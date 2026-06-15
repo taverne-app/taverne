@@ -1,0 +1,5 @@
+# Docker configuration files
+# Dockerfile.app    — PHP-FPM + Laravel
+# Dockerfile.frontend — Node build + Nginx static
+# nginx.conf        — Reverse proxy config
+# php.ini           — PHP tuning
