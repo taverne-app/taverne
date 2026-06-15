@@ -21,14 +21,14 @@ services:
     build:
       context: ./frontend
       dockerfile: ../docker/Dockerfile.frontend
+      args:
+        VITE_REVERB_APP_KEY: ${VITE_REVERB_APP_KEY}
+        VITE_REVERB_HOST: ${VITE_REVERB_HOST:-reverb}
+        VITE_REVERB_PORT: ${VITE_REVERB_PORT:-8080}
+        VITE_REVERB_SCHEME: ${VITE_REVERB_SCHEME:-http}
     restart: unless-stopped
     ports:
       - "3000:3000"
-    environment:
-      - VITE_REVERB_APP_KEY=${VITE_REVERB_APP_KEY}
-      - VITE_REVERB_HOST=${VITE_REVERB_HOST}
-      - VITE_REVERB_PORT=${VITE_REVERB_PORT}
-      - VITE_REVERB_SCHEME=${VITE_REVERB_SCHEME}
     depends_on:
       - app
     networks:
