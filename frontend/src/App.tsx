@@ -1,14 +1,28 @@
-function App() {
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AuthProvider } from './contexts/AuthContext'
+import { ProtectedRoute } from './components/ProtectedRoute'
+import { LoginPage } from './pages/LoginPage'
+import { RegisterPage } from './pages/RegisterPage'
+import { CharactersPage } from './pages/CharactersPage'
+
+export default function App() {
   return (
-    <div className="min-h-screen bg-taverne-parchment flex items-center justify-center">
-      <div className="text-center">
-        <h1 className="text-5xl font-bold text-taverne-brown mb-4">🍺 Taverne</h1>
-        <p className="text-taverne-dark/70 text-lg">
-          Gestion de campagnes D&amp;D 5e
-        </p>
-      </div>
-    </div>
+    <AuthProvider>
+      <BrowserRouter>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/characters"
+            element={
+              <ProtectedRoute>
+                <CharactersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/characters" replace />} />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
   )
 }
-
-export default App
