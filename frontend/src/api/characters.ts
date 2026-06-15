@@ -101,6 +101,19 @@ export async function updateConditions(id: number, conditions: string[]): Promis
   return json.data
 }
 
+export async function updateAbilities(
+  id: number,
+  abilities: Partial<Record<keyof Character['abilities'], number>>,
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(abilities),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  const json = await res.json()
+  return json.data
+}
+
 export async function updateDeathSaves(
   id: number,
   successes: number,

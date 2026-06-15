@@ -5,6 +5,7 @@ import {
   updateHp,
   updateConditions,
   updateDeathSaves,
+  updateAbilities,
   type Character,
 } from '../api/characters'
 import { logout } from '../api/auth'
@@ -114,6 +115,15 @@ export function CharacterPage() {
   const hpRef  = useRef<HTMLInputElement>(null)
   const tempRef = useRef<HTMLInputElement>(null)
 
+  type AbilityKey = keyof Character['abilities']
+  type AbilityDraft = Record<AbilityKey, string>
+  const ABILITY_KEYS: AbilityKey[] = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma']
+  const emptyDraft = (): AbilityDraft =>
+    Object.fromEntries(ABILITY_KEYS.map(k => [k, ''])) as AbilityDraft
+
+  const [editingAbilities, setEditingAbilities] = useState(false)
+  const [abilityDraft, setAbilityDraft] = useState<AbilityDraft>(emptyDraft)
+
   useEffect(() => {
     if (!id) return
     setLoading(true)
@@ -169,6 +179,30 @@ export function CharacterPage() {
     const f = type === 'failures'  ? value : character.state.death_saves_failures
     const updated = await withSave(() => updateDeathSaves(character.id, s, f))
     if (updated) setCharacter(updated)
+  }
+
+  function startEditAbilities() {
+    if (!character) return
+    setAbilityDraft(
+      Object.fromEntries(
+        ABILITY_KEYS.map(k => [k, character.abilities[k] != null ? String(character.abilities[k]) : '']),
+      ) as AbilityDraft,
+    )
+    setEditingAbilities(true)
+  }
+
+  async function saveAbilities() {
+    if (!character) return
+    const payload: Partial<Record<AbilityKey, number>> = {}
+    for (const k of ABILITY_KEYS) {
+      const n = parseInt(abilityDraft[k], 10)
+      if (!isNaN(n) && n >= 1 && n <= 30) payload[k] = n
+    }
+    const updated = await withSave(() => updateAbilities(character.id, payload))
+    if (updated) {
+      setCharacter(updated)
+      setEditingAbilities(false)
+    }
   }
 
   async function handleLogout() {
@@ -242,13 +276,41 @@ export function CharacterPage() {
 
           {/* Left — Ability scores */}
           <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
-            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">
-              Caractéristiques
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                Caractéristiques
+              </h2>
+              {editingAbilities ? (
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setEditingAbilities(false)}
+                    className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                  >
+                    Annuler
+                  </button>
+                  <button
+                    onClick={saveAbilities}
+                    disabled={saving}
+                    className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
+                  >
+                    Enregistrer
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={startEditAbilities}
+                  className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                >
+                  Modifier
+                </button>
+              )}
+            </div>
             <div className="space-y-1">
               {ABILITY_LABELS.map(([key, abbr, label]) => {
                 const score = character.abilities[key]
-                const mod   = character.modifiers[key]
+                const draftVal = parseInt(abilityDraft[key], 10)
+                const displayScore = editingAbilities && !isNaN(draftVal) ? draftVal : score
+                const mod = displayScore != null ? Math.floor((displayScore - 10) / 2) : 0
                 return (
                   <div
                     key={key}
@@ -259,9 +321,23 @@ export function CharacterPage() {
                       <span className="text-stone-300 text-sm">{label}</span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="text-white font-semibold text-sm w-8 text-right">
-                        {score ?? '—'}
-                      </span>
+                      {editingAbilities ? (
+                        <input
+                          type="number"
+                          min={1}
+                          max={30}
+                          value={abilityDraft[key]}
+                          onChange={e =>
+                            setAbilityDraft(d => ({ ...d, [key]: e.target.value }))
+                          }
+                          placeholder="—"
+                          className="w-14 bg-stone-800 border border-stone-600 rounded px-2 py-0.5 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                        />
+                      ) : (
+                        <span className="text-white font-semibold text-sm w-8 text-right">
+                          {score ?? '—'}
+                        </span>
+                      )}
                       <span
                         className={`text-sm font-bold w-8 text-right ${
                           mod > 0
