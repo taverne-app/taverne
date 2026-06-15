@@ -1,0 +1,8 @@
+@import "tailwindcss";
+
+@theme {
+  --color-taverne-brown: #8B4513;
+  --color-taverne-gold: #D4AF37;
+  --color-taverne-dark: #1a1008;
+  --color-taverne-parchment: #F5F0E8;
+}

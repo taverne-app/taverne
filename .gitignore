@@ -1,0 +1,28 @@
+# Root env
+.env
+
+# Laravel (app/)
+app/vendor/
+app/.env
+app/.env.backup
+app/.env.production
+app/storage/logs/*.log
+app/bootstrap/cache/*.php
+app/storage/*.key
+app/storage/pail/
+app/public/storage
+app/public/hot
+app/.phpunit.result.cache
+app/.phpunit.cache/
+app/node_modules/
+app/public/build/
+
+# React (frontend/)
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/*.local
+
+# OS
+.DS_Store
+Thumbs.db
