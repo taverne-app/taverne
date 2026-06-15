@@ -77,6 +77,23 @@ L'application est disponible sur :
 - **Frontend (React)** → http://localhost:3000
 - **WebSockets (Reverb)** → ws://localhost:8080
 
+### Note production — Redis `vm.overcommit_memory`
+
+Sur un VPS, Redis affiche au démarrage :
+
+```
+WARNING Memory overcommit must be enabled!
+```
+
+Sans ce réglage, une sauvegarde en arrière-plan peut échouer sous pression mémoire. À activer une fois sur l'hôte :
+
+```bash
+echo 'vm.overcommit_memory = 1' | sudo tee -a /etc/sysctl.conf
+sudo sysctl -p
+```
+
+Sans impact en développement local.
+
 ---
 
 ## Stack technique
