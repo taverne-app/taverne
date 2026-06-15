@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\CharacterUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCharacterRequest;
 use App\Http\Requests\UpdateCharacterRequest;
@@ -47,6 +48,8 @@ class CharacterController extends Controller
         $this->authorizeCharacter($request, $character);
 
         $character->update($request->validated());
+        $character->refresh();
+        CharacterUpdated::dispatch($character);
 
         return new CharacterResource($character);
     }
@@ -77,7 +80,10 @@ class CharacterController extends Controller
             'temporary' => $character->update(['temporary_hp' => max(0, $amount)]),
         };
 
-        return new CharacterResource($character->fresh());
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
     }
 
     public function updateConditions(Request $request, Character $character): CharacterResource
@@ -91,7 +97,10 @@ class CharacterController extends Controller
 
         $character->update(['conditions' => array_values(array_unique($request->conditions))]);
 
-        return new CharacterResource($character->fresh());
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
     }
 
     public function updateDeathSaves(Request $request, Character $character): CharacterResource
@@ -108,7 +117,10 @@ class CharacterController extends Controller
             'death_saves_failures'  => $request->input('failures', $character->death_saves_failures),
         ]);
 
-        return new CharacterResource($character->fresh());
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
     }
 
     private function applyDamage(Character $character, int $amount): void

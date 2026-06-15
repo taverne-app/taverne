@@ -10,6 +10,7 @@ import {
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
+import { createEcho } from '../lib/echo'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -103,12 +104,16 @@ function SaveDots({
 
 export function CharacterPage() {
   const { id } = useParams<{ id: string }>()
-  const { user, clearAuth } = useAuth()
+  const { token, user, clearAuth } = useAuth()
   const navigate = useNavigate()
 
   const [character, setCharacter] = useState<Character | null>(null)
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
+
+  // Flag set to true while we're the originator of a mutation; suppresses
+  // the echo of our own broadcast so we don't overwrite optimistic state.
+  const isSelfUpdate = useRef(false)
 
   const [hpInput, setHpInput]         = useState('')
   const [tempInput, setTempInput]     = useState('')
@@ -133,12 +138,28 @@ export function CharacterPage() {
       .finally(() => setLoading(false))
   }, [id, navigate])
 
+  useEffect(() => {
+    if (!id || !token) return
+    const echo = createEcho(token)
+    echo
+      .private(`character.${id}`)
+      .listen('.character.updated', (e: { character: Character }) => {
+        if (isSelfUpdate.current) return
+        setCharacter(e.character)
+      })
+    return () => {
+      echo.leave(`character.${id}`)
+      echo.disconnect()
+    }
+  }, [id, token])
+
   // Sync temp HP input with loaded character
   useEffect(() => {
     if (character) setTempInput(String(character.combat.temporary_hp))
   }, [character?.id])  // only on first load
 
   async function withSave<T>(fn: () => Promise<T>): Promise<T | undefined> {
+    isSelfUpdate.current = true
     setSaving(true)
     try {
       return await fn()
@@ -146,6 +167,8 @@ export function CharacterPage() {
       // TODO: toast error
     } finally {
       setSaving(false)
+      // Give the broadcast a tick to arrive before we clear the flag
+      setTimeout(() => { isSelfUpdate.current = false }, 500)
     }
   }
 
