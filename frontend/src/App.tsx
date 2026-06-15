@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { CharactersPage } from './pages/CharactersPage'
+import { CharacterPage } from './pages/CharacterPage'
 
 export default function App() {
   return (
@@ -17,6 +18,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CharactersPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/characters/:id"
+            element={
+              <ProtectedRoute>
+                <CharacterPage />
               </ProtectedRoute>
             }
           />

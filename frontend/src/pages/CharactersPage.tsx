@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { listCharacters, deleteCharacter, type Character } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
 
 function HpBar({ current, max }: { current: number; max: number }) {
@@ -38,7 +38,8 @@ function CharacterCard({
   const [confirming, setConfirming] = useState(false)
 
   return (
-    <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 hover:border-stone-700 transition-colors group relative">
+    <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 hover:border-amber-700/50 transition-colors group relative">
+      <Link to={`/characters/${character.id}`} className="absolute inset-0 rounded-xl" />
       <div className="flex items-start justify-between">
         <div>
           <h3 className="text-white font-semibold text-base leading-tight">{character.name}</h3>
@@ -85,7 +86,7 @@ function CharacterCard({
         </div>
       )}
 
-      <div className="mt-3 pt-3 border-t border-stone-800 flex justify-end">
+      <div className="mt-3 pt-3 border-t border-stone-800 flex justify-end relative z-10">
         {confirming ? (
           <div className="flex gap-2 text-xs">
             <button
