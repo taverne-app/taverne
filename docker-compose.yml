@@ -59,12 +59,17 @@ services:
     command: php artisan reverb:start --host=0.0.0.0 --port=8080
     ports:
       - "8080:8080"
+    volumes:
+      - ./app:/var/www/html
     environment:
       - REVERB_APP_ID=${REVERB_APP_ID}
       - REVERB_APP_KEY=${REVERB_APP_KEY}
       - REVERB_APP_SECRET=${REVERB_APP_SECRET}
     depends_on:
-      - app
+      db:
+        condition: service_healthy
+      app:
+        condition: service_started
     networks:
       - taverne
 

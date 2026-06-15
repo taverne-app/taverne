@@ -29,25 +29,53 @@ Taverne centralise tout ce dont un Maître du Donjon et ses joueurs ont besoin :
 
 **Prérequis** : Docker et Docker Compose installés.
 
+### 1. Cloner le dépôt
+
 ```bash
-# 1. Cloner le dépôt
-git clone https://github.com/taverne-app/taverne.git && cd taverne
+git clone https://github.com/taverne-app/taverne.git
+cd taverne
+```
 
-# 2. Configurer l'environnement
+### 2. Configurer l'environnement
+
+```bash
+# Variables Docker Compose (DB, Reverb keys…)
 cp .env.example .env
-# Éditez .env pour définir APP_KEY, DB_PASSWORD, REVERB_APP_SECRET, etc.
 
-# 3. Lancer les services
+# Variables Laravel (dans le container app)
+cp app/.env.example app/.env
+```
+
+Éditez `.env` pour définir des secrets robustes en production :
+
+```dotenv
+DB_PASSWORD=changeme
+REVERB_APP_KEY=une-clé-aléatoire
+REVERB_APP_SECRET=un-secret-aléatoire
+```
+
+Reportez les mêmes valeurs dans `app/.env` aux clés correspondantes (`DB_PASSWORD`, `REVERB_APP_KEY`, `REVERB_APP_SECRET`).
+
+> **Note :** `APP_KEY` dans `app/.env` est générée automatiquement à l'étape suivante.
+
+### 3. Démarrer les services
+
+```bash
 docker compose up -d
 ```
 
-L'application est disponible sur `http://localhost:8000` et le frontend sur `http://localhost:3000`.
+### 4. Initialiser l'application
 
-Pour générer la clé d'application Laravel :
 ```bash
+# Génère la clé Laravel et lance les migrations
 docker compose exec app php artisan key:generate
-docker compose exec app php artisan migrate --seed
+docker compose exec app php artisan migrate
 ```
+
+L'application est disponible sur :
+- **Backend (API)** → http://localhost:8000
+- **Frontend (React)** → http://localhost:3000
+- **WebSockets (Reverb)** → ws://localhost:8080
 
 ---
 
@@ -55,12 +83,13 @@ docker compose exec app php artisan migrate --seed
 
 | Couche | Technologie |
 |---|---|
-| Backend | Laravel 12 (PHP 8.3) |
+| Backend | Laravel 12 (PHP 8.4) |
 | Frontend | React 19 + Tailwind CSS v4 |
 | Base de données | PostgreSQL 16 |
 | WebSockets | Laravel Reverb |
-| Conteneurisation | Docker / Docker Compose |
 | Cache & Queues | Redis 7 |
+| Conteneurisation | Docker / Docker Compose |
+| Reverse proxy | Nginx |
 
 ---
 
