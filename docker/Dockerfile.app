@@ -5,11 +5,13 @@ RUN apk add --no-cache \
         libpq-dev \
         libzip-dev \
         icu-dev \
+        sqlite-dev \
         linux-headers \
         $PHPIZE_DEPS \
     && docker-php-ext-install -j$(nproc) \
         pdo_pgsql \
         pgsql \
+        pdo_sqlite \
         bcmath \
         intl \
         pcntl \

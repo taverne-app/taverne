@@ -44,9 +44,9 @@ class Character extends Model
     ];
 
     // Modificateur d'une caractéristique : floor((score - 10) / 2)
-    public function modifier(int $score): int
+    public function modifier(?int $score): int
     {
-        return (int) floor(($score - 10) / 2);
+        return (int) floor((($score ?? 10) - 10) / 2);
     }
 
     // Bonus de maîtrise selon le niveau (règle D&D 5e)
