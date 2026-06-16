@@ -25,6 +25,7 @@ export interface Character {
     temporary_hp: number
     armor_class: number
     initiative: number
+    initiative_roll: number | null
     speed: number
     inspiration: boolean
     is_alive: boolean
@@ -105,6 +106,19 @@ export async function updateAbilities(
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(abilities),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  const json = await res.json()
+  return json.data
+}
+
+export async function setInitiativeRoll(
+  id: number,
+  roll: number | null,
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ initiative_roll: roll }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   const json = await res.json()

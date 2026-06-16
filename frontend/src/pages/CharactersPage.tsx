@@ -152,6 +152,12 @@ export function CharactersPage() {
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
           <span className="text-amber-400 font-bold text-lg">🍺 Taverne</span>
           <div className="flex items-center gap-4">
+            <Link
+              to="/combat"
+              className="text-stone-400 hover:text-amber-400 text-sm transition-colors font-medium"
+            >
+              ⚔ Combat
+            </Link>
             <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
             <button
               onClick={handleLogout}

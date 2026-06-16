@@ -5,6 +5,7 @@ import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { CharactersPage } from './pages/CharactersPage'
 import { CharacterPage } from './pages/CharacterPage'
+import { CombatPage } from './pages/CombatPage'
 
 export default function App() {
   return (
@@ -26,6 +27,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CharacterPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/combat"
+            element={
+              <ProtectedRoute>
+                <CombatPage />
               </ProtectedRoute>
             }
           />

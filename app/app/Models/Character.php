@@ -57,6 +57,7 @@ class Character extends Model
         'conditions',
         'save_proficiencies',
         'skill_proficiencies',
+        'initiative_roll',
         'notes',
         'campaign_id',
     ];

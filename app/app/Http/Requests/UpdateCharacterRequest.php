@@ -34,6 +34,7 @@ class UpdateCharacterRequest extends FormRequest
             'armor_class'      => ['sometimes', 'integer', 'min:1', 'max:30'],
             'speed'            => ['sometimes', 'integer', 'min:0'],
             'inspiration'         => ['sometimes', 'boolean'],
+            'initiative_roll'     => ['sometimes', 'nullable', 'integer', 'min:-10', 'max:30'],
             'notes'               => ['sometimes', 'nullable', 'string'],
 
             'save_proficiencies'    => ['sometimes', 'array'],

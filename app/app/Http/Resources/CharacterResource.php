@@ -44,14 +44,15 @@ class CharacterResource extends JsonResource
             'passive_perception' => $this->passive_perception,
 
             'combat' => [
-                'max_hp'       => $this->max_hp,
-                'current_hp'   => $this->current_hp,
-                'temporary_hp' => $this->temporary_hp,
-                'armor_class'  => $this->armor_class,
-                'initiative'   => $this->initiative,
-                'speed'        => $this->speed,
-                'inspiration'  => $this->inspiration,
-                'is_alive'     => $this->isAlive(),
+                'max_hp'          => $this->max_hp,
+                'current_hp'      => $this->current_hp,
+                'temporary_hp'    => $this->temporary_hp,
+                'armor_class'     => $this->armor_class,
+                'initiative'      => $this->initiative,
+                'initiative_roll' => $this->initiative_roll,
+                'speed'           => $this->speed,
+                'inspiration'     => $this->inspiration,
+                'is_alive'        => $this->isAlive(),
             ],
 
             'state' => [
