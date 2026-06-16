@@ -61,6 +61,15 @@ class CharacterResource extends JsonResource
                 'conditions'            => $this->conditions ?? [],
             ],
 
+            'spellcasting' => [
+                'ability'      => $this->spellcasting_ability,
+                'modifier'     => $this->spellcasting_modifier,
+                'save_dc'      => $this->spell_save_dc,
+                'attack_bonus' => $this->spell_attack_bonus,
+                'slots'        => (object) ($this->spell_slots ?? []),
+                'spells'       => $this->spells_known ?? [],
+            ],
+
             'notes'       => $this->notes,
             'campaign_id' => $this->campaign_id,
             'created_at'  => $this->created_at,

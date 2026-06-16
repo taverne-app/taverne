@@ -22,5 +22,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('hp',          [CharacterController::class, 'updateHp']);
         Route::patch('conditions',  [CharacterController::class, 'updateConditions']);
         Route::patch('death-saves', [CharacterController::class, 'updateDeathSaves']);
+        Route::patch('spell-slot',  [CharacterController::class, 'useSpellSlot']);
+        Route::post('rest',         [CharacterController::class, 'longRest']);
     });
 });

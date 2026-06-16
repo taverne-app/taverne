@@ -7,6 +7,17 @@ export type SkillName =
   | 'nature' | 'perception' | 'performance' | 'persuasion' | 'religion'
   | 'sleight_of_hand' | 'stealth' | 'survival'
 
+export interface SpellSlot {
+  max: number
+  used: number
+}
+
+export interface Spell {
+  name: string
+  level: number
+  prepared: boolean
+}
+
 export interface Character {
   id: number
   name: string
@@ -34,6 +45,14 @@ export interface Character {
     conditions: string[]
     death_saves_successes: number
     death_saves_failures: number
+  }
+  spellcasting: {
+    ability: AbilityName | null
+    modifier: number
+    save_dc: number
+    attack_bonus: number
+    slots: Record<string, SpellSlot>
+    spells: Spell[]
   }
 }
 
@@ -140,6 +159,55 @@ export async function updateProficiencies(
   if (!res.ok) throw new ApiError(res.status, await res.json())
   const json = await res.json()
   return json.data
+}
+
+export async function useSpellSlot(
+  id: number,
+  level: number,
+  action: 'use' | 'restore',
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}/spell-slot`, {
+    method: 'PATCH',
+    body: JSON.stringify({ level, action }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function longRest(id: number): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}/rest`, { method: 'POST' })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateSpells(
+  id: number,
+  spells: Spell[],
+  spellcastingAbility?: AbilityName | null,
+): Promise<Character> {
+  const body: Record<string, unknown> = { spells_known: spells }
+  if (spellcastingAbility !== undefined) body.spellcasting_ability = spellcastingAbility
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateSpellSlots(
+  id: number,
+  slots: Record<string, SpellSlot>,
+  spellcastingAbility?: AbilityName | null,
+): Promise<Character> {
+  const body: Record<string, unknown> = { spell_slots: slots }
+  if (spellcastingAbility !== undefined) body.spellcasting_ability = spellcastingAbility
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
 }
 
 export async function updateDeathSaves(

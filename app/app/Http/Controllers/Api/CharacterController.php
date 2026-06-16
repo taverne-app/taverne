@@ -103,6 +103,55 @@ class CharacterController extends Controller
         return new CharacterResource($fresh);
     }
 
+    public function useSpellSlot(Request $request, Character $character): CharacterResource
+    {
+        $this->authorizeCharacter($request, $character);
+
+        $request->validate([
+            'level'  => ['required', 'integer', 'min:1', 'max:9'],
+            'action' => ['required', 'in:use,restore'],
+        ]);
+
+        $slots = $character->spell_slots ?? [];
+        $level = (string) $request->integer('level');
+
+        abort_unless(isset($slots[$level]), 422, "Aucun emplacement configuré pour le niveau $level.");
+
+        $max  = (int) $slots[$level]['max'];
+        $used = (int) ($slots[$level]['used'] ?? 0);
+
+        $slots[$level]['used'] = $request->string('action') === 'use'
+            ? min($max, $used + 1)
+            : max(0, $used - 1);
+
+        $character->update(['spell_slots' => $slots]);
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
+    public function longRest(Request $request, Character $character): CharacterResource
+    {
+        $this->authorizeCharacter($request, $character);
+
+        $slots = $character->spell_slots ?? [];
+        foreach ($slots as &$slot) {
+            $slot['used'] = 0;
+        }
+        unset($slot);
+
+        $character->update([
+            'spell_slots'           => $slots,
+            'death_saves_successes' => 0,
+            'death_saves_failures'  => 0,
+        ]);
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
     public function updateDeathSaves(Request $request, Character $character): CharacterResource
     {
         $this->authorizeCharacter($request, $character);

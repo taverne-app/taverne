@@ -42,6 +42,13 @@ class UpdateCharacterRequest extends FormRequest
             'skill_proficiencies'   => ['sometimes', 'array'],
             'skill_proficiencies.*' => ['string', 'in:' . implode(',', array_keys(\App\Models\Character::SKILLS))],
 
+            'spellcasting_ability'  => ['sometimes', 'nullable', 'string', 'in:strength,dexterity,constitution,intelligence,wisdom,charisma'],
+            'spell_slots'           => ['sometimes', 'nullable', 'array'],
+            'spells_known'          => ['sometimes', 'nullable', 'array'],
+            'spells_known.*.name'   => ['required_with:spells_known', 'string', 'max:100'],
+            'spells_known.*.level'  => ['required_with:spells_known', 'integer', 'min:0', 'max:9'],
+            'spells_known.*.prepared' => ['sometimes', 'boolean'],
+
             'campaign_id'      => ['sometimes', 'nullable', 'integer', 'exists:campaigns,id'],
         ];
     }

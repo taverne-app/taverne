@@ -59,6 +59,9 @@ class Character extends Model
         'skill_proficiencies',
         'initiative_roll',
         'notes',
+        'spell_slots',
+        'spells_known',
+        'spellcasting_ability',
         'campaign_id',
     ];
 
@@ -67,6 +70,8 @@ class Character extends Model
         'conditions'         => 'array',
         'save_proficiencies' => 'array',
         'skill_proficiencies'=> 'array',
+        'spell_slots'        => 'array',
+        'spells_known'       => 'array',
     ];
 
     /** Modificateur d'une caractéristique : floor((score - 10) / 2) */
@@ -120,6 +125,23 @@ class Character extends Model
     public function getPassivePerceptionAttribute(): int
     {
         return 10 + $this->skills['perception']['modifier'];
+    }
+
+    public function getSpellcastingModifierAttribute(): int
+    {
+        $ability = $this->spellcasting_ability;
+        if (!$ability || !isset($this->$ability)) return 0;
+        return $this->modifier($this->$ability);
+    }
+
+    public function getSpellSaveDcAttribute(): int
+    {
+        return 8 + $this->proficiency_bonus + $this->spellcasting_modifier;
+    }
+
+    public function getSpellAttackBonusAttribute(): int
+    {
+        return $this->proficiency_bonus + $this->spellcasting_modifier;
     }
 
     public function isAlive(): bool
