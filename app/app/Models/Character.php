@@ -10,6 +10,27 @@ class Character extends Model
 {
     use HasFactory;
 
+    public const SKILLS = [
+        'acrobatics'      => 'dexterity',
+        'animal_handling' => 'wisdom',
+        'arcana'          => 'intelligence',
+        'athletics'       => 'strength',
+        'deception'       => 'charisma',
+        'history'         => 'intelligence',
+        'insight'         => 'wisdom',
+        'intimidation'    => 'charisma',
+        'investigation'   => 'intelligence',
+        'medicine'        => 'wisdom',
+        'nature'          => 'intelligence',
+        'perception'      => 'wisdom',
+        'performance'     => 'charisma',
+        'persuasion'      => 'charisma',
+        'religion'        => 'intelligence',
+        'sleight_of_hand' => 'dexterity',
+        'stealth'         => 'dexterity',
+        'survival'        => 'wisdom',
+    ];
+
     protected $fillable = [
         'name',
         'race',
@@ -34,25 +55,70 @@ class Character extends Model
         'death_saves_successes',
         'death_saves_failures',
         'conditions',
+        'save_proficiencies',
+        'skill_proficiencies',
         'notes',
         'campaign_id',
     ];
 
     protected $casts = [
-        'inspiration' => 'boolean',
-        'conditions'  => 'array',
+        'inspiration'        => 'boolean',
+        'conditions'         => 'array',
+        'save_proficiencies' => 'array',
+        'skill_proficiencies'=> 'array',
     ];
 
-    // Modificateur d'une caractéristique : floor((score - 10) / 2)
+    /** Modificateur d'une caractéristique : floor((score - 10) / 2) */
     public function modifier(?int $score): int
     {
         return (int) floor((($score ?? 10) - 10) / 2);
     }
 
-    // Bonus de maîtrise selon le niveau (règle D&D 5e)
+    /** Bonus de maîtrise selon le niveau (règle D&D 5e) */
     public function getProficiencyBonusAttribute(): int
     {
         return (int) ceil($this->level / 4) + 1;
+    }
+
+    public function getInitiativeAttribute(): int
+    {
+        return $this->modifier($this->dexterity);
+    }
+
+    public function getSavingThrowsAttribute(): array
+    {
+        $profs = $this->save_proficiencies ?? [];
+        $result = [];
+        foreach (['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma'] as $ability) {
+            $proficient = in_array($ability, $profs);
+            $mod = $this->modifier($this->$ability);
+            $result[$ability] = [
+                'modifier'   => $mod + ($proficient ? $this->proficiency_bonus : 0),
+                'proficient' => $proficient,
+            ];
+        }
+        return $result;
+    }
+
+    public function getSkillsAttribute(): array
+    {
+        $profs = $this->skill_proficiencies ?? [];
+        $result = [];
+        foreach (self::SKILLS as $skill => $ability) {
+            $proficient = in_array($skill, $profs);
+            $mod = $this->modifier($this->$ability);
+            $result[$skill] = [
+                'modifier'   => $mod + ($proficient ? $this->proficiency_bonus : 0),
+                'proficient' => $proficient,
+                'ability'    => $ability,
+            ];
+        }
+        return $result;
+    }
+
+    public function getPassivePerceptionAttribute(): int
+    {
+        return 10 + $this->skills['perception']['modifier'];
     }
 
     public function isAlive(): bool

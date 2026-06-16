@@ -1,5 +1,12 @@
 import { apiFetch, ApiError } from './client'
 
+export type AbilityName = 'strength' | 'dexterity' | 'constitution' | 'intelligence' | 'wisdom' | 'charisma'
+export type SkillName =
+  | 'acrobatics' | 'animal_handling' | 'arcana' | 'athletics' | 'deception'
+  | 'history' | 'insight' | 'intimidation' | 'investigation' | 'medicine'
+  | 'nature' | 'perception' | 'performance' | 'persuasion' | 'religion'
+  | 'sleight_of_hand' | 'stealth' | 'survival'
+
 export interface Character {
   id: number
   name: string
@@ -7,30 +14,20 @@ export interface Character {
   character_class: string
   level: number
   proficiency_bonus: number
-  abilities: {
-    strength: number | null
-    dexterity: number | null
-    constitution: number | null
-    intelligence: number | null
-    wisdom: number | null
-    charisma: number | null
-  }
-  modifiers: {
-    strength: number
-    dexterity: number
-    constitution: number
-    intelligence: number
-    wisdom: number
-    charisma: number
-  }
+  abilities: Record<AbilityName, number | null>
+  modifiers: Record<AbilityName, number>
+  saving_throws: Record<AbilityName, { modifier: number; proficient: boolean }>
+  skills: Record<SkillName, { modifier: number; proficient: boolean; ability: AbilityName }>
+  passive_perception: number
   combat: {
     current_hp: number
     max_hp: number
     temporary_hp: number
     armor_class: number
-    speed: number
     initiative: number
+    speed: number
     inspiration: boolean
+    is_alive: boolean
   }
   state: {
     conditions: string[]
@@ -108,6 +105,23 @@ export async function updateAbilities(
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(abilities),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  const json = await res.json()
+  return json.data
+}
+
+export async function updateProficiencies(
+  id: number,
+  saveProficiencies: string[],
+  skillProficiencies: string[],
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      save_proficiencies: saveProficiencies,
+      skill_proficiencies: skillProficiencies,
+    }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   const json = await res.json()

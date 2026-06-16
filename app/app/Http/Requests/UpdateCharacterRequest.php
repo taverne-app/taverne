@@ -33,8 +33,13 @@ class UpdateCharacterRequest extends FormRequest
             'max_hp'           => ['sometimes', 'integer', 'min:1'],
             'armor_class'      => ['sometimes', 'integer', 'min:1', 'max:30'],
             'speed'            => ['sometimes', 'integer', 'min:0'],
-            'inspiration'      => ['sometimes', 'boolean'],
-            'notes'            => ['sometimes', 'nullable', 'string'],
+            'inspiration'         => ['sometimes', 'boolean'],
+            'notes'               => ['sometimes', 'nullable', 'string'],
+
+            'save_proficiencies'    => ['sometimes', 'array'],
+            'save_proficiencies.*'  => ['string', 'in:strength,dexterity,constitution,intelligence,wisdom,charisma'],
+            'skill_proficiencies'   => ['sometimes', 'array'],
+            'skill_proficiencies.*' => ['string', 'in:' . implode(',', array_keys(\App\Models\Character::SKILLS))],
 
             'campaign_id'      => ['sometimes', 'nullable', 'integer', 'exists:campaigns,id'],
         ];

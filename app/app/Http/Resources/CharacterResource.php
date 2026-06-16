@@ -38,19 +38,23 @@ class CharacterResource extends JsonResource
                 'charisma'     => $this->modifier($this->charisma),
             ],
 
-            'proficiency_bonus' => $this->proficiency_bonus,
+            'proficiency_bonus'  => $this->proficiency_bonus,
+            'saving_throws'      => $this->saving_throws,
+            'skills'             => $this->skills,
+            'passive_perception' => $this->passive_perception,
 
             'combat' => [
                 'max_hp'       => $this->max_hp,
                 'current_hp'   => $this->current_hp,
                 'temporary_hp' => $this->temporary_hp,
                 'armor_class'  => $this->armor_class,
+                'initiative'   => $this->initiative,
                 'speed'        => $this->speed,
+                'inspiration'  => $this->inspiration,
                 'is_alive'     => $this->isAlive(),
             ],
 
             'state' => [
-                'inspiration'           => $this->inspiration,
                 'death_saves_successes' => $this->death_saves_successes,
                 'death_saves_failures'  => $this->death_saves_failures,
                 'conditions'            => $this->conditions ?? [],

@@ -6,7 +6,10 @@ import {
   updateConditions,
   updateDeathSaves,
   updateAbilities,
+  updateProficiencies,
   type Character,
+  type AbilityName,
+  type SkillName,
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -14,13 +17,48 @@ import { createEcho } from '../lib/echo'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
-const ABILITY_LABELS: [keyof Character['abilities'], string, string][] = [
+const ABILITY_LABELS: [AbilityName, string, string][] = [
   ['strength',     'FOR', 'Force'],
   ['dexterity',    'DEX', 'Dextérité'],
   ['constitution', 'CON', 'Constitution'],
   ['intelligence', 'INT', 'Intelligence'],
   ['wisdom',       'SAG', 'Sagesse'],
   ['charisma',     'CHA', 'Charisme'],
+]
+
+const ABILITY_ABBR: Record<AbilityName, string> = {
+  strength: 'FOR', dexterity: 'DEX', constitution: 'CON',
+  intelligence: 'INT', wisdom: 'SAG', charisma: 'CHA',
+}
+
+const SKILL_LABELS: [SkillName, string][] = [
+  ['acrobatics',      'Acrobaties'],
+  ['animal_handling', 'Dressage'],
+  ['arcana',          'Arcanes'],
+  ['athletics',       'Athlétisme'],
+  ['deception',       'Tromperie'],
+  ['history',         'Histoire'],
+  ['insight',         'Perspicacité'],
+  ['intimidation',    'Intimidation'],
+  ['investigation',   'Investigation'],
+  ['medicine',        'Médecine'],
+  ['nature',          'Nature'],
+  ['perception',      'Perception'],
+  ['performance',     'Représentation'],
+  ['persuasion',      'Persuasion'],
+  ['religion',        'Religion'],
+  ['sleight_of_hand', 'Escamotage'],
+  ['stealth',         'Discrétion'],
+  ['survival',        'Survie'],
+]
+
+const SAVE_LABELS: [AbilityName, string][] = [
+  ['strength',     'Force'],
+  ['dexterity',    'Dextérité'],
+  ['constitution', 'Constitution'],
+  ['intelligence', 'Intelligence'],
+  ['wisdom',       'Sagesse'],
+  ['charisma',     'Charisme'],
 ]
 
 const CONDITIONS: Record<string, string> = {
@@ -120,9 +158,8 @@ export function CharacterPage() {
   const hpRef  = useRef<HTMLInputElement>(null)
   const tempRef = useRef<HTMLInputElement>(null)
 
-  type AbilityKey = keyof Character['abilities']
-  type AbilityDraft = Record<AbilityKey, string>
-  const ABILITY_KEYS: AbilityKey[] = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma']
+  type AbilityDraft = Record<AbilityName, string>
+  const ABILITY_KEYS: AbilityName[] = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma']
   const emptyDraft = (): AbilityDraft =>
     Object.fromEntries(ABILITY_KEYS.map(k => [k, ''])) as AbilityDraft
 
@@ -216,7 +253,7 @@ export function CharacterPage() {
 
   async function saveAbilities() {
     if (!character) return
-    const payload: Partial<Record<AbilityKey, number>> = {}
+    const payload: Partial<Record<AbilityName, number>> = {}
     for (const k of ABILITY_KEYS) {
       const n = parseInt(abilityDraft[k], 10)
       if (!isNaN(n) && n >= 1 && n <= 30) payload[k] = n
@@ -226,6 +263,36 @@ export function CharacterPage() {
       setCharacter(updated)
       setEditingAbilities(false)
     }
+  }
+
+  async function toggleSaveProficiency(ability: AbilityName) {
+    if (!character) return
+    const current = Object.entries(character.saving_throws)
+      .filter(([, v]) => v.proficient)
+      .map(([k]) => k)
+    const next = current.includes(ability)
+      ? current.filter(a => a !== ability)
+      : [...current, ability]
+    const skillProfs = Object.entries(character.skills)
+      .filter(([, v]) => v.proficient)
+      .map(([k]) => k)
+    const updated = await withSave(() => updateProficiencies(character.id, next, skillProfs))
+    if (updated) setCharacter(updated)
+  }
+
+  async function toggleSkillProficiency(skill: SkillName) {
+    if (!character) return
+    const saveProfs = Object.entries(character.saving_throws)
+      .filter(([, v]) => v.proficient)
+      .map(([k]) => k)
+    const current = Object.entries(character.skills)
+      .filter(([, v]) => v.proficient)
+      .map(([k]) => k)
+    const next = current.includes(skill)
+      ? current.filter(s => s !== skill)
+      : [...current, skill]
+    const updated = await withSave(() => updateProficiencies(character.id, saveProfs, next))
+    if (updated) setCharacter(updated)
   }
 
   async function handleLogout() {
@@ -380,6 +447,49 @@ export function CharacterPage() {
             <div className="mt-4 pt-4 border-t border-stone-800 flex items-center justify-between">
               <span className="text-stone-400 text-sm">Bonus de maîtrise</span>
               <span className="text-amber-400 font-bold text-sm">{sign(character.proficiency_bonus)}</span>
+            </div>
+
+            {/* Saving throws */}
+            <div className="mt-4 pt-4 border-t border-stone-800">
+              <h3 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                Jets de sauvegarde
+              </h3>
+              <div className="space-y-1">
+                {SAVE_LABELS.map(([ability, label]) => {
+                  const save = character.saving_throws[ability]
+                  return (
+                    <div key={ability} className="flex items-center justify-between py-1">
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => toggleSaveProficiency(ability)}
+                          disabled={saving}
+                          title={save.proficient ? 'Retirer la maîtrise' : 'Ajouter la maîtrise'}
+                          className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 transition-colors disabled:cursor-not-allowed ${
+                            save.proficient
+                              ? 'bg-amber-400 border-amber-400'
+                              : 'bg-transparent border-stone-600 hover:border-stone-400'
+                          }`}
+                        />
+                        <span className="text-stone-300 text-xs">{label}</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-stone-500 text-xs font-mono">{ABILITY_ABBR[ability]}</span>
+                        <span className={`text-xs font-bold w-7 text-right ${
+                          save.modifier > 0 ? 'text-emerald-400' : save.modifier < 0 ? 'text-red-400' : 'text-stone-400'
+                        }`}>
+                          {sign(save.modifier)}
+                        </span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Passive perception */}
+            <div className="mt-3 pt-3 border-t border-stone-800 flex items-center justify-between">
+              <span className="text-stone-400 text-xs">Perception passive</span>
+              <span className="text-stone-200 font-semibold text-sm">{character.passive_perception}</span>
             </div>
           </div>
 
@@ -547,6 +657,43 @@ export function CharacterPage() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Skills */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">
+            Compétences
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-0.5">
+            {SKILL_LABELS.map(([skill, label]) => {
+              const entry = character.skills[skill]
+              return (
+                <div key={skill} className="flex items-center justify-between py-1.5 border-b border-stone-800/60">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <button
+                      onClick={() => toggleSkillProficiency(skill)}
+                      disabled={saving}
+                      title={entry.proficient ? 'Retirer la maîtrise' : 'Ajouter la maîtrise'}
+                      className={`w-3.5 h-3.5 rounded-full border-2 shrink-0 transition-colors disabled:cursor-not-allowed ${
+                        entry.proficient
+                          ? 'bg-amber-400 border-amber-400'
+                          : 'bg-transparent border-stone-600 hover:border-stone-400'
+                      }`}
+                    />
+                    <span className="text-stone-300 text-xs truncate">{label}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                    <span className="text-stone-500 text-xs font-mono">{ABILITY_ABBR[entry.ability]}</span>
+                    <span className={`text-xs font-bold w-7 text-right ${
+                      entry.modifier > 0 ? 'text-emerald-400' : entry.modifier < 0 ? 'text-red-400' : 'text-stone-400'
+                    }`}>
+                      {sign(entry.modifier)}
+                    </span>
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
       </main>
