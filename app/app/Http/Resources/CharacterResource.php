@@ -70,6 +70,11 @@ class CharacterResource extends JsonResource
                 'spells'       => $this->spells_known ?? [],
             ],
 
+            'inventory' => [
+                'items'    => $this->inventory ?? [],
+                'capacity' => round(($this->strength ?? 10) * 6.75, 1),
+            ],
+
             'notes'       => $this->notes,
             'campaign_id' => $this->campaign_id,
             'created_at'  => $this->created_at,

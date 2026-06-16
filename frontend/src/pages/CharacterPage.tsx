@@ -12,12 +12,15 @@ import {
   updateSpells,
   updateSpellSlots,
   rollDice,
+  updateInventory,
+  updateNotes,
   type Character,
   type AbilityName,
   type SkillName,
   type Spell,
   type SpellSlot,
   type DiceRoll,
+  type InventoryItem,
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -393,6 +396,67 @@ export function CharacterPage() {
       i === index ? { ...s, prepared: !s.prepared } : s,
     )
     const updated = await withSave(() => updateSpells(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  // ── Notes ────────────────────────────────────────────────────────────────────
+
+  const [notesDraft, setNotesDraft] = useState('')
+  const [notesDirty, setNotesDirty] = useState(false)
+
+  useEffect(() => {
+    if (character) setNotesDraft(character.notes ?? '')
+  }, [character?.id])
+
+  async function handleSaveNotes() {
+    if (!character || !notesDirty) return
+    const updated = await withSave(() => updateNotes(character.id, notesDraft))
+    if (updated) { setCharacter(updated); setNotesDirty(false) }
+  }
+
+  // ── Inventory ─────────────────────────────────────────────────────────────────
+
+  interface ItemDraft { name: string; quantity: string; weight: string; value: string }
+  const emptyItemDraft = (): ItemDraft => ({ name: '', quantity: '1', weight: '0', value: '' })
+  const [addingItem, setAddingItem] = useState(false)
+  const [itemDraft, setItemDraft]   = useState<ItemDraft>(emptyItemDraft)
+
+  async function handleAddItem() {
+    if (!character || !itemDraft.name.trim()) return
+    const item: InventoryItem = {
+      name:     itemDraft.name.trim(),
+      quantity: Math.max(1, parseInt(itemDraft.quantity, 10) || 1),
+      weight:   parseFloat(itemDraft.weight) || 0,
+      value:    itemDraft.value.trim(),
+      equipped: false,
+    }
+    const next = [...character.inventory.items, item]
+    const updated = await withSave(() => updateInventory(character.id, next))
+    if (updated) { setCharacter(updated); setItemDraft(emptyItemDraft()); setAddingItem(false) }
+  }
+
+  async function handleRemoveItem(index: number) {
+    if (!character) return
+    const next = character.inventory.items.filter((_, i) => i !== index)
+    const updated = await withSave(() => updateInventory(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleQtyChange(index: number, delta: number) {
+    if (!character) return
+    const next = character.inventory.items.map((item, i) =>
+      i === index ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item,
+    )
+    const updated = await withSave(() => updateInventory(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleToggleEquipped(index: number) {
+    if (!character) return
+    const next = character.inventory.items.map((item, i) =>
+      i === index ? { ...item, equipped: !item.equipped } : item,
+    )
+    const updated = await withSave(() => updateInventory(character.id, next))
     if (updated) setCharacter(updated)
   }
 
@@ -985,6 +1049,153 @@ export function CharacterPage() {
           </div>
         </div>
 
+        {/* Inventory */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                Inventaire
+              </h2>
+              {character.inventory.items.length > 0 && (() => {
+                const total = character.inventory.items.reduce(
+                  (s, it) => s + it.weight * it.quantity, 0,
+                )
+                const pct = Math.min(100, (total / character.inventory.capacity) * 100)
+                const color = pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                return (
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className="w-24 h-1.5 bg-stone-700 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+                    </div>
+                    <span className="text-stone-500 text-xs">
+                      {total.toFixed(1)} / {character.inventory.capacity} kg
+                    </span>
+                  </div>
+                )
+              })()}
+            </div>
+            <button
+              onClick={() => { setAddingItem(v => !v); setItemDraft(emptyItemDraft()) }}
+              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+            >
+              {addingItem ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {/* Add item form */}
+          {addingItem && (
+            <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-stone-800">
+              <input
+                type="text"
+                placeholder="Nom de l'objet"
+                value={itemDraft.name}
+                onChange={e => setItemDraft(d => ({ ...d, name: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddItem() }}
+                className="flex-1 min-w-[160px] bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+              />
+              <input
+                type="number"
+                placeholder="Qté"
+                min={1}
+                value={itemDraft.quantity}
+                onChange={e => setItemDraft(d => ({ ...d, quantity: e.target.value }))}
+                className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <input
+                type="number"
+                placeholder="kg"
+                min={0}
+                step={0.1}
+                value={itemDraft.weight}
+                onChange={e => setItemDraft(d => ({ ...d, weight: e.target.value }))}
+                className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              />
+              <input
+                type="text"
+                placeholder="Valeur (ex: 15 po)"
+                value={itemDraft.value}
+                onChange={e => setItemDraft(d => ({ ...d, value: e.target.value }))}
+                className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+              />
+              <button
+                onClick={handleAddItem}
+                disabled={saving || !itemDraft.name.trim()}
+                className="bg-amber-600 hover:bg-amber-500 text-stone-950 font-semibold text-sm rounded-lg px-4 py-2 transition-colors disabled:opacity-40"
+              >
+                Ajouter
+              </button>
+            </div>
+          )}
+
+          {character.inventory.items.length === 0 ? (
+            <p className="text-stone-500 text-sm">Inventaire vide.</p>
+          ) : (
+            <div className="divide-y divide-stone-800/60">
+              {character.inventory.items.map((item, i) => (
+                <div key={i} className="flex items-center gap-3 py-2.5">
+                  {/* Equipped toggle */}
+                  <button
+                    onClick={() => handleToggleEquipped(i)}
+                    disabled={saving}
+                    title={item.equipped ? 'Déséquiper' : 'Équiper'}
+                    className={`w-4 h-4 rounded-full border-2 shrink-0 transition-colors disabled:cursor-not-allowed ${
+                      item.equipped
+                        ? 'bg-amber-400 border-amber-400'
+                        : 'bg-transparent border-stone-600 hover:border-stone-400'
+                    }`}
+                  />
+
+                  {/* Name */}
+                  <span className={`flex-1 min-w-0 text-sm truncate ${item.equipped ? 'text-white font-medium' : 'text-stone-300'}`}>
+                    {item.name}
+                  </span>
+
+                  {/* Quantity */}
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button
+                      onClick={() => handleQtyChange(i, -1)}
+                      disabled={saving || item.quantity <= 0}
+                      className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 text-xs font-bold transition-colors disabled:opacity-30"
+                    >
+                      −
+                    </button>
+                    <span className="text-white text-sm w-6 text-center font-semibold">{item.quantity}</span>
+                    <button
+                      onClick={() => handleQtyChange(i, +1)}
+                      disabled={saving}
+                      className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 text-xs font-bold transition-colors disabled:opacity-30"
+                    >
+                      +
+                    </button>
+                  </div>
+
+                  {/* Weight */}
+                  {item.weight > 0 && (
+                    <span className="text-stone-500 text-xs w-14 text-right shrink-0">
+                      {(item.weight * item.quantity).toFixed(1)} kg
+                    </span>
+                  )}
+
+                  {/* Value */}
+                  {item.value && (
+                    <span className="text-amber-600 text-xs w-16 text-right shrink-0 truncate">{item.value}</span>
+                  )}
+
+                  {/* Delete */}
+                  <button
+                    onClick={() => handleRemoveItem(i)}
+                    disabled={saving}
+                    className="text-stone-700 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-sm shrink-0"
+                    title="Supprimer"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
         {/* Spell slots */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -1233,6 +1444,30 @@ export function CharacterPage() {
               })}
             </div>
           )}
+        </div>
+
+        {/* Notes */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Notes</h2>
+            {notesDirty && (
+              <button
+                onClick={handleSaveNotes}
+                disabled={saving}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
+              >
+                Enregistrer
+              </button>
+            )}
+          </div>
+          <textarea
+            value={notesDraft}
+            onChange={e => { setNotesDraft(e.target.value); setNotesDirty(true) }}
+            onBlur={handleSaveNotes}
+            placeholder="Notes libres sur ce personnage…"
+            rows={5}
+            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+          />
         </div>
       </main>
     </div>

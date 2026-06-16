@@ -42,6 +42,13 @@ class UpdateCharacterRequest extends FormRequest
             'skill_proficiencies'   => ['sometimes', 'array'],
             'skill_proficiencies.*' => ['string', 'in:' . implode(',', array_keys(\App\Models\Character::SKILLS))],
 
+            'inventory'                => ['sometimes', 'nullable', 'array'],
+            'inventory.*.name'         => ['required_with:inventory', 'string', 'max:100'],
+            'inventory.*.quantity'     => ['sometimes', 'integer', 'min:0'],
+            'inventory.*.weight'       => ['sometimes', 'numeric', 'min:0'],
+            'inventory.*.value'        => ['sometimes', 'nullable', 'string', 'max:50'],
+            'inventory.*.equipped'     => ['sometimes', 'boolean'],
+
             'spellcasting_ability'  => ['sometimes', 'nullable', 'string', 'in:strength,dexterity,constitution,intelligence,wisdom,charisma'],
             'spell_slots'           => ['sometimes', 'nullable', 'array'],
             'spells_known'          => ['sometimes', 'nullable', 'array'],

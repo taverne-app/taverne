@@ -7,6 +7,14 @@ export type SkillName =
   | 'nature' | 'perception' | 'performance' | 'persuasion' | 'religion'
   | 'sleight_of_hand' | 'stealth' | 'survival'
 
+export interface InventoryItem {
+  name: string
+  quantity: number
+  weight: number
+  value: string
+  equipped: boolean
+}
+
 export interface SpellSlot {
   max: number
   used: number
@@ -54,6 +62,11 @@ export interface Character {
     slots: Record<string, SpellSlot>
     spells: Spell[]
   }
+  inventory: {
+    items: InventoryItem[]
+    capacity: number
+  }
+  notes: string | null
 }
 
 export interface CreateCharacterPayload {
@@ -173,6 +186,24 @@ export interface DiceRoll {
   advantage: boolean
   disadvantage: boolean
   timestamp: string
+}
+
+export async function updateInventory(id: number, items: InventoryItem[]): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ inventory: items }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateNotes(id: number, notes: string): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ notes }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
 }
 
 export async function rollDice(
