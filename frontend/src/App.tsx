@@ -6,6 +6,8 @@ import { RegisterPage } from './pages/RegisterPage'
 import { CharactersPage } from './pages/CharactersPage'
 import { CharacterPage } from './pages/CharacterPage'
 import { CombatPage } from './pages/CombatPage'
+import { CampaignsPage } from './pages/CampaignsPage'
+import { CampaignPage } from './pages/CampaignPage'
 
 export default function App() {
   return (
@@ -35,6 +37,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CombatPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campaigns"
+            element={
+              <ProtectedRoute>
+                <CampaignsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/campaigns/:id"
+            element={
+              <ProtectedRoute>
+                <CampaignPage />
               </ProtectedRoute>
             }
           />

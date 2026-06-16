@@ -153,6 +153,12 @@ export function CharactersPage() {
           <span className="text-amber-400 font-bold text-lg">🍺 Taverne</span>
           <div className="flex items-center gap-4">
             <Link
+              to="/campaigns"
+              className="text-stone-400 hover:text-amber-400 text-sm transition-colors font-medium"
+            >
+              🗺 Campagnes
+            </Link>
+            <Link
               to="/combat"
               className="text-stone-400 hover:text-amber-400 text-sm transition-colors font-medium"
             >
