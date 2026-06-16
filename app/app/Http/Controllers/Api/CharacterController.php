@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Events\CharacterUpdated;
+use App\Events\DiceRolled;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCharacterRequest;
 use App\Http\Requests\UpdateCharacterRequest;
@@ -129,6 +130,55 @@ class CharacterController extends Controller
         CharacterUpdated::dispatch($fresh);
 
         return new CharacterResource($fresh);
+    }
+
+    public function roll(Request $request, Character $character): JsonResponse
+    {
+        $this->authorizeCharacter($request, $character);
+
+        $request->validate([
+            'label'        => ['sometimes', 'string', 'max:100'],
+            'count'        => ['sometimes', 'integer', 'min:1', 'max:20'],
+            'sides'        => ['required', 'integer', 'in:4,6,8,10,12,20,100'],
+            'modifier'     => ['sometimes', 'integer', 'min:-20', 'max:30'],
+            'advantage'    => ['sometimes', 'boolean'],
+            'disadvantage' => ['sometimes', 'boolean'],
+        ]);
+
+        $count        = $request->integer('count', 1);
+        $sides        = $request->integer('sides');
+        $modifier     = $request->integer('modifier', 0);
+        $advantage    = $request->boolean('advantage');
+        $disadvantage = $request->boolean('disadvantage');
+
+        $numRolls = ($advantage || $disadvantage) ? 2 : $count;
+        $rolls    = array_map(fn () => random_int(1, $sides), range(1, $numRolls));
+
+        if ($advantage) {
+            $result = max($rolls);
+        } elseif ($disadvantage) {
+            $result = min($rolls);
+        } else {
+            $result = array_sum($rolls);
+        }
+
+        $roll = [
+            'character_id'   => $character->id,
+            'character_name' => $character->name,
+            'label'          => $request->string('label', "{$count}d{$sides}")->value(),
+            'count'          => $count,
+            'sides'          => $sides,
+            'rolls'          => $rolls,
+            'modifier'       => $modifier,
+            'total'          => $result + $modifier,
+            'advantage'      => $advantage,
+            'disadvantage'   => $disadvantage,
+            'timestamp'      => now()->toISOString(),
+        ];
+
+        DiceRolled::dispatch($roll);
+
+        return response()->json($roll);
     }
 
     public function longRest(Request $request, Character $character): CharacterResource

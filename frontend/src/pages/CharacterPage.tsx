@@ -11,11 +11,13 @@ import {
   longRest,
   updateSpells,
   updateSpellSlots,
+  rollDice,
   type Character,
   type AbilityName,
   type SkillName,
   type Spell,
   type SpellSlot,
+  type DiceRoll,
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -394,6 +396,47 @@ export function CharacterPage() {
     if (updated) setCharacter(updated)
   }
 
+  // ── Dice panel ───────────────────────────────────────────────────────────────
+
+  const [diceOpen, setDiceOpen]         = useState(false)
+  const [rollHistory, setRollHistory]   = useState<DiceRoll[]>([])
+  const [selectedSides, setSelectedSides] = useState(20)
+  const [diceModInput, setDiceModInput] = useState('')
+  const [advantage, setAdvantage]       = useState<'none' | 'adv' | 'dis'>('none')
+  const [lastRoll, setLastRoll]         = useState<DiceRoll | null>(null)
+
+  // WS: also capture dice.rolled events
+  useEffect(() => {
+    if (!id || !token) return
+    const echo = createEcho(token)
+    echo.private(`character.${id}`).listen('.dice.rolled', (e: DiceRoll) => {
+      setRollHistory(h => [e, ...h].slice(0, 30))
+      setLastRoll(e)
+    })
+    return () => {
+      echo.leave(`character.${id}`)
+      echo.disconnect()
+    }
+  }, [id, token])
+
+  async function handleRoll(params: {
+    sides: number
+    count?: number
+    modifier?: number
+    label?: string
+    advantage?: boolean
+    disadvantage?: boolean
+  }) {
+    if (!character) return
+    const result = await rollDice(character.id, params)
+    setRollHistory(h => [result, ...h].slice(0, 30))
+    setLastRoll(result)
+  }
+
+  function quickRoll(label: string, sides: number, modifier: number) {
+    handleRoll({ sides, modifier, label, count: 1 })
+  }
+
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
     clearAuth()
@@ -433,6 +476,16 @@ export function CharacterPage() {
             {saving && (
               <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
             )}
+            <button
+              onClick={() => setDiceOpen(v => !v)}
+              className={`text-sm font-bold px-3 py-1 rounded-lg border transition-colors ${
+                diceOpen
+                  ? 'bg-rose-600 border-rose-500 text-white'
+                  : 'bg-stone-800 border-stone-700 text-stone-300 hover:border-stone-500'
+              }`}
+            >
+              ⚅ Dés
+            </button>
             <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
             <button
               onClick={handleLogout}
@@ -444,7 +497,143 @@ export function CharacterPage() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+      {/* Dice panel — fixed bottom overlay */}
+      {diceOpen && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-stone-900 border-t border-stone-700 shadow-2xl">
+          <div className="max-w-5xl mx-auto px-4 py-4">
+            <div className="flex gap-6">
+
+              {/* Left: controls */}
+              <div className="flex-1 min-w-0 space-y-3">
+                {/* Dice type buttons */}
+                <div className="flex flex-wrap gap-2">
+                  {[4, 6, 8, 10, 12, 20, 100].map(d => (
+                    <button
+                      key={d}
+                      onClick={() => setSelectedSides(d)}
+                      className={`w-12 h-10 rounded-lg border font-bold text-sm transition-colors ${
+                        selectedSides === d
+                          ? 'bg-rose-600 border-rose-500 text-white'
+                          : 'bg-stone-800 border-stone-700 text-stone-300 hover:border-stone-500'
+                      }`}
+                    >
+                      d{d}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Modifier + advantage row */}
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="flex items-center gap-2">
+                    <span className="text-stone-500 text-xs">Modif.</span>
+                    <input
+                      type="number"
+                      value={diceModInput}
+                      onChange={e => setDiceModInput(e.target.value)}
+                      placeholder="0"
+                      className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-rose-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                  {selectedSides === 20 && (
+                    <div className="flex gap-1">
+                      {(['none', 'adv', 'dis'] as const).map(mode => (
+                        <button
+                          key={mode}
+                          onClick={() => setAdvantage(mode)}
+                          className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                            advantage === mode
+                              ? mode === 'adv'
+                                ? 'bg-emerald-700 border-emerald-600 text-white'
+                                : mode === 'dis'
+                                  ? 'bg-red-800 border-red-700 text-white'
+                                  : 'bg-stone-600 border-stone-500 text-white'
+                              : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
+                          }`}
+                        >
+                          {mode === 'none' ? 'Normal' : mode === 'adv' ? 'Avantage' : 'Désavantage'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => handleRoll({
+                      sides: selectedSides,
+                      modifier: parseInt(diceModInput, 10) || 0,
+                      advantage: advantage === 'adv',
+                      disadvantage: advantage === 'dis',
+                      label: `1d${selectedSides}`,
+                    })}
+                    className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm rounded-lg px-5 py-1.5 transition-colors"
+                  >
+                    Lancer
+                  </button>
+                </div>
+
+                {/* Quick rolls */}
+                <div className="flex flex-wrap gap-1.5">
+                  <button
+                    onClick={() => quickRoll('Initiative', 20, character.combat.initiative)}
+                    className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 rounded-lg px-2.5 py-1 text-xs transition-colors"
+                  >
+                    Initiative {sign(character.combat.initiative)}
+                  </button>
+                  {SAVE_LABELS.map(([ability, label]) => {
+                    const save = character.saving_throws[ability]
+                    return (
+                      <button
+                        key={ability}
+                        onClick={() => quickRoll(`Save: ${label}`, 20, save.modifier)}
+                        className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 rounded-lg px-2.5 py-1 text-xs transition-colors"
+                      >
+                        {ABILITY_ABBR[ability]} {sign(save.modifier)}
+                      </button>
+                    )
+                  })}
+                  {SKILL_LABELS.map(([skill, label]) => {
+                    const entry = character.skills[skill]
+                    return (
+                      <button
+                        key={skill}
+                        onClick={() => quickRoll(label, 20, entry.modifier)}
+                        className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 rounded-lg px-2.5 py-1 text-xs transition-colors"
+                      >
+                        {label} {sign(entry.modifier)}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              {/* Right: last result + history */}
+              <div className="w-52 shrink-0 flex flex-col gap-2">
+                {lastRoll && (
+                  <div className="bg-stone-800 rounded-xl p-3 text-center border border-rose-700/40">
+                    <p className="text-stone-400 text-xs truncate">{lastRoll.label}</p>
+                    <p className="text-rose-300 font-black text-4xl leading-none my-1">{lastRoll.total}</p>
+                    <p className="text-stone-500 text-xs">
+                      [{lastRoll.rolls.join(', ')}]{lastRoll.modifier !== 0 ? ` ${sign(lastRoll.modifier)}` : ''}
+                      {lastRoll.advantage && ' (av.)'}
+                      {lastRoll.disadvantage && ' (dés.)'}
+                    </p>
+                  </div>
+                )}
+                <div className="flex-1 overflow-y-auto max-h-28 space-y-1">
+                  {rollHistory.map((r, i) => (
+                    <div key={i} className="flex items-center justify-between text-xs px-1">
+                      <span className="text-stone-500 truncate max-w-[100px]">{r.label}</span>
+                      <span className={`font-bold ${r.total >= 20 ? 'text-amber-400' : r.total <= 2 ? 'text-red-400' : 'text-white'}`}>
+                        {r.total}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <main className="max-w-5xl mx-auto px-4 py-6 space-y-6" style={{ paddingBottom: diceOpen ? '220px' : undefined }}>
         {/* Identity */}
         <div>
           <div className="flex items-start justify-between gap-4">

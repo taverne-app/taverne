@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, type Character } from '../api/characters'
+import { listCharacters, setInitiativeRoll, type Character, type DiceRoll } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
@@ -82,6 +82,7 @@ export function CombatPage() {
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTurn, setActiveTurn] = useState(0)
+  const [diceLog, setDiceLog] = useState<DiceRoll[]>([])
 
   // Map id→round for WS subscriptions cleanup
   const echoRefs = useRef<Map<number, ReturnType<typeof createEcho>>>(new Map())
@@ -102,9 +103,13 @@ export function CombatPage() {
     echoRefs.current.clear()
 
     characters.forEach(c => {
-      echo.private(`character.${c.id}`).listen('.character.updated', (e: { character: Character }) => {
-        setCharacters(prev => prev.map(ch => ch.id === e.character.id ? e.character : ch))
-      })
+      echo.private(`character.${c.id}`)
+        .listen('.character.updated', (e: { character: Character }) => {
+          setCharacters(prev => prev.map(ch => ch.id === e.character.id ? e.character : ch))
+        })
+        .listen('.dice.rolled', (e: DiceRoll) => {
+          setDiceLog(log => [e, ...log].slice(0, 50))
+        })
     })
 
     return () => {
@@ -369,6 +374,50 @@ export function CombatPage() {
         <p className="text-stone-600 text-xs text-center">
           Cliquer sur le champ d'initiative pour le modifier · Le tour actif est mis en surbrillance · Les PV se synchronisent en temps réel
         </p>
+
+        {/* Dice log */}
+        {diceLog.length > 0 && (
+          <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+            <div className="flex items-center justify-between px-5 py-3 border-b border-stone-800">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                Journal des jets
+              </h2>
+              <button
+                onClick={() => setDiceLog([])}
+                className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+              >
+                Effacer
+              </button>
+            </div>
+            <div className="divide-y divide-stone-800/60 max-h-64 overflow-y-auto">
+              {diceLog.map((roll, i) => (
+                <div key={i} className="flex items-center gap-3 px-5 py-2.5">
+                  <div className="w-10 shrink-0 text-center">
+                    <span className={`font-black text-lg ${
+                      roll.total >= 20 && roll.sides === 20 ? 'text-amber-400' :
+                      roll.total <= roll.sides * roll.count * 0.1 ? 'text-red-400' :
+                      'text-white'
+                    }`}>
+                      {roll.total}
+                    </span>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-stone-200 text-sm font-medium truncate">{roll.label}</p>
+                    <p className="text-stone-500 text-xs">
+                      {roll.character_name} · [{roll.rolls.join(', ')}]
+                      {roll.modifier !== 0 && ` ${roll.modifier >= 0 ? '+' : ''}${roll.modifier}`}
+                      {roll.advantage && ' · avantage'}
+                      {roll.disadvantage && ' · désavantage'}
+                    </p>
+                  </div>
+                  <span className="text-stone-600 text-xs shrink-0">
+                    {new Date(roll.timestamp).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </main>
     </div>
   )

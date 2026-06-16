@@ -161,6 +161,39 @@ export async function updateProficiencies(
   return json.data
 }
 
+export interface DiceRoll {
+  character_id: number
+  character_name: string
+  label: string
+  count: number
+  sides: number
+  rolls: number[]
+  modifier: number
+  total: number
+  advantage: boolean
+  disadvantage: boolean
+  timestamp: string
+}
+
+export async function rollDice(
+  id: number,
+  params: {
+    sides: number
+    count?: number
+    modifier?: number
+    label?: string
+    advantage?: boolean
+    disadvantage?: boolean
+  },
+): Promise<DiceRoll> {
+  const res = await apiFetch(`/characters/${id}/roll`, {
+    method: 'POST',
+    body: JSON.stringify(params),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return res.json()
+}
+
 export async function useSpellSlot(
   id: number,
   level: number,
