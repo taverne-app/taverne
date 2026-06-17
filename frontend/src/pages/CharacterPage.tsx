@@ -13,6 +13,8 @@ import {
   updateSpellSlots,
   rollDice,
   updateInventory,
+  updateFeatures,
+  updateIdentity,
   updateNotes,
   type Character,
   type AbilityName,
@@ -21,6 +23,8 @@ import {
   type SpellSlot,
   type DiceRoll,
   type InventoryItem,
+  type Feature,
+  type IdentityPayload,
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -179,6 +183,40 @@ export function CharacterPage() {
   const [tempInput, setTempInput]     = useState('')
   const hpRef  = useRef<HTMLInputElement>(null)
   const tempRef = useRef<HTMLInputElement>(null)
+
+  // ── Identity draft ───────────────────────────────────────────────────────────
+  const [editingIdentity, setEditingIdentity] = useState(false)
+  const [identityDraft, setIdentityDraft] = useState<IdentityPayload>({})
+
+  function startEditIdentity() {
+    if (!character) return
+    setIdentityDraft({
+      name: character.name,
+      race: character.race,
+      character_class: character.character_class,
+      subclass: character.subclass ?? '',
+      level: character.level,
+      background: character.background ?? '',
+      alignment: character.alignment ?? '',
+      experience_points: character.experience_points,
+      speed: character.combat.speed,
+      max_hp: character.combat.max_hp,
+      armor_class: character.combat.armor_class,
+    })
+    setEditingIdentity(true)
+  }
+
+  async function saveIdentity() {
+    if (!character) return
+    const payload: IdentityPayload = {
+      ...identityDraft,
+      subclass: identityDraft.subclass?.trim() || null,
+      background: identityDraft.background?.trim() || null,
+      alignment: identityDraft.alignment?.trim() || null,
+    }
+    const updated = await withSave(() => updateIdentity(character.id, payload))
+    if (updated) { setCharacter(updated); setEditingIdentity(false) }
+  }
 
   type AbilityDraft = Record<AbilityName, string>
   const ABILITY_KEYS: AbilityName[] = ['strength', 'dexterity', 'constitution', 'intelligence', 'wisdom', 'charisma']
@@ -397,6 +435,39 @@ export function CharacterPage() {
     )
     const updated = await withSave(() => updateSpells(character.id, next))
     if (updated) setCharacter(updated)
+  }
+
+  // ── Features ──────────────────────────────────────────────────────────────────
+
+  const emptyFeatureDraft = (): Feature => ({ name: '', source: '', description: '' })
+  const [addingFeature, setAddingFeature]     = useState(false)
+  const [featureDraft, setFeatureDraft]       = useState<Feature>(emptyFeatureDraft)
+  const [expandedFeature, setExpandedFeature] = useState<number | null>(null)
+  const [editingFeature, setEditingFeature]   = useState<number | null>(null)
+  const [editDraft, setEditDraft]             = useState<Feature>(emptyFeatureDraft)
+
+  async function handleAddFeature() {
+    if (!character || !featureDraft.name.trim()) return
+    const next = [...(character.features ?? []), { ...featureDraft, name: featureDraft.name.trim() }]
+    const updated = await withSave(() => updateFeatures(character.id, next))
+    if (updated) { setCharacter(updated); setAddingFeature(false); setFeatureDraft(emptyFeatureDraft()) }
+  }
+
+  async function handleSaveFeature(index: number) {
+    if (!character || !editDraft.name.trim()) return
+    const next = character.features.map((f, i) => i === index ? { ...editDraft, name: editDraft.name.trim() } : f)
+    const updated = await withSave(() => updateFeatures(character.id, next))
+    if (updated) { setCharacter(updated); setEditingFeature(null) }
+  }
+
+  async function handleDeleteFeature(index: number) {
+    if (!character) return
+    const next = character.features.filter((_, i) => i !== index)
+    const updated = await withSave(() => updateFeatures(character.id, next))
+    if (updated) {
+      setCharacter(updated)
+      if (expandedFeature === index) setExpandedFeature(null)
+    }
   }
 
   // ── Notes ────────────────────────────────────────────────────────────────────
@@ -699,18 +770,85 @@ export function CharacterPage() {
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6" style={{ paddingBottom: diceOpen ? '220px' : undefined }}>
         {/* Identity */}
-        <div>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold text-white">{character.name}</h1>
-              <p className="text-stone-400 mt-0.5">
-                {character.race} · {character.character_class}
-              </p>
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          {editingIdentity ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {([
+                  ['name', 'Nom', 'text'],
+                  ['race', 'Race', 'text'],
+                  ['character_class', 'Classe', 'text'],
+                  ['subclass', 'Sous-classe', 'text'],
+                  ['background', 'Background', 'text'],
+                  ['alignment', 'Alignement', 'text'],
+                ] as [keyof IdentityPayload, string, string][]).map(([field, label]) => (
+                  <div key={field}>
+                    <label className="text-stone-500 text-xs mb-1 block">{label}</label>
+                    <input
+                      type="text"
+                      value={(identityDraft[field] ?? '') as string}
+                      onChange={e => setIdentityDraft(d => ({ ...d, [field]: e.target.value }))}
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                {([
+                  ['level', 'Niveau', 1, 20],
+                  ['experience_points', 'XP', 0, 355000],
+                  ['max_hp', 'PV max', 1, 9999],
+                  ['armor_class', 'CA', 1, 30],
+                  ['speed', 'Vitesse (m)', 0, 200],
+                ] as [keyof IdentityPayload, string, number, number][]).map(([field, label, min, max]) => (
+                  <div key={field}>
+                    <label className="text-stone-500 text-xs mb-1 block">{label}</label>
+                    <input
+                      type="number"
+                      min={min}
+                      max={max}
+                      value={(identityDraft[field] ?? '') as number}
+                      onChange={e => setIdentityDraft(d => ({ ...d, [field]: parseInt(e.target.value, 10) || 0 }))}
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <button onClick={() => setEditingIdentity(false)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
+                <button onClick={saveIdentity} disabled={saving} className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
+              </div>
             </div>
-            <span className="shrink-0 bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-sm rounded-lg px-3 py-1.5">
-              Niveau {character.level}
-            </span>
-          </div>
+          ) : (
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h1 className="text-2xl font-bold text-white">{character.name}</h1>
+                <p className="text-stone-400 mt-0.5">
+                  {character.race} · {character.character_class}
+                  {character.subclass && <span className="text-stone-500"> ({character.subclass})</span>}
+                </p>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
+                  {character.background && (
+                    <span className="text-stone-500 text-xs">{character.background}</span>
+                  )}
+                  {character.alignment && (
+                    <span className="text-stone-500 text-xs">{character.alignment}</span>
+                  )}
+                  {character.experience_points > 0 && (
+                    <span className="text-stone-500 text-xs">{character.experience_points} XP</span>
+                  )}
+                </div>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-sm rounded-lg px-3 py-1.5">
+                  Niveau {character.level}
+                </span>
+                <button onClick={startEditIdentity} className="text-stone-600 hover:text-stone-400 text-xs transition-colors">
+                  Modifier
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Two-column grid */}
@@ -1442,6 +1580,159 @@ export function CharacterPage() {
                   </div>
                 )
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Features */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Traits &amp; Capacités
+            </h2>
+            <button
+              onClick={() => { setAddingFeature(v => !v); setFeatureDraft(emptyFeatureDraft()) }}
+              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+            >
+              {addingFeature ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {/* Add form */}
+          {addingFeature && (
+            <div className="bg-stone-800 border border-stone-700 rounded-xl p-4 mb-4 space-y-3">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Nom de la capacité *"
+                  value={featureDraft.name}
+                  onChange={e => setFeatureDraft(d => ({ ...d, name: e.target.value }))}
+                  className="flex-1 bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <input
+                  type="text"
+                  placeholder="Source (Classe, Race…)"
+                  value={featureDraft.source}
+                  onChange={e => setFeatureDraft(d => ({ ...d, source: e.target.value }))}
+                  className="w-40 bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <textarea
+                placeholder="Description…"
+                value={featureDraft.description}
+                onChange={e => setFeatureDraft(d => ({ ...d, description: e.target.value }))}
+                rows={3}
+                className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-none"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddFeature}
+                  disabled={saving || !featureDraft.name.trim()}
+                  className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Feature list */}
+          {character.features.length === 0 && !addingFeature ? (
+            <p className="text-stone-500 text-sm">Aucune capacité enregistrée.</p>
+          ) : (
+            <div className="space-y-2">
+              {character.features.map((f, i) => (
+                <div key={i} className="border border-stone-800 rounded-xl overflow-hidden">
+                  {editingFeature === i ? (
+                    /* Inline edit form */
+                    <div className="bg-stone-800 p-4 space-y-3">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          value={editDraft.name}
+                          onChange={e => setEditDraft(d => ({ ...d, name: e.target.value }))}
+                          className="flex-1 bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Source"
+                          value={editDraft.source}
+                          onChange={e => setEditDraft(d => ({ ...d, source: e.target.value }))}
+                          className="w-40 bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                      </div>
+                      <textarea
+                        value={editDraft.description}
+                        onChange={e => setEditDraft(d => ({ ...d, description: e.target.value }))}
+                        rows={3}
+                        className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors resize-none"
+                      />
+                      <div className="flex items-center justify-between">
+                        <button
+                          onClick={() => setEditingFeature(null)}
+                          className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                        >
+                          Annuler
+                        </button>
+                        <div className="flex gap-4">
+                          <button
+                            onClick={() => handleDeleteFeature(i)}
+                            disabled={saving}
+                            className="text-red-500 hover:text-red-400 text-xs transition-colors disabled:opacity-40"
+                          >
+                            Supprimer
+                          </button>
+                          <button
+                            onClick={() => handleSaveFeature(i)}
+                            disabled={saving || !editDraft.name.trim()}
+                            className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
+                          >
+                            Enregistrer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Display row */
+                    <div>
+                      <button
+                        onClick={() => setExpandedFeature(expandedFeature === i ? null : i)}
+                        className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-800/50 transition-colors text-left group"
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-stone-500 text-xs transition-transform duration-200" style={{ transform: expandedFeature === i ? 'rotate(90deg)' : 'rotate(0deg)' }}>
+                            ▶
+                          </span>
+                          <span className="text-white text-sm font-medium truncate">{f.name}</span>
+                          {f.source && (
+                            <span className="shrink-0 text-xs bg-stone-800 text-stone-400 border border-stone-700 rounded px-1.5 py-0.5">
+                              {f.source}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setEditDraft({ ...f })
+                            setEditingFeature(i)
+                            setExpandedFeature(null)
+                          }}
+                          className="shrink-0 text-stone-600 hover:text-stone-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          Modifier
+                        </button>
+                      </button>
+                      {expandedFeature === i && f.description && (
+                        <div className="px-4 pb-4">
+                          <p className="text-stone-400 text-sm whitespace-pre-wrap leading-relaxed">
+                            {f.description}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

@@ -26,12 +26,22 @@ export interface Spell {
   prepared: boolean
 }
 
+export interface Feature {
+  name: string
+  source: string
+  description: string
+}
+
 export interface Character {
   id: number
   name: string
   race: string
   character_class: string
+  subclass: string | null
   level: number
+  background: string | null
+  alignment: string | null
+  experience_points: number
   proficiency_bonus: number
   abilities: Record<AbilityName, number | null>
   modifiers: Record<AbilityName, number>
@@ -66,6 +76,7 @@ export interface Character {
     items: InventoryItem[]
     capacity: number
   }
+  features: Feature[]
   notes: string | null
 }
 
@@ -76,6 +87,29 @@ export interface CreateCharacterPayload {
   max_hp: number
   armor_class: number
   level?: number
+}
+
+export interface IdentityPayload {
+  name?: string
+  race?: string
+  character_class?: string
+  subclass?: string | null
+  level?: number
+  background?: string | null
+  alignment?: string | null
+  experience_points?: number
+  speed?: number
+  max_hp?: number
+  armor_class?: number
+}
+
+export async function updateIdentity(id: number, payload: IdentityPayload): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
 }
 
 export async function listCharacters(): Promise<Character[]> {
@@ -192,6 +226,15 @@ export async function updateInventory(id: number, items: InventoryItem[]): Promi
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ inventory: items }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateFeatures(id: number, features: Feature[]): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ features }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data
