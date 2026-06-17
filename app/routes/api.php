@@ -3,6 +3,8 @@
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CharacterController;
+use App\Http\Controllers\Api\SessionController;
+use App\Http\Controllers\Api\ShareController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -12,6 +14,9 @@ Route::prefix('auth')->group(function () {
     Route::post('login',    [AuthController::class, 'login']);
 });
 
+// Vue MJ (public)
+Route::get('/share/{token}', [ShareController::class, 'show']);
+
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());
     Route::post('auth/logout', [AuthController::class, 'logout']);
@@ -19,8 +24,11 @@ Route::middleware('auth:sanctum')->group(function () {
     // Campagnes
     Route::apiResource('campaigns', CampaignController::class);
     Route::prefix('campaigns/{campaign}')->group(function () {
-        Route::post('characters',                   [CampaignController::class, 'addCharacter']);
-        Route::delete('characters/{character}',     [CampaignController::class, 'removeCharacter']);
+        Route::post('characters',               [CampaignController::class, 'addCharacter']);
+        Route::delete('characters/{character}', [CampaignController::class, 'removeCharacter']);
+        Route::post('share',                    [CampaignController::class, 'share']);
+        Route::delete('share',                  [CampaignController::class, 'revokeShare']);
+        Route::apiResource('sessions', SessionController::class)->except(['show']);
     });
 
     // Personnages

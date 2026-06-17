@@ -11,7 +11,7 @@ class Campaign extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'description'];
+    protected $fillable = ['user_id', 'name', 'description', 'share_token'];
 
     public function user(): BelongsTo
     {
@@ -21,5 +21,10 @@ class Campaign extends Model
     public function characters(): HasMany
     {
         return $this->hasMany(Character::class)->orderBy('name');
+    }
+
+    public function sessions(): HasMany
+    {
+        return $this->hasMany(CampaignSession::class)->orderByDesc('session_date')->orderByDesc('id');
     }
 }

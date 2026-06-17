@@ -9,6 +9,13 @@ import {
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, type Character } from '../api/characters'
+import {
+  listSessions,
+  createSession,
+  updateSession,
+  deleteSession,
+  type CampaignSession,
+} from '../api/sessions'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
@@ -57,6 +64,14 @@ export function CampaignPage() {
   // Share
   const [copied, setCopied] = useState(false)
 
+  // Sessions
+  const [sessions, setSessions]               = useState<CampaignSession[]>([])
+  const [addingSession, setAddingSession]     = useState(false)
+  const [sessionDraft, setSessionDraft]       = useState({ title: '', session_date: '', notes: '' })
+  const [editingSession, setEditingSession]   = useState<number | null>(null)
+  const [editSessionDraft, setEditSessionDraft] = useState({ title: '', session_date: '', notes: '' })
+  const [expandedSession, setExpandedSession] = useState<number | null>(null)
+
   // Load campaign
   useEffect(() => {
     if (!id) return
@@ -69,6 +84,11 @@ export function CampaignPage() {
       .catch(() => navigate('/campaigns'))
       .finally(() => setLoading(false))
   }, [id, navigate])
+
+  useEffect(() => {
+    if (!id) return
+    listSessions(Number(id)).then(setSessions).catch(() => {})
+  }, [id])
 
   // Real-time WS subscription per character
   const charIds = characters.map(c => c.id).join(',')
@@ -159,6 +179,44 @@ export function CampaignPage() {
     navigator.clipboard.writeText(`${window.location.origin}/share/${campaign.share_token}`)
     setCopied(true)
     setTimeout(() => setCopied(false), 2000)
+  }
+
+  async function handleCreateSession() {
+    if (!campaign || !sessionDraft.title.trim()) return
+    setSaving(true)
+    try {
+      const s = await createSession(campaign.id, {
+        title: sessionDraft.title.trim(),
+        session_date: sessionDraft.session_date || null,
+        notes: sessionDraft.notes || null,
+      })
+      setSessions(prev => [s, ...prev])
+      setAddingSession(false)
+      setSessionDraft({ title: '', session_date: '', notes: '' })
+      setExpandedSession(s.id)
+    } finally { setSaving(false) }
+  }
+
+  async function handleUpdateSession(sessionId: number) {
+    if (!campaign) return
+    setSaving(true)
+    try {
+      const updated = await updateSession(campaign.id, sessionId, {
+        title: editSessionDraft.title.trim(),
+        session_date: editSessionDraft.session_date || null,
+        notes: editSessionDraft.notes || null,
+      })
+      setSessions(prev => prev.map(s => s.id === sessionId ? updated : s))
+      setEditingSession(null)
+    } finally { setSaving(false) }
+  }
+
+  async function handleDeleteSession(sessionId: number) {
+    if (!campaign) return
+    await deleteSession(campaign.id, sessionId)
+    setSessions(prev => prev.filter(s => s.id !== sessionId))
+    if (editingSession === sessionId) setEditingSession(null)
+    if (expandedSession === sessionId) setExpandedSession(null)
   }
 
   async function handleLogout() {
@@ -440,6 +498,154 @@ export function CampaignPage() {
                   </div>
                 )
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Sessions */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Journal de sessions ({sessions.length})
+            </h2>
+            <button
+              onClick={() => { setAddingSession(v => !v); setSessionDraft({ title: '', session_date: '', notes: '' }) }}
+              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              {addingSession ? 'Annuler' : '+ Nouvelle session'}
+            </button>
+          </div>
+
+          {/* Add session form */}
+          {addingSession && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Titre de la session *"
+                  value={sessionDraft.title}
+                  onChange={e => setSessionDraft(d => ({ ...d, title: e.target.value }))}
+                  autoFocus
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <input
+                  type="date"
+                  value={sessionDraft.session_date}
+                  onChange={e => setSessionDraft(d => ({ ...d, session_date: e.target.value }))}
+                  className="w-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <textarea
+                placeholder="Notes de la session…"
+                value={sessionDraft.notes}
+                onChange={e => setSessionDraft(d => ({ ...d, notes: e.target.value }))}
+                rows={4}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleCreateSession}
+                  disabled={saving || !sessionDraft.title.trim()}
+                  className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                >
+                  Créer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {sessions.length === 0 && !addingSession ? (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-8 text-center">
+              <p className="text-stone-500 text-sm">
+                Aucune session enregistrée.{' '}
+                <button onClick={() => setAddingSession(true)} className="text-amber-400 hover:text-amber-300 transition-colors">
+                  Créer la première
+                </button>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {sessions.map(s => (
+                <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                  {editingSession === s.id ? (
+                    <div className="p-5 space-y-3">
+                      <div className="flex gap-3">
+                        <input
+                          type="text"
+                          value={editSessionDraft.title}
+                          onChange={e => setEditSessionDraft(d => ({ ...d, title: e.target.value }))}
+                          className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <input
+                          type="date"
+                          value={editSessionDraft.session_date}
+                          onChange={e => setEditSessionDraft(d => ({ ...d, session_date: e.target.value }))}
+                          className="w-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                      </div>
+                      <textarea
+                        value={editSessionDraft.notes}
+                        onChange={e => setEditSessionDraft(d => ({ ...d, notes: e.target.value }))}
+                        rows={5}
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors resize-y"
+                      />
+                      <div className="flex items-center justify-between">
+                        <button onClick={() => setEditingSession(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                        <div className="flex gap-4">
+                          <button
+                            onClick={() => handleDeleteSession(s.id)}
+                            className="text-red-500 hover:text-red-400 text-xs transition-colors"
+                          >
+                            Supprimer
+                          </button>
+                          <button
+                            onClick={() => handleUpdateSession(s.id)}
+                            disabled={saving || !editSessionDraft.title.trim()}
+                            className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
+                          >
+                            Enregistrer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <button
+                        onClick={() => setExpandedSession(expandedSession === s.id ? null : s.id)}
+                        className="w-full flex items-center justify-between gap-3 px-5 py-4 hover:bg-stone-800/50 transition-colors text-left group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-stone-500 text-xs" style={{ transform: expandedSession === s.id ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.2s' }}>▶</span>
+                          <span className="text-white text-sm font-medium truncate">{s.title}</span>
+                          {s.session_date && (
+                            <span className="shrink-0 text-stone-500 text-xs">
+                              {new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation()
+                            setEditSessionDraft({ title: s.title, session_date: s.session_date ?? '', notes: s.notes ?? '' })
+                            setEditingSession(s.id)
+                            setExpandedSession(null)
+                          }}
+                          className="shrink-0 text-stone-600 hover:text-stone-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          Modifier
+                        </button>
+                      </button>
+                      {expandedSession === s.id && s.notes && (
+                        <div className="px-5 pb-5">
+                          <p className="text-stone-400 text-sm whitespace-pre-wrap leading-relaxed border-t border-stone-800 pt-4">
+                            {s.notes}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>
