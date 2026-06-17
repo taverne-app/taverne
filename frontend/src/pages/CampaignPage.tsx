@@ -7,6 +7,7 @@ import {
   removeCharacterFromCampaign,
   type Campaign,
 } from '../api/campaigns'
+import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, type Character } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -52,6 +53,9 @@ export function CampaignPage() {
   const [showAddModal, setShowAddModal]         = useState(false)
   const [allChars, setAllChars]                 = useState<Character[]>([])
   const [confirmRemove, setConfirmRemove]       = useState<number | null>(null)
+
+  // Share
+  const [copied, setCopied] = useState(false)
 
   // Load campaign
   useEffect(() => {
@@ -130,6 +134,31 @@ export function CampaignPage() {
       setCharacters(updated.characters)
       setConfirmRemove(null)
     } finally { setSaving(false) }
+  }
+
+  async function handleShare() {
+    if (!campaign) return
+    setSaving(true)
+    try {
+      const updated = await generateShareToken(campaign.id)
+      setCampaign(updated)
+    } finally { setSaving(false) }
+  }
+
+  async function handleRevoke() {
+    if (!campaign) return
+    setSaving(true)
+    try {
+      const updated = await revokeShareToken(campaign.id)
+      setCampaign(updated)
+    } finally { setSaving(false) }
+  }
+
+  function copyLink() {
+    if (!campaign?.share_token) return
+    navigator.clipboard.writeText(`${window.location.origin}/share/${campaign.share_token}`)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 2000)
   }
 
   async function handleLogout() {
@@ -215,7 +244,7 @@ export function CampaignPage() {
               </div>
               <div className="flex items-center gap-3 shrink-0">
                 <Link
-                  to="/combat"
+                  to={`/combat?campaign=${campaign.id}`}
                   className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
                 >
                   ⚔ Combat
@@ -227,6 +256,61 @@ export function CampaignPage() {
                   Modifier
                 </button>
               </div>
+            </div>
+          )}
+        </div>
+
+        {/* Share / Vue MJ */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-stone-300 text-sm font-semibold">Vue MJ</h2>
+              <p className="text-stone-500 text-xs mt-0.5">
+                Lien en lecture seule — HP, conditions et initiative en temps réel
+              </p>
+            </div>
+            {campaign.share_token ? (
+              <button
+                onClick={handleRevoke}
+                disabled={saving}
+                className="text-red-500 hover:text-red-400 text-xs transition-colors disabled:opacity-40"
+              >
+                Révoquer
+              </button>
+            ) : (
+              <button
+                onClick={handleShare}
+                disabled={saving}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
+              >
+                Créer le lien
+              </button>
+            )}
+          </div>
+
+          {campaign.share_token && (
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-stone-800 text-stone-400 text-xs rounded-lg px-3 py-2 truncate font-mono">
+                {window.location.origin}/share/{campaign.share_token}
+              </code>
+              <button
+                onClick={copyLink}
+                className={`shrink-0 text-xs font-semibold px-3 py-2 rounded-lg transition-colors ${
+                  copied
+                    ? 'bg-emerald-700 text-emerald-200'
+                    : 'bg-stone-700 hover:bg-stone-600 text-stone-300'
+                }`}
+              >
+                {copied ? 'Copié !' : 'Copier'}
+              </button>
+              <a
+                href={`/share/${campaign.share_token}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="shrink-0 text-xs text-stone-500 hover:text-stone-300 transition-colors px-2 py-2"
+              >
+                Ouvrir
+              </a>
             </div>
           )}
         </div>

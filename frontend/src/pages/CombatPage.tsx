@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { listCharacters, setInitiativeRoll, type Character, type DiceRoll } from '../api/characters'
+import { getCampaign, type Campaign } from '../api/campaigns'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
@@ -78,8 +79,11 @@ function InitInput({
 export function CombatPage() {
   const { token, user, clearAuth } = useAuth()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const campaignId = searchParams.get('campaign') ? Number(searchParams.get('campaign')) : null
 
   const [characters, setCharacters] = useState<Character[]>([])
+  const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTurn, setActiveTurn] = useState(0)
   const [diceLog, setDiceLog] = useState<DiceRoll[]>([])
@@ -87,13 +91,20 @@ export function CombatPage() {
   // Map id→round for WS subscriptions cleanup
   const echoRefs = useRef<Map<number, ReturnType<typeof createEcho>>>(new Map())
 
-  // Load characters
+  // Load characters (all or filtered to campaign)
   useEffect(() => {
-    listCharacters()
-      .then(setCharacters)
-      .catch(() => navigate('/characters'))
-      .finally(() => setLoading(false))
-  }, [navigate])
+    if (campaignId) {
+      getCampaign(campaignId)
+        .then(c => { setCampaign(c); setCharacters(c.characters) })
+        .catch(() => navigate('/campaigns'))
+        .finally(() => setLoading(false))
+    } else {
+      listCharacters()
+        .then(setCharacters)
+        .catch(() => navigate('/characters'))
+        .finally(() => setLoading(false))
+    }
+  }, [campaignId, navigate])
 
   // Subscribe to each character's WS channel
   useEffect(() => {
@@ -182,13 +193,16 @@ export function CombatPage() {
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link
-              to="/characters"
+              to={campaign ? `/campaigns/${campaign.id}` : '/characters'}
               className="text-stone-400 hover:text-stone-200 transition-colors text-sm shrink-0"
             >
-              ← Personnages
+              {campaign ? `← ${campaign.name}` : '← Personnages'}
             </Link>
             <span className="text-stone-700">|</span>
             <span className="text-amber-400 font-bold">⚔ Combat Tracker</span>
+            {campaign && (
+              <span className="text-stone-500 text-sm hidden sm:block truncate">— {campaign.name}</span>
+            )}
           </div>
           <div className="flex items-center gap-4 shrink-0">
             <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
