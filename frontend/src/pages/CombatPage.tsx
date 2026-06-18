@@ -14,6 +14,7 @@ import {
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
+import { MONSTERS, rollMonsterHp, type MonsterTemplate } from '../data/monsters'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -150,6 +151,9 @@ export function CombatPage() {
   // Add combatant form
   const [addingCombatant, setAddingCombatant] = useState(false)
   const [combatantDraft, setCombatantDraft] = useState({ name: '', max_hp: '', ac: '', initiative: '' })
+  const [showBestiary, setShowBestiary] = useState(false)
+  const [bestiarySearch, setBestiarySearch] = useState('')
+  const [addedMonster, setAddedMonster] = useState<string | null>(null)
 
   const echoRef = useRef<ReturnType<typeof createEcho> | null>(null)
 
@@ -309,6 +313,21 @@ export function CombatPage() {
     setCombatants(prev => [...prev, created])
     setCombatantDraft({ name: '', max_hp: '', ac: '', initiative: '' })
     setAddingCombatant(false)
+  }
+
+  async function handleAddMonster(m: MonsterTemplate) {
+    if (!campaignId) return
+    const hp = rollMonsterHp(m)
+    const initRoll = Math.floor(Math.random() * 20) + 1 + m.initiative_mod
+    const created = await createCombatant(campaignId, {
+      name: m.name,
+      max_hp: hp,
+      armor_class: m.ac,
+      initiative_roll: initRoll,
+    })
+    setCombatants(prev => [...prev, created])
+    setAddedMonster(m.name)
+    setTimeout(() => setAddedMonster(null), 2000)
   }
 
   async function handleLogout() {
@@ -694,6 +713,13 @@ export function CombatPage() {
                               )}
                             </div>
                           )}
+                          {character.state.concentrating_on && (
+                            <div className="mt-1">
+                              <span className="text-xs bg-violet-900/50 border border-violet-700/50 text-violet-300 rounded px-1.5 py-0.5">
+                                ◈ {character.state.concentrating_on}
+                              </span>
+                            </div>
+                          )}
                           {character.attack_macros.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {character.attack_macros.map((macro, mi) => (
@@ -756,7 +782,7 @@ export function CombatPage() {
                         </div>
 
                         {/* Inspiration + action economy */}
-                        <div className="hidden md:flex items-center gap-1 shrink-0">
+                        <div className="flex items-center gap-1 shrink-0">
                           <button
                             onClick={() => handleToggleInspiration(character)}
                             title={character.combat.inspiration ? 'Retirer l\'inspiration' : 'Accorder l\'inspiration'}
@@ -1002,14 +1028,22 @@ export function CombatPage() {
           {/* Add combatant section */}
           {campaignId && (
             <div className="border-t border-stone-800 px-5 py-3">
-              {!addingCombatant ? (
-                <button
-                  onClick={() => setAddingCombatant(true)}
-                  className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
-                >
-                  + Ajouter un ennemi / PNJ
-                </button>
-              ) : (
+              {!addingCombatant && !showBestiary ? (
+                <div className="flex items-center gap-4">
+                  <button
+                    onClick={() => setAddingCombatant(true)}
+                    className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
+                  >
+                    + Ajouter un ennemi / PNJ
+                  </button>
+                  <button
+                    onClick={() => setShowBestiary(true)}
+                    className="text-stone-500 hover:text-stone-300 text-xs font-medium transition-colors"
+                  >
+                    📚 Bestiaire SRD
+                  </button>
+                </div>
+              ) : addingCombatant ? (
                 <div className="space-y-3">
                   <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Nouvel adversaire</p>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -1059,7 +1093,51 @@ export function CombatPage() {
                     </button>
                   </div>
                 </div>
-              )}
+              ) : showBestiary ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Bestiaire SRD</p>
+                    <button onClick={() => { setShowBestiary(false); setBestiarySearch('') }} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">
+                      Fermer
+                    </button>
+                  </div>
+                  <input
+                    type="text"
+                    placeholder="Rechercher un monstre…"
+                    value={bestiarySearch}
+                    onChange={e => setBestiarySearch(e.target.value)}
+                    autoFocus
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-red-500 transition-colors"
+                  />
+                  {addedMonster && (
+                    <p className="text-emerald-400 text-xs font-medium">✓ {addedMonster} ajouté au combat</p>
+                  )}
+                  <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                    {MONSTERS.filter(m =>
+                      m.name.toLowerCase().includes(bestiarySearch.toLowerCase())
+                    ).map(m => (
+                      <button
+                        key={m.name}
+                        onClick={() => handleAddMonster(m)}
+                        className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-stone-800 transition-colors text-left group"
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-stone-500 text-xs w-8 shrink-0 font-mono">CR{m.cr}</span>
+                          <span className="text-stone-200 text-sm truncate group-hover:text-white transition-colors">{m.name}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0 text-stone-500 text-xs">
+                          <span>CA {m.ac}</span>
+                          <span>{m.hp_dice}d{m.hp_sides}{m.hp_bonus > 0 ? `+${m.hp_bonus}` : m.hp_bonus < 0 ? m.hp_bonus : ''} PV</span>
+                          <span className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">+ Ajouter</span>
+                        </div>
+                      </button>
+                    ))}
+                    {MONSTERS.filter(m => m.name.toLowerCase().includes(bestiarySearch.toLowerCase())).length === 0 && (
+                      <p className="text-stone-600 text-sm text-center py-4">Aucun monstre trouvé.</p>
+                    )}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </div>
