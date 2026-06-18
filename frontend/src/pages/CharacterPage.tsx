@@ -22,6 +22,7 @@ import {
   updateIdentity,
   updateNotes,
   shortRest,
+  updateAttackMacros,
   type Character,
   type AbilityName,
   type SkillName,
@@ -32,6 +33,7 @@ import {
   type Feature,
   type IdentityPayload,
   type Currency,
+  type AttackMacro,
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -148,6 +150,12 @@ function hpColor(current: number, max: number) {
   if (pct > 0.5) return 'bg-emerald-500'
   if (pct > 0.25) return 'bg-amber-500'
   return 'bg-red-500'
+}
+
+function parseDice(str: string): { count: number; sides: number; bonus: number } | null {
+  const m = str.trim().match(/^(\d+)d(\d+)([+-]\d+)?$/i)
+  if (!m) return null
+  return { count: parseInt(m[1]), sides: parseInt(m[2]), bonus: parseInt(m[3] ?? '0') }
 }
 
 // ── Sub-components ────────────────────────────────────────────────────────────
@@ -316,13 +324,31 @@ export function CharacterPage() {
     if (updated) setCharacter(updated)
   }
 
+  // ── Durées de conditions ─────────────────────────────────────────────────────
+
+  const [conditionDurationDraft, setConditionDurationDraft] = useState<Record<string, string>>({})
+
   async function toggleCondition(key: string) {
     if (!character) return
     const active = character.state.conditions
-    const next = active.includes(key)
-      ? active.filter(c => c !== key)
-      : [...active, key]
-    const updated = await withSave(() => updateConditions(character.id, next))
+    const durations = { ...character.state.condition_durations }
+    let next: string[]
+    if (active.includes(key)) {
+      next = active.filter(c => c !== key)
+      delete durations[key]
+    } else {
+      next = [...active, key]
+    }
+    const updated = await withSave(() => updateConditions(character.id, next, durations))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleSetConditionDuration(key: string) {
+    if (!character) return
+    const val = parseInt(conditionDurationDraft[key] ?? '', 10)
+    if (isNaN(val) || val < 0) return
+    const durations = { ...character.state.condition_durations, [key]: val }
+    const updated = await withSave(() => updateConditions(character.id, character.state.conditions, durations))
     if (updated) setCharacter(updated)
   }
 
@@ -637,6 +663,71 @@ export function CharacterPage() {
     if (updated) { setCharacter(updated); setNotesDirty(false) }
   }
 
+  // ── Macros d'attaque ─────────────────────────────────────────────────────────
+
+  interface MacroDraft { name: string; attack_bonus: string; damage_dice: string; damage_type: string; crit_dice: string }
+  const emptyMacroDraft = (): MacroDraft => ({ name: '', attack_bonus: '', damage_dice: '', damage_type: '', crit_dice: '' })
+  const [addingMacro, setAddingMacro] = useState(false)
+  const [macroDraft, setMacroDraft] = useState<MacroDraft>(emptyMacroDraft)
+
+  async function handleAddMacro() {
+    if (!character || !macroDraft.name.trim() || !macroDraft.damage_dice.trim()) return
+    const macro: AttackMacro = {
+      name: macroDraft.name.trim(),
+      attack_bonus: macroDraft.attack_bonus !== '' ? parseInt(macroDraft.attack_bonus, 10) : null,
+      damage_dice: macroDraft.damage_dice.trim(),
+      damage_type: macroDraft.damage_type.trim() || undefined,
+      crit_dice: macroDraft.crit_dice.trim() || undefined,
+    }
+    const next = [...character.attack_macros, macro]
+    const updated = await withSave(() => updateAttackMacros(character.id, next))
+    if (updated) { setCharacter(updated); setMacroDraft(emptyMacroDraft()); setAddingMacro(false) }
+  }
+
+  async function handleDeleteMacro(index: number) {
+    if (!character) return
+    const next = character.attack_macros.filter((_, i) => i !== index)
+    const updated = await withSave(() => updateAttackMacros(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  function rollAttackMacro(macro: AttackMacro) {
+    const bonus = macro.attack_bonus ?? 0
+    handleRoll({ sides: 20, modifier: bonus, label: `Attaque: ${macro.name}`, count: 1 })
+  }
+
+  function rollDamageMacro(macro: AttackMacro) {
+    const parsed = parseDice(macro.damage_dice)
+    if (!parsed) return
+    handleRoll({ sides: parsed.sides, count: parsed.count, modifier: parsed.bonus, label: `Dégâts: ${macro.name}` })
+  }
+
+  // ── Assistant de montée de niveau ─────────────────────────────────────────────
+
+  const [showLevelUp, setShowLevelUp] = useState(false)
+  const [hpMethod, setHpMethod] = useState<'max' | 'avg' | 'roll'>('max')
+  const [rolledHpGain, setRolledHpGain] = useState<number | null>(null)
+
+  function computeHpGain(): number {
+    if (!character) return 0
+    const conMod = character.modifiers.constitution
+    const diceType = character.combat.hit_dice_type
+    if (hpMethod === 'max') return diceType + conMod
+    if (hpMethod === 'avg') return Math.floor(diceType / 2 + 1) + conMod
+    return (rolledHpGain ?? 0) + conMod
+  }
+
+  async function handleLevelUp() {
+    if (!character) return
+    if (hpMethod === 'roll' && rolledHpGain === null) return
+    const gain = Math.max(1, computeHpGain())
+    const updated = await withSave(() => updateIdentity(character.id, {
+      level: character.level + 1,
+      max_hp: character.combat.max_hp + gain,
+    }))
+    if (updated) { setCharacter(updated); setShowLevelUp(false); setRolledHpGain(null) }
+  }
+
   // ── Inventory ─────────────────────────────────────────────────────────────────
 
   interface ItemDraft { name: string; quantity: string; weight: string; value: string }
@@ -888,6 +979,29 @@ export function CharacterPage() {
                       </button>
                     )
                   })}
+                  {character.attack_macros.length > 0 && (
+                    <>
+                      <span className="self-center text-stone-600 text-xs">•</span>
+                      {character.attack_macros.map((macro, i) => (
+                        <span key={i} className="inline-flex items-center gap-1">
+                          <button
+                            onClick={() => rollAttackMacro(macro)}
+                            className="bg-rose-900/60 hover:bg-rose-800/60 border border-rose-700/50 text-rose-300 rounded-lg px-2.5 py-1 text-xs transition-colors"
+                            title={`Attaque: 1d20${sign(macro.attack_bonus ?? 0)}`}
+                          >
+                            {macro.name} {sign(macro.attack_bonus ?? 0)}
+                          </button>
+                          <button
+                            onClick={() => rollDamageMacro(macro)}
+                            className="bg-orange-900/60 hover:bg-orange-800/60 border border-orange-700/50 text-orange-300 rounded-lg px-2.5 py-1 text-xs transition-colors"
+                            title={`Dégâts: ${macro.damage_dice}`}
+                          >
+                            {macro.damage_dice}
+                          </button>
+                        </span>
+                      ))}
+                    </>
+                  )}
                 </div>
               </div>
 
@@ -999,6 +1113,7 @@ export function CharacterPage() {
               </div>
             </div>
           ) : (
+            <>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h1 className="text-2xl font-bold text-white">{character.name}</h1>
@@ -1020,12 +1135,13 @@ export function CharacterPage() {
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {canLevelUp(character.level, character.experience_points) && (
-                  <span
+                  <button
+                    onClick={() => setShowLevelUp(v => !v)}
                     title={`${xpForNextLevel(character.level)?.toLocaleString()} XP requis pour le niveau ${character.level + 1}`}
-                    className="bg-amber-500/20 border border-amber-500/50 text-amber-400 font-bold text-xs rounded-lg px-2.5 py-1.5 animate-pulse"
+                    className="bg-amber-500/20 border border-amber-500/50 text-amber-400 font-bold text-xs rounded-lg px-2.5 py-1.5 animate-pulse hover:animate-none hover:bg-amber-500/30 transition-colors"
                   >
                     ↑ Niveau {character.level + 1} disponible
-                  </span>
+                  </button>
                 )}
                 <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-sm rounded-lg px-3 py-1.5">
                   Niveau {character.level}
@@ -1035,6 +1151,61 @@ export function CharacterPage() {
                 </button>
               </div>
             </div>
+
+            {/* Level-up assistant */}
+            {showLevelUp && canLevelUp(character.level, character.experience_points) && (
+              <div className="mt-4 pt-4 border-t border-amber-500/20 bg-amber-500/5 rounded-lg p-4 space-y-3">
+                <p className="text-amber-400 text-sm font-semibold">
+                  Montée de niveau : {character.level} → {character.level + 1}
+                </p>
+                <div>
+                  <p className="text-stone-400 text-xs mb-2">Gain de PV (d{character.combat.hit_dice_type} + {sign(character.modifiers.constitution)} CON)</p>
+                  <div className="flex flex-wrap gap-2">
+                    {([
+                      ['max',  `Maximum (${character.combat.hit_dice_type + character.modifiers.constitution} PV)`],
+                      ['avg',  `Moyenne (${Math.floor(character.combat.hit_dice_type / 2 + 1) + character.modifiers.constitution} PV)`],
+                      ['roll', 'Lancer le dé'],
+                    ] as const).map(([m, label]) => (
+                      <button
+                        key={m}
+                        onClick={() => { setHpMethod(m); setRolledHpGain(null) }}
+                        className={`px-3 py-1.5 rounded-lg border text-xs font-medium transition-colors ${
+                          hpMethod === m
+                            ? 'bg-amber-600 border-amber-500 text-white'
+                            : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    {hpMethod === 'roll' && (
+                      <button
+                        onClick={() => setRolledHpGain(Math.floor(Math.random() * character.combat.hit_dice_type) + 1)}
+                        className="px-3 py-1.5 rounded-lg border border-rose-700/50 bg-rose-900/40 text-rose-300 text-xs font-medium hover:bg-rose-800/40 transition-colors"
+                      >
+                        ⚅ {rolledHpGain !== null ? `${rolledHpGain} + ${character.modifiers.constitution} CON = +${Math.max(1, rolledHpGain + character.modifiers.constitution)} PV` : 'Lancer'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 pt-1">
+                  <button
+                    onClick={handleLevelUp}
+                    disabled={saving || (hpMethod === 'roll' && rolledHpGain === null)}
+                    className="bg-amber-600 hover:bg-amber-500 disabled:opacity-40 text-stone-950 font-bold text-sm rounded-lg px-5 py-2 transition-colors"
+                  >
+                    Confirmer la montée de niveau
+                  </button>
+                  <button
+                    onClick={() => setShowLevelUp(false)}
+                    className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
+                  >
+                    Annuler
+                  </button>
+                </div>
+              </div>
+            )}
+            </>
           )}
         </div>
 
@@ -1409,22 +1580,49 @@ export function CharacterPage() {
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                 {Object.entries(CONDITIONS).map(([key, label]) => {
                   const active = activeConditions.includes(key)
+                  const duration = character.state.condition_durations[key]
                   return (
                     <button
                       key={key}
                       onClick={() => toggleCondition(key)}
                       disabled={saving}
-                      className={`rounded-lg px-2 py-2 text-xs font-medium text-center transition-colors disabled:cursor-not-allowed ${
+                      className={`relative rounded-lg px-2 py-2 text-xs font-medium text-center transition-colors disabled:cursor-not-allowed ${
                         active
                           ? 'bg-purple-600 border border-purple-500 text-white'
                           : 'bg-stone-800 border border-stone-700 text-stone-400 hover:border-stone-600 hover:text-stone-300'
                       }`}
                     >
                       {label}
+                      {active && duration > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 bg-purple-400 text-purple-950 text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
+                          {duration}
+                        </span>
+                      )}
                     </button>
                   )
                 })}
               </div>
+              {/* Duration inputs for active conditions */}
+              {activeConditions.length > 0 && (
+                <div className="mt-3 pt-3 border-t border-stone-800 flex flex-wrap gap-2">
+                  {activeConditions.map(key => (
+                    <div key={key} className="flex items-center gap-1.5 bg-stone-800 rounded-lg px-2 py-1">
+                      <span className="text-purple-300 text-xs">{CONDITIONS[key]}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        placeholder="∞"
+                        value={conditionDurationDraft[key] ?? (character.state.condition_durations[key] > 0 ? String(character.state.condition_durations[key]) : '')}
+                        onChange={e => setConditionDurationDraft(d => ({ ...d, [key]: e.target.value }))}
+                        onBlur={() => handleSetConditionDuration(key)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSetConditionDuration(key) }}
+                        className="w-12 bg-stone-700 border border-stone-600 rounded px-1 py-0.5 text-white text-xs text-center focus:outline-none focus:border-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <span className="text-stone-500 text-xs">tours</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Death saves — shown when unconscious/dying */}
@@ -1505,6 +1703,129 @@ export function CharacterPage() {
               </div>
             ))}
           </div>
+        </div>
+
+        {/* Attaques */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Attaques
+            </h2>
+            <button
+              onClick={() => { setAddingMacro(v => !v); setMacroDraft(emptyMacroDraft()) }}
+              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+            >
+              {addingMacro ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {addingMacro && (
+            <div className="bg-stone-800 border border-stone-700 rounded-xl p-4 mb-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Nom *</label>
+                  <input
+                    type="text"
+                    placeholder="Épée longue"
+                    value={macroDraft.name}
+                    onChange={e => setMacroDraft(d => ({ ...d, name: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Bonus d'attaque</label>
+                  <input
+                    type="number"
+                    placeholder="+5"
+                    value={macroDraft.attack_bonus}
+                    onChange={e => setMacroDraft(d => ({ ...d, attack_bonus: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Dégâts *</label>
+                  <input
+                    type="text"
+                    placeholder="1d8+3"
+                    value={macroDraft.damage_dice}
+                    onChange={e => setMacroDraft(d => ({ ...d, damage_dice: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Type de dégâts</label>
+                  <select
+                    value={macroDraft.damage_type}
+                    onChange={e => setMacroDraft(d => ({ ...d, damage_type: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-rose-500 transition-colors"
+                  >
+                    <option value="">— aucun —</option>
+                    {DAMAGE_TYPES.map(([type, label]) => (
+                      <option key={type} value={type}>{label}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  onClick={() => setAddingMacro(false)}
+                  className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
+                >
+                  Annuler
+                </button>
+                <button
+                  onClick={handleAddMacro}
+                  disabled={saving || !macroDraft.name.trim() || !macroDraft.damage_dice.trim()}
+                  className="bg-rose-700 hover:bg-rose-600 disabled:opacity-40 text-white font-semibold text-sm rounded-lg px-5 py-2 transition-colors"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {character.attack_macros.length === 0 && !addingMacro ? (
+            <p className="text-stone-500 text-sm">Aucune attaque enregistrée.</p>
+          ) : (
+            <div className="space-y-2">
+              {character.attack_macros.map((macro, i) => (
+                <div key={i} className="flex items-center gap-3 bg-stone-800/50 border border-stone-800 rounded-lg px-3 py-2.5">
+                  <div className="flex-1 min-w-0">
+                    <span className="text-white text-sm font-medium">{macro.name}</span>
+                    {macro.damage_type && (
+                      <span className="ml-2 text-stone-500 text-xs">
+                        {DAMAGE_TYPES.find(([t]) => t === macro.damage_type)?.[1] ?? macro.damage_type}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => { rollAttackMacro(macro); setDiceOpen(true) }}
+                      className="bg-rose-900/60 hover:bg-rose-800/60 border border-rose-700/50 text-rose-300 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
+                      title={`Attaque: 1d20${sign(macro.attack_bonus ?? 0)}`}
+                    >
+                      1d20{sign(macro.attack_bonus ?? 0)}
+                    </button>
+                    <button
+                      onClick={() => { rollDamageMacro(macro); setDiceOpen(true) }}
+                      className="bg-orange-900/60 hover:bg-orange-800/60 border border-orange-700/50 text-orange-300 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
+                      title={`Dégâts: ${macro.damage_dice}`}
+                    >
+                      {macro.damage_dice}
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteMacro(i)}
+                    disabled={saving}
+                    className="text-stone-700 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-sm shrink-0"
+                    title="Supprimer"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Skills */}
