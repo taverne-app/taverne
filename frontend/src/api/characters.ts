@@ -12,6 +12,7 @@ export interface InventoryItem {
   quantity: number
   weight: number
   value: string
+  notes: string
   equipped: boolean
 }
 

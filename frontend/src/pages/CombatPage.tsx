@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
+import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
 import { getCampaign, broadcastCombatTurn, type Campaign } from '../api/campaigns'
 import {
   listCombatants,
@@ -386,6 +386,13 @@ export function CombatPage() {
     setMonsterMap(prev => ({ ...prev, [created.id]: m }))
     setAddedMonster(m.name)
     setTimeout(() => setAddedMonster(null), 2000)
+  }
+
+  async function handleDeathSave(character: Character, type: 'successes' | 'failures', value: number) {
+    const s = type === 'successes' ? value : character.state.death_saves_successes
+    const f = type === 'failures'  ? value : character.state.death_saves_failures
+    const updated = await updateDeathSaves(character.id, s, f)
+    updateCharacter(updated)
   }
 
   async function handleLaunchEncounter() {
@@ -898,6 +905,64 @@ export function CombatPage() {
                           ↗
                         </Link>
                       </div>
+
+                      {/* Death saves panel */}
+                      {isDying && (
+                        <div className="mt-3 pt-3 border-t border-red-900/40 flex items-center gap-4">
+                          {character.state.death_saves_successes >= 3 ? (
+                            <span className="text-emerald-400 text-xs font-semibold">✓ Stabilisé</span>
+                          ) : character.state.death_saves_failures >= 3 ? (
+                            <span className="text-red-400 text-xs font-semibold">✕ Mort</span>
+                          ) : (
+                            <>
+                              <span className="text-stone-500 text-xs shrink-0">Jets de mort</span>
+                              <div className="flex items-center gap-3">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-stone-600 text-xs mr-1">✓</span>
+                                  {[1, 2, 3].map(n => (
+                                    <button
+                                      key={n}
+                                      onClick={() => handleDeathSave(character, 'successes',
+                                        character.state.death_saves_successes === n ? n - 1 : n,
+                                      )}
+                                      className={`w-5 h-5 rounded-full border-2 transition-colors ${
+                                        n <= character.state.death_saves_successes
+                                          ? 'bg-emerald-500 border-emerald-400'
+                                          : 'bg-transparent border-stone-600 hover:border-emerald-600'
+                                      }`}
+                                      title={`${n} succès`}
+                                    />
+                                  ))}
+                                </div>
+                                <div className="flex items-center gap-1">
+                                  <span className="text-stone-600 text-xs mr-1">✕</span>
+                                  {[1, 2, 3].map(n => (
+                                    <button
+                                      key={n}
+                                      onClick={() => handleDeathSave(character, 'failures',
+                                        character.state.death_saves_failures === n ? n - 1 : n,
+                                      )}
+                                      className={`w-5 h-5 rounded-full border-2 transition-colors ${
+                                        n <= character.state.death_saves_failures
+                                          ? 'bg-red-500 border-red-400'
+                                          : 'bg-transparent border-stone-600 hover:border-red-600'
+                                      }`}
+                                      title={`${n} échec${n > 1 ? 's' : ''}`}
+                                    />
+                                  ))}
+                                </div>
+                                <button
+                                  onClick={() => handleDeathSave(character, 'successes', 3)}
+                                  className="text-emerald-600 hover:text-emerald-400 text-xs transition-colors ml-1"
+                                  title="Marquer stable"
+                                >
+                                  Stable
+                                </button>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      )}
                     </div>
                   )
                 }

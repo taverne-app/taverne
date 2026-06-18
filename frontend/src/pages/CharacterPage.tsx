@@ -771,8 +771,8 @@ export function CharacterPage() {
 
   // ── Inventory ─────────────────────────────────────────────────────────────────
 
-  interface ItemDraft { name: string; quantity: string; weight: string; value: string }
-  const emptyItemDraft = (): ItemDraft => ({ name: '', quantity: '1', weight: '0', value: '' })
+  interface ItemDraft { name: string; quantity: string; weight: string; value: string; notes: string }
+  const emptyItemDraft = (): ItemDraft => ({ name: '', quantity: '1', weight: '0', value: '', notes: '' })
   const [addingItem, setAddingItem] = useState(false)
   const [itemDraft, setItemDraft]   = useState<ItemDraft>(emptyItemDraft)
 
@@ -783,6 +783,7 @@ export function CharacterPage() {
       quantity: Math.max(1, parseInt(itemDraft.quantity, 10) || 1),
       weight:   parseFloat(itemDraft.weight) || 0,
       value:    itemDraft.value.trim(),
+      notes:    itemDraft.notes.trim(),
       equipped: false,
     }
     const next = [...character.inventory.items, item]
@@ -2116,6 +2117,14 @@ export function CharacterPage() {
                 onChange={e => setItemDraft(d => ({ ...d, value: e.target.value }))}
                 className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
               />
+              <input
+                type="text"
+                placeholder="Notes (optionnel)"
+                value={itemDraft.notes}
+                onChange={e => setItemDraft(d => ({ ...d, notes: e.target.value }))}
+                onKeyDown={e => { if (e.key === 'Enter') handleAddItem() }}
+                className="flex-1 min-w-[140px] bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+              />
               <button
                 onClick={handleAddItem}
                 disabled={saving || !itemDraft.name.trim()}
@@ -2178,6 +2187,11 @@ export function CharacterPage() {
                   {/* Value */}
                   {item.value && (
                     <span className="text-amber-600 text-xs w-16 text-right shrink-0 truncate">{item.value}</span>
+                  )}
+
+                  {/* Notes */}
+                  {item.notes && (
+                    <span className="text-stone-500 text-xs italic truncate max-w-[120px] hidden sm:block" title={item.notes}>{item.notes}</span>
                   )}
 
                   {/* Delete */}
