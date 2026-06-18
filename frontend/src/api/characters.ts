@@ -66,6 +66,9 @@ export interface Character {
     speed: number
     inspiration: boolean
     is_alive: boolean
+    hit_dice_type: number
+    hit_dice_remaining: number
+    hit_dice_max: number
   }
   state: {
     conditions: string[]
@@ -238,6 +241,18 @@ export async function updateInventory(id: number, items: InventoryItem[]): Promi
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data
+}
+
+export async function shortRest(
+  id: number,
+  diceSpent: number,
+): Promise<{ character: Character; rolls: number[]; modifier: number; total_healed: number }> {
+  const res = await apiFetch(`/characters/${id}/short-rest`, {
+    method: 'POST',
+    body: JSON.stringify({ dice_spent: diceSpent }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return res.json()
 }
 
 export async function updateCurrency(id: number, currency: Currency): Promise<Character> {

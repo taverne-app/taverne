@@ -17,6 +17,7 @@ import {
   updateCurrency,
   updateIdentity,
   updateNotes,
+  shortRest,
   type Character,
   type AbilityName,
   type SkillName,
@@ -469,6 +470,28 @@ export function CharacterPage() {
     if (updated) {
       setCharacter(updated)
       if (expandedFeature === index) setExpandedFeature(null)
+    }
+  }
+
+  // ── Dés de vie ───────────────────────────────────────────────────────────────
+
+  const [hitDiceSpend, setHitDiceSpend] = useState('')
+  const [shortRestResult, setShortRestResult] = useState<{
+    rolls: number[]
+    modifier: number
+    total_healed: number
+  } | null>(null)
+
+  async function handleShortRest() {
+    if (!character) return
+    const n = parseInt(hitDiceSpend, 10)
+    if (!n || n < 1) return
+    const res = await withSave(() => shortRest(character.id, n))
+    if (res) {
+      setCharacter(res.character)
+      setShortRestResult({ rolls: res.rolls, modifier: res.modifier, total_healed: res.total_healed })
+      setHitDiceSpend('')
+      setTimeout(() => setShortRestResult(null), 6000)
     }
   }
 
@@ -1092,6 +1115,60 @@ export function CharacterPage() {
                   Définir
                 </button>
               </div>
+            </div>
+
+            {/* Dés de vie */}
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                  Dés de vie
+                </h2>
+                <span className="text-stone-400 text-xs">
+                  {character.combat.hit_dice_remaining}/{character.combat.hit_dice_max} d{character.combat.hit_dice_type}
+                </span>
+              </div>
+
+              {/* Pip track */}
+              <div className="flex gap-1 mb-4">
+                {Array.from({ length: character.combat.hit_dice_max }, (_, i) => (
+                  <div
+                    key={i}
+                    className={`flex-1 h-2.5 rounded-full transition-colors ${
+                      i < character.combat.hit_dice_remaining ? 'bg-teal-500' : 'bg-stone-700'
+                    }`}
+                  />
+                ))}
+              </div>
+
+              {/* Repos court */}
+              <div className="flex gap-2">
+                <input
+                  type="number"
+                  min={1}
+                  max={character.combat.hit_dice_remaining}
+                  value={hitDiceSpend}
+                  onChange={e => setHitDiceSpend(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleShortRest() }}
+                  placeholder="Dés"
+                  disabled={character.combat.hit_dice_remaining === 0}
+                  className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-teal-500 transition-colors disabled:opacity-40 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <button
+                  onClick={handleShortRest}
+                  disabled={saving || !hitDiceSpend || character.combat.hit_dice_remaining === 0}
+                  className="bg-teal-900/60 hover:bg-teal-800/60 border border-teal-700/50 text-teal-300 font-semibold text-sm rounded-lg px-4 py-2 transition-colors disabled:opacity-40"
+                >
+                  Repos court
+                </button>
+              </div>
+
+              {shortRestResult && (
+                <p className="text-teal-400 text-xs mt-2 animate-pulse">
+                  +{shortRestResult.total_healed} PV
+                  {' '}({shortRestResult.rolls.join(' + ')}
+                  {shortRestResult.modifier !== 0 && ` + ${shortRestResult.modifier}×${shortRestResult.rolls.length} CON`})
+                </p>
+              )}
             </div>
 
             {/* Conditions */}

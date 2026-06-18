@@ -181,6 +181,40 @@ class CharacterController extends Controller
         return response()->json($roll);
     }
 
+    public function shortRest(Request $request, Character $character): JsonResponse
+    {
+        $this->authorizeCharacter($request, $character);
+
+        $request->validate([
+            'dice_spent' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $diceSpent = $request->integer('dice_spent');
+        $remaining = $character->hit_dice_remaining ?? $character->level;
+        $diceType  = $character->hit_dice_type ?? 8;
+        $conMod    = $character->modifier($character->constitution);
+
+        abort_if($diceSpent > $remaining, 422, 'Pas assez de dés de vie disponibles.');
+
+        $rolls = array_map(fn () => random_int(1, $diceType), range(1, $diceSpent));
+        $totalHealed = max(0, array_sum($rolls) + ($conMod * $diceSpent));
+
+        $character->update([
+            'current_hp'         => min($character->max_hp, $character->current_hp + $totalHealed),
+            'hit_dice_remaining' => $remaining - $diceSpent,
+        ]);
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return response()->json([
+            'character'    => (new CharacterResource($fresh))->resolve(),
+            'rolls'        => $rolls,
+            'modifier'     => $conMod,
+            'total_healed' => $totalHealed,
+        ]);
+    }
+
     public function longRest(Request $request, Character $character): CharacterResource
     {
         $this->authorizeCharacter($request, $character);
@@ -191,10 +225,14 @@ class CharacterController extends Controller
         }
         unset($slot);
 
+        $remaining = $character->hit_dice_remaining ?? $character->level;
+        $restored  = (int) ceil($character->level / 2);
+
         $character->update([
             'spell_slots'           => $slots,
             'death_saves_successes' => 0,
             'death_saves_failures'  => 0,
+            'hit_dice_remaining'    => min($character->level, $remaining + $restored),
         ]);
         $fresh = $character->fresh();
         CharacterUpdated::dispatch($fresh);

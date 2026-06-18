@@ -35,6 +35,8 @@ class UpdateCharacterRequest extends FormRequest
             'speed'            => ['sometimes', 'integer', 'min:0'],
             'inspiration'         => ['sometimes', 'boolean'],
             'initiative_roll'     => ['sometimes', 'nullable', 'integer', 'min:-10', 'max:30'],
+            'hit_dice_type'       => ['sometimes', 'integer', 'in:4,6,8,10,12'],
+            'hit_dice_remaining'  => ['sometimes', 'nullable', 'integer', 'min:0'],
             'notes'               => ['sometimes', 'nullable', 'string'],
 
             'save_proficiencies'    => ['sometimes', 'array'],

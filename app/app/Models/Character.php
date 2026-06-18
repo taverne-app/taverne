@@ -65,6 +65,8 @@ class Character extends Model
         'inventory',
         'features',
         'currency',
+        'hit_dice_type',
+        'hit_dice_remaining',
         'campaign_id',
     ];
 

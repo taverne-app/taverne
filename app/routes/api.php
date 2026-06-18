@@ -44,8 +44,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('conditions',  [CharacterController::class, 'updateConditions']);
         Route::patch('death-saves', [CharacterController::class, 'updateDeathSaves']);
         Route::patch('spell-slot',  [CharacterController::class, 'useSpellSlot']);
-        Route::patch('currency',    [CharacterController::class, 'updateCurrency']);
-        Route::post('rest',         [CharacterController::class, 'longRest']);
+        Route::patch('currency',     [CharacterController::class, 'updateCurrency']);
+        Route::post('rest',          [CharacterController::class, 'longRest']);
+        Route::post('short-rest',    [CharacterController::class, 'shortRest']);
         Route::post('roll',         [CharacterController::class, 'roll']);
     });
 });
