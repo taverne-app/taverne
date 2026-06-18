@@ -436,6 +436,7 @@ export function CharacterPage() {
   const [addingSpell, setAddingSpell] = useState(false)
   const [spellNameDraft, setSpellNameDraft] = useState('')
   const [spellLevelDraft, setSpellLevelDraft] = useState('1')
+  const [spellFilter, setSpellFilter] = useState<'all' | 'prepared'>('all')
 
   async function handleAddSpell() {
     if (!character || !spellNameDraft.trim()) return
@@ -1811,9 +1812,28 @@ export function CharacterPage() {
         {/* Spells known */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
-              Sorts
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                Sorts
+              </h2>
+              {character.spellcasting.spells.length > 0 && (() => {
+                const preparedCount = character.spellcasting.spells.filter(s => s.prepared).length
+                const totalCount = character.spellcasting.spells.length
+                return (
+                  <button
+                    onClick={() => setSpellFilter(f => f === 'all' ? 'prepared' : 'all')}
+                    className={`text-xs rounded-lg px-2 py-0.5 border transition-colors ${
+                      spellFilter === 'prepared'
+                        ? 'bg-violet-700/40 border-violet-600/50 text-violet-300'
+                        : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                    }`}
+                    title={spellFilter === 'all' ? 'Afficher uniquement les sorts préparés' : 'Afficher tous les sorts'}
+                  >
+                    {preparedCount}/{totalCount} préparés
+                  </button>
+                )
+              })()}
+            </div>
             <button
               onClick={() => setAddingSpell(v => !v)}
               className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
@@ -1885,7 +1905,7 @@ export function CharacterPage() {
               {[0,1,2,3,4,5,6,7,8,9].map(lvl => {
                 const spells = character.spellcasting.spells
                   .map((s, i) => ({ ...s, _idx: i }))
-                  .filter(s => s.level === lvl)
+                  .filter(s => s.level === lvl && (spellFilter === 'all' || s.prepared))
                 if (spells.length === 0) return null
                 return (
                   <div key={lvl}>
