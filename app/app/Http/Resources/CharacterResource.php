@@ -80,6 +80,11 @@ class CharacterResource extends JsonResource
 
             'features'    => $this->features ?? [],
             'currency'    => $this->currency ?? ['pc' => 0, 'pa' => 0, 'pe' => 0, 'po' => 0, 'pp' => 0],
+            'damage_modifiers' => [
+                'resistances'     => $this->damage_modifiers['resistances']     ?? [],
+                'immunities'      => $this->damage_modifiers['immunities']      ?? [],
+                'vulnerabilities' => $this->damage_modifiers['vulnerabilities'] ?? [],
+            ],
             'notes'       => $this->notes,
             'campaign_id' => $this->campaign_id,
             'created_at'  => $this->created_at,

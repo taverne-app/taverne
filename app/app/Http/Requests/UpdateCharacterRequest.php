@@ -37,6 +37,14 @@ class UpdateCharacterRequest extends FormRequest
             'initiative_roll'     => ['sometimes', 'nullable', 'integer', 'min:-10', 'max:30'],
             'hit_dice_type'       => ['sometimes', 'integer', 'in:4,6,8,10,12'],
             'hit_dice_remaining'  => ['sometimes', 'nullable', 'integer', 'min:0'],
+
+            'damage_modifiers'                    => ['sometimes', 'nullable', 'array'],
+            'damage_modifiers.resistances'        => ['sometimes', 'array'],
+            'damage_modifiers.resistances.*'      => ['string', 'in:acid,bludgeoning,cold,fire,force,lightning,necrotic,piercing,poison,psychic,radiant,slashing,thunder'],
+            'damage_modifiers.immunities'         => ['sometimes', 'array'],
+            'damage_modifiers.immunities.*'       => ['string', 'in:acid,bludgeoning,cold,fire,force,lightning,necrotic,piercing,poison,psychic,radiant,slashing,thunder'],
+            'damage_modifiers.vulnerabilities'    => ['sometimes', 'array'],
+            'damage_modifiers.vulnerabilities.*'  => ['string', 'in:acid,bludgeoning,cold,fire,force,lightning,necrotic,piercing,poison,psychic,radiant,slashing,thunder'],
             'notes'               => ['sometimes', 'nullable', 'string'],
 
             'save_proficiencies'    => ['sometimes', 'array'],

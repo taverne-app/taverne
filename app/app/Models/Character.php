@@ -67,6 +67,7 @@ class Character extends Model
         'currency',
         'hit_dice_type',
         'hit_dice_remaining',
+        'damage_modifiers',
         'campaign_id',
     ];
 
@@ -80,6 +81,7 @@ class Character extends Model
         'inventory'          => 'array',
         'features'           => 'array',
         'currency'           => 'array',
+        'damage_modifiers'   => 'array',
     ];
 
     /** Modificateur d'une caractéristique : floor((score - 10) / 2) */

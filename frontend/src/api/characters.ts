@@ -89,6 +89,11 @@ export interface Character {
   }
   features: Feature[]
   currency: Currency
+  damage_modifiers: {
+    resistances: string[]
+    immunities: string[]
+    vulnerabilities: string[]
+  }
   notes: string | null
 }
 
@@ -113,6 +118,7 @@ export interface IdentityPayload {
   speed?: number
   max_hp?: number
   armor_class?: number
+  hit_dice_type?: number
 }
 
 export async function updateIdentity(id: number, payload: IdentityPayload): Promise<Character> {
@@ -253,6 +259,18 @@ export async function shortRest(
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return res.json()
+}
+
+export async function updateDamageModifiers(
+  id: number,
+  modifiers: { resistances: string[]; immunities: string[]; vulnerabilities: string[] },
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ damage_modifiers: modifiers }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
 }
 
 export async function updateCurrency(id: number, currency: Currency): Promise<Character> {
