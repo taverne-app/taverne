@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
+import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
 import { getCampaign, type Campaign } from '../api/campaigns'
 import {
   listCombatants,
@@ -133,6 +133,9 @@ export function CombatPage() {
   const macroResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [roundNumber, setRoundNumber] = useState(1)
   const [linkCopied, setLinkCopied] = useState(false)
+  const [showXpPanel, setShowXpPanel] = useState(false)
+  const [xpInputs, setXpInputs] = useState<Record<number, string>>({})
+  const [xpResult, setXpResult] = useState<{ total: number; share: number } | null>(null)
 
   function handleRollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage') {
     const result = rollMacro(character, macro, type)
@@ -345,8 +348,40 @@ export function CombatPage() {
     })
   }
 
+  async function decrementConditions(row: CombatRow) {
+    const conditions = row.kind === 'character' ? row.data.state.conditions : row.data.conditions
+    const durations  = row.kind === 'character' ? row.data.state.condition_durations : row.data.condition_durations
+
+    if (!Object.values(durations).some(d => d > 0)) return
+
+    const nextConditions: string[] = []
+    const nextDurations: Record<string, number> = {}
+
+    for (const cond of conditions) {
+      const dur = durations[cond]
+      if (!dur) {
+        nextConditions.push(cond)
+      } else if (dur > 1) {
+        nextConditions.push(cond)
+        nextDurations[cond] = dur - 1
+      }
+      // dur === 1 → condition expire, non ajoutée
+    }
+
+    if (row.kind === 'character') {
+      const updated = await updateConditions(row.data.id, nextConditions, nextDurations)
+      updateCharacter(updated)
+    } else {
+      if (!campaignId) return
+      const updated = await updateCombatantConditions(campaignId, row.data.id, nextConditions, nextDurations)
+      setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+    }
+  }
+
   function nextTurn() {
     if (withRoll.length === 0) return
+    const currentRow = withRoll[activeTurn % withRoll.length]
+    if (currentRow) decrementConditions(currentRow)
     setActiveTurn(t => {
       const next = (t + 1) % withRoll.length
       if (next === 0) setRoundNumber(r => r + 1)
@@ -356,6 +391,18 @@ export function CombatPage() {
       }
       return next
     })
+  }
+
+  async function handleDistributeXp() {
+    const total = Object.values(xpInputs).reduce((s, v) => s + (parseInt(v, 10) || 0), 0)
+    if (total <= 0 || characters.length === 0) return
+    const share = Math.floor(total / characters.length)
+    const updated = await Promise.all(
+      characters.map(c => updateIdentity(c.id, { experience_points: c.experience_points + share })),
+    )
+    updated.forEach(updateCharacter)
+    setXpResult({ total, share })
+    setTimeout(() => { setXpResult(null); setShowXpPanel(false); setXpInputs({}) }, 6000)
   }
 
   function prevTurn() {
@@ -499,6 +546,25 @@ export function CombatPage() {
                   title="Lance 1d20 + modificateur pour tous les participants"
                 >
                   ⚅ Lancer l'initiative
+                </button>
+              )}
+              {campaignId && combatants.some(c => c.current_hp <= 0) && characters.length > 0 && (
+                <button
+                  onClick={() => {
+                    setShowXpPanel(v => !v)
+                    if (!showXpPanel) {
+                      const defaults: Record<number, string> = {}
+                      combatants.filter(c => c.current_hp <= 0).forEach(c => { defaults[c.id] = '' })
+                      setXpInputs(defaults)
+                    }
+                  }}
+                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
+                    showXpPanel
+                      ? 'bg-emerald-700/30 border-emerald-600 text-emerald-400'
+                      : 'bg-emerald-900/20 border-emerald-800/50 text-emerald-500 hover:border-emerald-700 hover:text-emerald-400'
+                  }`}
+                >
+                  ✦ XP
                 </button>
               )}
               {campaignId && combatants.length > 0 && (
@@ -988,6 +1054,75 @@ export function CombatPage() {
             </div>
           )}
         </div>
+
+        {/* XP distribution panel */}
+        {showXpPanel && (() => {
+          const deadCombatants = combatants.filter(c => c.current_hp <= 0)
+          const total = Object.values(xpInputs).reduce((s, v) => s + (parseInt(v, 10) || 0), 0)
+          const share = characters.length > 0 ? Math.floor(total / characters.length) : 0
+          return (
+            <div className="bg-stone-900 border border-emerald-800/40 rounded-xl p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-emerald-400 text-xs font-semibold uppercase tracking-widest">
+                  ✦ Distribution d'expérience
+                </h2>
+                <button onClick={() => setShowXpPanel(false)} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
+              </div>
+
+              {xpResult ? (
+                <div className="text-center py-4">
+                  <p className="text-emerald-400 font-bold text-2xl">{xpResult.share} XP</p>
+                  <p className="text-stone-400 text-sm mt-1">
+                    par personnage ({xpResult.total} XP au total · {characters.length} joueur{characters.length > 1 ? 's' : ''})
+                  </p>
+                  <p className="text-stone-500 text-xs mt-2">Les fiches sont mises à jour — vérifiez les montées de niveau.</p>
+                </div>
+              ) : (
+                <>
+                  {deadCombatants.length === 0 ? (
+                    <p className="text-stone-500 text-sm">Aucun ennemi vaincu pour le moment.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {deadCombatants.map(c => (
+                        <div key={c.id} className="flex items-center gap-3">
+                          <span className="flex-1 text-stone-300 text-sm">{c.name}</span>
+                          <input
+                            type="number"
+                            min={0}
+                            placeholder="XP"
+                            value={xpInputs[c.id] ?? ''}
+                            onChange={e => setXpInputs(prev => ({ ...prev, [c.id]: e.target.value }))}
+                            className="w-24 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm text-right focus:outline-none focus:border-emerald-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <span className="text-stone-500 text-xs w-6">XP</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-2 border-t border-stone-800">
+                    <div className="text-sm">
+                      {total > 0 && characters.length > 0 ? (
+                        <span className="text-stone-300">
+                          {total} XP ÷ {characters.length} = <span className="text-emerald-400 font-bold">{share} XP/joueur</span>
+                        </span>
+                      ) : (
+                        <span className="text-stone-600">Renseignez les valeurs XP</span>
+                      )}
+                    </div>
+                    <button
+                      onClick={handleDistributeXp}
+                      disabled={total <= 0 || characters.length === 0}
+                      className="bg-emerald-700 hover:bg-emerald-600 disabled:opacity-40 text-white font-semibold text-sm rounded-lg px-5 py-2 transition-colors"
+                    >
+                      Distribuer
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Legend */}
         <p className="text-stone-600 text-xs text-center">
