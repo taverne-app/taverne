@@ -131,6 +131,8 @@ export function CombatPage() {
   const [conditionDurationDraft, setConditionDurationDraft] = useState<Record<string, string>>({})
   const [macroResult, setMacroResult] = useState<{ label: string; detail: string; total: number; isAttack: boolean } | null>(null)
   const macroResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [roundNumber, setRoundNumber] = useState(1)
+  const [linkCopied, setLinkCopied] = useState(false)
 
   function handleRollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage') {
     const result = rollMacro(character, macro, type)
@@ -323,6 +325,7 @@ export function CombatPage() {
       setCombatants(prev => prev.map(c => ({ ...c, initiative_roll: null })))
     }
     setActiveTurn(0)
+    setRoundNumber(1)
   }
 
   async function handleClearCombatants() {
@@ -346,6 +349,7 @@ export function CombatPage() {
     if (withRoll.length === 0) return
     setActiveTurn(t => {
       const next = (t + 1) % withRoll.length
+      if (next === 0) setRoundNumber(r => r + 1)
       const nextRow = withRoll[next]
       if (nextRow) {
         setActionState(prev => ({ ...prev, [rowId(nextRow)]: { action: false, bonus: false, reaction: false } }))
@@ -397,7 +401,24 @@ export function CombatPage() {
               <span className="text-stone-500 text-sm hidden sm:block truncate">— {campaign.name}</span>
             )}
           </div>
-          <div className="flex items-center gap-4 shrink-0">
+          <div className="flex items-center gap-3 shrink-0">
+            {campaign?.share_token && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(`${window.location.origin}/share/${campaign.share_token}`)
+                  setLinkCopied(true)
+                  setTimeout(() => setLinkCopied(false), 2000)
+                }}
+                className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
+                  linkCopied
+                    ? 'bg-emerald-700/30 border-emerald-600 text-emerald-400'
+                    : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
+                }`}
+                title="Copier le lien joueurs"
+              >
+                {linkCopied ? '✓ Copié' : '⟳ Vue joueurs'}
+              </button>
+            )}
             <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
             <button
               onClick={handleLogout}
@@ -415,7 +436,12 @@ export function CombatPage() {
         {withRoll.length > 0 && (
           <div className="bg-stone-900 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
             <div>
-              <p className="text-stone-400 text-xs uppercase tracking-widest mb-0.5">Tour actif</p>
+              <div className="flex items-center gap-3 mb-0.5">
+                <p className="text-stone-400 text-xs uppercase tracking-widest">Tour actif</p>
+                <span className="text-amber-600 text-xs font-semibold uppercase tracking-widest">
+                  Round {roundNumber}
+                </span>
+              </div>
               <p className="text-white font-bold text-lg">{activeRowName}</p>
               {activeRowSubtitle && (
                 <p className="text-stone-400 text-xs mt-0.5">{activeRowSubtitle}</p>
