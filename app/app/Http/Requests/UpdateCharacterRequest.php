@@ -49,6 +49,11 @@ class UpdateCharacterRequest extends FormRequest
             'inventory.*.value'        => ['sometimes', 'nullable', 'string', 'max:50'],
             'inventory.*.equipped'     => ['sometimes', 'boolean'],
 
+            'features'                    => ['sometimes', 'nullable', 'array'],
+            'features.*.name'             => ['required_with:features', 'string', 'max:150'],
+            'features.*.source'           => ['sometimes', 'nullable', 'string', 'max:100'],
+            'features.*.description'      => ['sometimes', 'nullable', 'string'],
+
             'spellcasting_ability'  => ['sometimes', 'nullable', 'string', 'in:strength,dexterity,constitution,intelligence,wisdom,charisma'],
             'spell_slots'           => ['sometimes', 'nullable', 'array'],
             'spells_known'          => ['sometimes', 'nullable', 'array'],
