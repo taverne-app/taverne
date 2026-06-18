@@ -8,7 +8,7 @@ import {
   type Campaign,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, type Character } from '../api/characters'
+import { listCharacters, longRest, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -63,6 +63,10 @@ export function CampaignPage() {
 
   // Share
   const [copied, setCopied] = useState(false)
+
+  // Group rest
+  const [restingAll, setRestingAll] = useState(false)
+  const [restDone, setRestDone]     = useState<'long' | null>(null)
 
   // Sessions
   const [sessions, setSessions]               = useState<CampaignSession[]>([])
@@ -217,6 +221,19 @@ export function CampaignPage() {
     setSessions(prev => prev.filter(s => s.id !== sessionId))
     if (editingSession === sessionId) setEditingSession(null)
     if (expandedSession === sessionId) setExpandedSession(null)
+  }
+
+  async function handleGroupLongRest() {
+    if (restingAll || characters.length === 0) return
+    setRestingAll(true)
+    try {
+      const updated = await Promise.all(characters.map(c => longRest(c.id)))
+      setCharacters(updated)
+      setRestDone('long')
+      setTimeout(() => setRestDone(null), 4000)
+    } finally {
+      setRestingAll(false)
+    }
   }
 
   async function handleLogout() {
@@ -379,12 +396,24 @@ export function CampaignPage() {
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Personnages ({characters.length})
             </h2>
-            <button
-              onClick={openAddModal}
-              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-            >
-              + Ajouter
-            </button>
+            <div className="flex items-center gap-3">
+              {characters.length > 0 && (
+                <button
+                  onClick={handleGroupLongRest}
+                  disabled={restingAll}
+                  className="text-stone-500 hover:text-amber-400 text-xs font-medium transition-colors disabled:opacity-40 flex items-center gap-1"
+                  title="Appliquer un repos long à tous les personnages"
+                >
+                  {restingAll ? '…' : restDone === 'long' ? '✓ Repos terminé' : '🌙 Repos long'}
+                </button>
+              )}
+              <button
+                onClick={openAddModal}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+              >
+                + Ajouter
+              </button>
+            </div>
           </div>
 
           {characters.length === 0 ? (
