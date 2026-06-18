@@ -15,6 +15,7 @@ import {
   updateInventory,
   updateFeatures,
   updateCurrency,
+  updateDamageModifiers,
   updateIdentity,
   updateNotes,
   shortRest,
@@ -32,6 +33,7 @@ import {
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
+import { SRD_SPELLS } from '../data/spells'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -73,6 +75,29 @@ const SKILL_LABELS: [SkillName, string][] = [
 const ABILITY_OPTIONS: [AbilityName, string][] = [
   ['strength', 'Force'], ['dexterity', 'Dextérité'], ['constitution', 'Constitution'],
   ['intelligence', 'Intelligence'], ['wisdom', 'Sagesse'], ['charisma', 'Charisme'],
+]
+
+const HIT_DICE_BY_CLASS: Record<string, number> = {
+  barbarian: 12, barbare: 12,
+  fighter: 10, guerrier: 10, combattant: 10,
+  paladin: 10,
+  ranger: 10, rôdeur: 10, rodeur: 10,
+  bard: 8, barde: 8,
+  cleric: 8, clerc: 8, prêtre: 8, pretre: 8,
+  druid: 8, druide: 8,
+  monk: 8, moine: 8,
+  rogue: 8, roublard: 8,
+  warlock: 8, sorcier: 8,
+  sorcerer: 6, ensorceleur: 6,
+  wizard: 6, magicien: 6, mage: 6,
+}
+
+const DAMAGE_TYPES: [string, string][] = [
+  ['acid', 'Acide'], ['bludgeoning', 'Contondant'], ['cold', 'Froid'],
+  ['fire', 'Feu'], ['force', 'Force'], ['lightning', 'Foudre'],
+  ['necrotic', 'Nécrotique'], ['piercing', 'Perforant'], ['poison', 'Poison'],
+  ['psychic', 'Psychique'], ['radiant', 'Radiant'], ['slashing', 'Tranchant'],
+  ['thunder', 'Tonnerre'],
 ]
 
 const SPELL_LEVEL_LABELS: Record<number, string> = {
@@ -205,6 +230,7 @@ export function CharacterPage() {
       speed: character.combat.speed,
       max_hp: character.combat.max_hp,
       armor_class: character.combat.armor_class,
+      hit_dice_type: character.combat.hit_dice_type,
     })
     setEditingIdentity(true)
   }
@@ -471,6 +497,41 @@ export function CharacterPage() {
       setCharacter(updated)
       if (expandedFeature === index) setExpandedFeature(null)
     }
+  }
+
+  // ── Résistances & immunités ──────────────────────────────────────────────────
+
+  async function toggleDamageModifier(
+    category: 'resistances' | 'immunities' | 'vulnerabilities',
+    type: string,
+  ) {
+    if (!character) return
+    const current = character.damage_modifiers
+    const list = current[category]
+    const next = list.includes(type) ? list.filter(t => t !== type) : [...list, type]
+    const updated = await withSave(() =>
+      updateDamageModifiers(character.id, { ...current, [category]: next }),
+    )
+    if (updated) setCharacter(updated)
+  }
+
+  // ── Sorts autocomplete ────────────────────────────────────────────────────────
+
+  const [spellSuggestions, setSpellSuggestions] = useState<[string, number][]>([])
+
+  function handleSpellNameChange(value: string) {
+    setSpellNameDraft(value)
+    if (value.trim().length < 2) { setSpellSuggestions([]); return }
+    const lower = value.toLowerCase()
+    setSpellSuggestions(
+      SRD_SPELLS.filter(([name]) => name.toLowerCase().includes(lower)).slice(0, 8),
+    )
+  }
+
+  function selectSpellSuggestion(name: string, level: number) {
+    setSpellNameDraft(name)
+    setSpellLevelDraft(String(level))
+    setSpellSuggestions([])
   }
 
   // ── Dés de vie ───────────────────────────────────────────────────────────────
@@ -848,11 +909,38 @@ export function CharacterPage() {
                       min={min}
                       max={max}
                       value={(identityDraft[field] ?? '') as number}
-                      onChange={e => setIdentityDraft(d => ({ ...d, [field]: parseInt(e.target.value, 10) || 0 }))}
+                      onChange={e => {
+                        const val = parseInt(e.target.value, 10) || 0
+                        setIdentityDraft(d => ({ ...d, [field]: val }))
+                      }}
                       className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
                   </div>
                 ))}
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Dé de vie</label>
+                  <select
+                    value={identityDraft.hit_dice_type ?? 8}
+                    onChange={e => setIdentityDraft(d => ({ ...d, hit_dice_type: parseInt(e.target.value, 10) }))}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  >
+                    {[4, 6, 8, 10, 12].map(d => (
+                      <option key={d} value={d}>d{d}</option>
+                    ))}
+                  </select>
+                  {identityDraft.character_class && HIT_DICE_BY_CLASS[identityDraft.character_class.toLowerCase()] && (
+                    <button
+                      type="button"
+                      onClick={() => setIdentityDraft(d => ({
+                        ...d,
+                        hit_dice_type: HIT_DICE_BY_CLASS[d.character_class!.toLowerCase()],
+                      }))}
+                      className="text-amber-500 hover:text-amber-400 text-xs mt-1 transition-colors"
+                    >
+                      ↺ d{HIT_DICE_BY_CLASS[identityDraft.character_class.toLowerCase()]} suggéré
+                    </button>
+                  )}
+                </div>
               </div>
               <div className="flex items-center justify-between pt-1">
                 <button onClick={() => setEditingIdentity(false)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
@@ -1244,6 +1332,39 @@ export function CharacterPage() {
           </div>
         </div>
 
+        {/* Résistances & immunités */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">
+            Résistances & Immunités
+          </h2>
+          <div className="space-y-4">
+            {([
+              ['resistances',     'Résistances',    'bg-sky-600 border-sky-500 text-white',       'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-700/60'],
+              ['immunities',      'Immunités',      'bg-emerald-700 border-emerald-600 text-white', 'bg-stone-800 border-stone-700 text-stone-400 hover:border-emerald-700/60'],
+              ['vulnerabilities', 'Vulnérabilités', 'bg-red-700 border-red-600 text-white',         'bg-stone-800 border-stone-700 text-stone-400 hover:border-red-700/60'],
+            ] as [keyof typeof character.damage_modifiers, string, string, string][]).map(([cat, label, activeClass, inactiveClass]) => (
+              <div key={cat}>
+                <p className="text-stone-500 text-xs font-medium mb-2">{label}</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {DAMAGE_TYPES.map(([type, typeLabel]) => {
+                    const active = character.damage_modifiers[cat].includes(type)
+                    return (
+                      <button
+                        key={type}
+                        onClick={() => toggleDamageModifier(cat, type)}
+                        disabled={saving}
+                        className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed ${active ? activeClass : inactiveClass}`}
+                      >
+                        {typeLabel}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Skills */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">
@@ -1628,32 +1749,57 @@ export function CharacterPage() {
 
           {/* Add spell form */}
           {addingSpell && (
-            <div className="flex gap-2 mb-4 pb-4 border-b border-stone-800">
-              <input
-                type="text"
-                placeholder="Nom du sort"
-                value={spellNameDraft}
-                onChange={e => setSpellNameDraft(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleAddSpell() }}
-                className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500 transition-colors"
-              />
-              <select
-                value={spellLevelDraft}
-                onChange={e => setSpellLevelDraft(e.target.value)}
-                className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-white text-sm focus:outline-none focus:border-violet-500 transition-colors"
-              >
-                <option value="0">Tour de magie</option>
-                {[1,2,3,4,5,6,7,8,9].map(l => (
-                  <option key={l} value={String(l)}>Niv. {l}</option>
-                ))}
-              </select>
-              <button
-                onClick={handleAddSpell}
-                disabled={saving || !spellNameDraft.trim()}
-                className="bg-violet-600 hover:bg-violet-500 text-white font-semibold text-sm rounded-lg px-4 py-2 transition-colors disabled:opacity-40"
-              >
-                Ajouter
-              </button>
+            <div className="mb-4 pb-4 border-b border-stone-800">
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text"
+                    placeholder="Nom du sort"
+                    value={spellNameDraft}
+                    onChange={e => handleSpellNameChange(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') { handleAddSpell(); setSpellSuggestions([]) }
+                      if (e.key === 'Escape') setSpellSuggestions([])
+                    }}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                  {spellSuggestions.length > 0 && (
+                    <ul className="absolute z-20 left-0 right-0 top-full mt-1 bg-stone-800 border border-stone-700 rounded-lg overflow-hidden shadow-xl">
+                      {spellSuggestions.map(([name, level]) => (
+                        <li key={name}>
+                          <button
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); selectSpellSuggestion(name, level) }}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-stone-700 transition-colors flex items-center justify-between gap-2"
+                          >
+                            <span className="text-stone-200">{name}</span>
+                            <span className="text-stone-500 text-xs shrink-0">
+                              {level === 0 ? 'Tour de magie' : `Niv. ${level}`}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+                <select
+                  value={spellLevelDraft}
+                  onChange={e => setSpellLevelDraft(e.target.value)}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-white text-sm focus:outline-none focus:border-violet-500 transition-colors"
+                >
+                  <option value="0">Tour de magie</option>
+                  {[1,2,3,4,5,6,7,8,9].map(l => (
+                    <option key={l} value={String(l)}>Niv. {l}</option>
+                  ))}
+                </select>
+                <button
+                  onClick={handleAddSpell}
+                  disabled={saving || !spellNameDraft.trim()}
+                  className="bg-violet-600 hover:bg-violet-500 text-white font-semibold text-sm rounded-lg px-4 py-2 transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
             </div>
           )}
 
