@@ -5,6 +5,7 @@ namespace App\Events;
 use App\Http\Resources\CharacterResource;
 use App\Models\Character;
 use Illuminate\Broadcasting\InteractsWithSockets;
+use Illuminate\Broadcasting\Channel;
 use Illuminate\Broadcasting\PrivateChannel;
 use Illuminate\Contracts\Broadcasting\ShouldBroadcastNow;
 use Illuminate\Foundation\Events\Dispatchable;
@@ -18,7 +19,14 @@ class CharacterUpdated implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        return [new PrivateChannel("character.{$this->character->id}")];
+        $channels = [new PrivateChannel("character.{$this->character->id}")];
+
+        $shareToken = $this->character->campaign?->share_token;
+        if ($shareToken) {
+            $channels[] = new Channel("campaign-share.{$shareToken}");
+        }
+
+        return $channels;
     }
 
     public function broadcastAs(): string
