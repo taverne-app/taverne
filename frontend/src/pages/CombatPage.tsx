@@ -7,6 +7,7 @@ import {
   createCombatant,
   updateCombatantHp,
   updateCombatantInitiative,
+  updateCombatantConditions,
   deleteCombatant,
   type Combatant,
 } from '../api/combatants'
@@ -100,6 +101,7 @@ export function CombatPage() {
   const [activeTurn, setActiveTurn] = useState(0)
   const [diceLog, setDiceLog] = useState<DiceRoll[]>([])
   const [actionState, setActionState] = useState<Record<string, { action: boolean; bonus: boolean; reaction: boolean }>>({})
+  const [expandedConditions, setExpandedConditions] = useState<number | null>(null)
 
   // Combatant HP input per combatant id
   const [combatantHpInputs, setCombatantHpInputs] = useState<Record<number, string>>({})
@@ -228,6 +230,17 @@ export function CombatPage() {
     if (!campaignId) return
     await deleteCombatant(campaignId, id)
     setCombatants(prev => prev.filter(c => c.id !== id))
+  }
+
+  async function handleToggleCombatantCondition(id: number, condition: string) {
+    if (!campaignId) return
+    const cb = combatants.find(c => c.id === id)
+    if (!cb) return
+    const next = cb.conditions.includes(condition)
+      ? cb.conditions.filter(c => c !== condition)
+      : [...cb.conditions, condition]
+    const updated = await updateCombatantConditions(campaignId, id, next)
+    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
   async function handleAddCombatant() {
@@ -687,19 +700,20 @@ export function CombatPage() {
                         </div>
                       </div>
 
-                      {/* Conditions placeholder */}
-                      <div className="hidden lg:block w-36 shrink-0">
-                        {cb.conditions.length === 0 ? (
-                          <span className="text-stone-700 text-xs">—</span>
-                        ) : (
-                          <div className="flex flex-wrap gap-1">
-                            {cb.conditions.map(c => (
-                              <span key={c} className="text-xs bg-purple-900/60 border border-purple-700/50 text-purple-300 rounded px-1.5 py-0.5">
-                                {CONDITIONS_FR[c] ?? c}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                      {/* Conditions (éditable) */}
+                      <div className="hidden lg:block shrink-0">
+                        <button
+                          onClick={() => setExpandedConditions(expandedConditions === cb.id ? null : cb.id)}
+                          className={`text-xs rounded px-2 py-1 border transition-colors ${
+                            cb.conditions.length > 0
+                              ? 'bg-purple-900/60 border-purple-700/50 text-purple-300 hover:bg-purple-800/60'
+                              : 'bg-stone-800 border-stone-700 text-stone-600 hover:text-stone-400'
+                          }`}
+                        >
+                          {cb.conditions.length > 0
+                            ? cb.conditions.map(c => CONDITIONS_FR[c] ?? c).join(', ')
+                            : '+ Condition'}
+                        </button>
                       </div>
 
                       {/* Action economy */}
@@ -737,6 +751,28 @@ export function CombatPage() {
                         ✕
                       </button>
                     </div>
+
+                    {/* Condition picker (expanded) */}
+                    {expandedConditions === cb.id && (
+                      <div className="mt-3 flex flex-wrap gap-1.5 pt-3 border-t border-stone-800">
+                        {Object.entries(CONDITIONS_FR).map(([key, label]) => {
+                          const active = cb.conditions.includes(key)
+                          return (
+                            <button
+                              key={key}
+                              onClick={() => handleToggleCombatantCondition(cb.id, key)}
+                              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
+                                active
+                                  ? 'bg-purple-600 border border-purple-500 text-white'
+                                  : 'bg-stone-800 border border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-300'
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          )
+                        })}
+                      </div>
+                    )}
                   </div>
                 )
               })}

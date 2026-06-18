@@ -58,6 +58,19 @@ export async function updateCombatantInitiative(
   return (await res.json()).data
 }
 
+export async function updateCombatantConditions(
+  campaignId: number,
+  combatantId: number,
+  conditions: string[],
+): Promise<Combatant> {
+  const res = await apiFetch(`/campaigns/${campaignId}/combatants/${combatantId}/conditions`, {
+    method: 'PATCH',
+    body: JSON.stringify({ conditions }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
 export async function deleteCombatant(campaignId: number, combatantId: number): Promise<void> {
   const res = await apiFetch(`/campaigns/${campaignId}/combatants/${combatantId}`, { method: 'DELETE' })
   if (!res.ok && res.status !== 204) throw new ApiError(res.status, await res.json())
