@@ -191,6 +191,14 @@ export function CombatPage() {
   const [xpResult, setXpResult] = useState<{ total: number; share: number; levelUps: string[] } | null>(null)
   const [monsterMap, setMonsterMap] = useState<Record<number, MonsterTemplate>>({})
 
+  // Combat timers
+  const [timers, setTimers] = useState<{ id: number; name: string; rounds: number }[]>([])
+  const [timerName, setTimerName] = useState('')
+  const [timerRounds, setTimerRounds] = useState('1')
+  const [expiredAlert, setExpiredAlert] = useState<string[]>([])
+  const [showTimerForm, setShowTimerForm] = useState(false)
+  const timerIdRef = useRef(0)
+
   // Encounter builder
   const [showEncounterBuilder, setShowEncounterBuilder] = useState(false)
   const [encounterSearch, setEncounterSearch] = useState('')
@@ -489,6 +497,16 @@ export function CombatPage() {
       setActionState(prev => ({ ...prev, [rowId(nextRow)]: { action: false, bonus: false, reaction: false } }))
     }
 
+    // Decrement timers once per round (when round increments)
+    if (next === 0) {
+      const expiredNow = timers.filter(t => t.rounds <= 1).map(t => t.name)
+      setTimers(prev => prev.map(t => ({ ...t, rounds: t.rounds - 1 })).filter(t => t.rounds > 0))
+      if (expiredNow.length > 0) {
+        setExpiredAlert(expiredNow)
+        setTimeout(() => setExpiredAlert([]), 5000)
+      }
+    }
+
     if (campaignId && campaign?.share_token) {
       broadcastCombatTurn(campaignId, {
         active_kind: nextRow ? nextRow.kind : null,
@@ -619,6 +637,110 @@ export function CombatPage() {
                 Suivant →
               </button>
             </div>
+          </div>
+        )}
+
+        {/* Combat timers */}
+        {(timers.length > 0 || withRoll.length > 0) && (
+          <div className="bg-stone-900 border border-stone-800 rounded-xl px-4 py-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <span className="text-stone-600 text-xs uppercase tracking-widest shrink-0">Effets</span>
+
+              {/* Active timers */}
+              {timers.map(t => {
+                const urgent = t.rounds <= 1
+                return (
+                  <button
+                    key={t.id}
+                    onClick={() => setTimers(prev => prev.filter(x => x.id !== t.id))}
+                    title="Cliquer pour supprimer"
+                    className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-medium border transition-colors ${
+                      urgent
+                        ? 'bg-red-900/40 border-red-700/60 text-red-300 hover:bg-red-900/60'
+                        : 'bg-stone-800 border-stone-700 text-stone-300 hover:bg-stone-700'
+                    }`}
+                  >
+                    <span className="truncate max-w-[120px]">{t.name}</span>
+                    <span className={`font-bold tabular-nums ${urgent ? 'text-red-400' : 'text-amber-400'}`}>
+                      {t.rounds}R
+                    </span>
+                    <span className="text-stone-600 text-xs">×</span>
+                  </button>
+                )
+              })}
+
+              {/* Add timer */}
+              {showTimerForm ? (
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Nom de l'effet"
+                    value={timerName}
+                    onChange={e => setTimerName(e.target.value)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        const r = parseInt(timerRounds, 10)
+                        if (timerName.trim() && r > 0) {
+                          setTimers(prev => [...prev, { id: ++timerIdRef.current, name: timerName.trim(), rounds: r }])
+                          setTimerName('')
+                          setTimerRounds('1')
+                          setShowTimerForm(false)
+                        }
+                      }
+                      if (e.key === 'Escape') setShowTimerForm(false)
+                    }}
+                    autoFocus
+                    className="w-36 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                  <input
+                    type="number"
+                    min={1}
+                    max={99}
+                    value={timerRounds}
+                    onChange={e => setTimerRounds(e.target.value)}
+                    className="w-14 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    placeholder="R"
+                  />
+                  <button
+                    onClick={() => {
+                      const r = parseInt(timerRounds, 10)
+                      if (timerName.trim() && r > 0) {
+                        setTimers(prev => [...prev, { id: ++timerIdRef.current, name: timerName.trim(), rounds: r }])
+                        setTimerName('')
+                        setTimerRounds('1')
+                        setShowTimerForm(false)
+                      }
+                    }}
+                    className="bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs rounded px-2 py-1 transition-colors"
+                  >
+                    +
+                  </button>
+                  <button
+                    onClick={() => { setShowTimerForm(false); setTimerName('') }}
+                    className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowTimerForm(true)}
+                  className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                  title="Ajouter un effet temporisé"
+                >
+                  + Effet
+                </button>
+              )}
+            </div>
+
+            {/* Expired alert */}
+            {expiredAlert.length > 0 && (
+              <div className="mt-2 pt-2 border-t border-stone-800">
+                <p className="text-red-400 text-xs font-semibold">
+                  ⏰ Expiré : {expiredAlert.join(', ')}
+                </p>
+              </div>
+            )}
           </div>
         )}
 
