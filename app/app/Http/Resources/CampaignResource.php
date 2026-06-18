@@ -13,7 +13,9 @@ class CampaignResource extends JsonResource
             'id'          => $this->id,
             'name'        => $this->name,
             'description' => $this->description,
+            'share_token' => $this->share_token,
             'characters'  => CharacterResource::collection($this->whenLoaded('characters')),
+            'combatants'  => CombatantResource::collection($this->whenLoaded('combatants')),
             'created_at'  => $this->created_at,
             'updated_at'  => $this->updated_at,
         ];

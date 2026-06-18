@@ -27,4 +27,9 @@ class Campaign extends Model
     {
         return $this->hasMany(CampaignSession::class)->orderByDesc('session_date')->orderByDesc('id');
     }
+
+    public function combatants(): HasMany
+    {
+        return $this->hasMany(Combatant::class)->orderBy('created_at');
+    }
 }

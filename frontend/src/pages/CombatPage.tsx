@@ -2,6 +2,14 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { listCharacters, setInitiativeRoll, type Character, type DiceRoll } from '../api/characters'
 import { getCampaign, type Campaign } from '../api/campaigns'
+import {
+  listCombatants,
+  createCombatant,
+  updateCombatantHp,
+  updateCombatantInitiative,
+  deleteCombatant,
+  type Combatant,
+} from '../api/combatants'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
@@ -27,33 +35,36 @@ const CONDITIONS_FR: Record<string, string> = {
   restrained: 'Entravé', stunned: 'Étourdi', unconscious: 'Inconscient',
 }
 
+// ── Unified row type ──────────────────────────────────────────────────────────
+
+type CombatRow =
+  | { kind: 'character'; initiativeRoll: number | null; data: Character }
+  | { kind: 'combatant'; initiativeRoll: number | null; data: Combatant }
+
+function rowId(row: CombatRow): string {
+  return `${row.kind}-${row.data.id}`
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
 function InitInput({
-  character,
+  value,
+  mod,
   onSet,
 }: {
-  character: Character
-  onSet: (id: number, roll: number | null) => void
+  value: number | null
+  mod: number
+  onSet: (roll: number | null) => void
 }) {
-  const [draft, setDraft] = useState(
-    character.combat.initiative_roll != null
-      ? String(character.combat.initiative_roll)
-      : '',
-  )
+  const [draft, setDraft] = useState(value != null ? String(value) : '')
 
-  // sync when parent updates (WS)
   useEffect(() => {
-    setDraft(
-      character.combat.initiative_roll != null
-        ? String(character.combat.initiative_roll)
-        : '',
-    )
-  }, [character.combat.initiative_roll])
+    setDraft(value != null ? String(value) : '')
+  }, [value])
 
   function commit() {
     const n = parseInt(draft, 10)
-    onSet(character.id, isNaN(n) ? null : n)
+    onSet(isNaN(n) ? null : n)
   }
 
   return (
@@ -64,11 +75,11 @@ function InitInput({
         onChange={e => setDraft(e.target.value)}
         onBlur={commit}
         onKeyDown={e => { if (e.key === 'Enter') commit() }}
-        placeholder={sign(character.combat.initiative)}
+        placeholder={sign(mod)}
         className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
       />
-      {character.combat.initiative_roll == null && (
-        <span className="text-stone-600 text-xs">(mod {sign(character.combat.initiative)})</span>
+      {value == null && (
+        <span className="text-stone-600 text-xs">(mod {sign(mod)})</span>
       )}
     </div>
   )
@@ -83,19 +94,30 @@ export function CombatPage() {
   const campaignId = searchParams.get('campaign') ? Number(searchParams.get('campaign')) : null
 
   const [characters, setCharacters] = useState<Character[]>([])
+  const [combatants, setCombatants] = useState<Combatant[]>([])
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTurn, setActiveTurn] = useState(0)
   const [diceLog, setDiceLog] = useState<DiceRoll[]>([])
 
-  // Map id→round for WS subscriptions cleanup
-  const echoRefs = useRef<Map<number, ReturnType<typeof createEcho>>>(new Map())
+  // Combatant HP input per combatant id
+  const [combatantHpInputs, setCombatantHpInputs] = useState<Record<number, string>>({})
 
-  // Load characters (all or filtered to campaign)
+  // Add combatant form
+  const [addingCombatant, setAddingCombatant] = useState(false)
+  const [combatantDraft, setCombatantDraft] = useState({ name: '', max_hp: '', ac: '', initiative: '' })
+
+  const echoRef = useRef<ReturnType<typeof createEcho> | null>(null)
+
+  // Load characters + combatants
   useEffect(() => {
     if (campaignId) {
-      getCampaign(campaignId)
-        .then(c => { setCampaign(c); setCharacters(c.characters) })
+      Promise.all([getCampaign(campaignId), listCombatants(campaignId)])
+        .then(([c, cbs]) => {
+          setCampaign(c)
+          setCharacters(c.characters)
+          setCombatants(cbs)
+        })
         .catch(() => navigate('/campaigns'))
         .finally(() => setLoading(false))
     } else {
@@ -106,12 +128,12 @@ export function CombatPage() {
     }
   }, [campaignId, navigate])
 
-  // Subscribe to each character's WS channel
+  // WS subscriptions
   useEffect(() => {
-    if (!token || characters.length === 0) return
+    if (!token || (characters.length === 0 && combatants.length === 0)) return
 
     const echo = createEcho(token)
-    echoRefs.current.clear()
+    echoRef.current = echo
 
     characters.forEach(c => {
       echo.private(`character.${c.id}`)
@@ -123,30 +145,86 @@ export function CombatPage() {
         })
     })
 
+    combatants.forEach(cb => {
+      echo.private(`combatant.${cb.id}`)
+        .listen('.combatant.updated', (e: { combatant: Combatant }) => {
+          setCombatants(prev => prev.map(c => c.id === e.combatant.id ? e.combatant : c))
+        })
+    })
+
     return () => {
       characters.forEach(c => echo.leave(`character.${c.id}`))
+      combatants.forEach(cb => echo.leave(`combatant.${cb.id}`))
       echo.disconnect()
+      echoRef.current = null
     }
-  }, [token, characters.map(c => c.id).join(',')])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, characters.map(c => c.id).join(','), combatants.map(c => c.id).join(',')])
 
-  // Characters sorted by initiative_roll (desc), then by initiative modifier (tiebreak)
-  const sorted = [...characters].sort((a, b) => {
-    const ra = a.combat.initiative_roll ?? -Infinity
-    const rb = b.combat.initiative_roll ?? -Infinity
+  // Build unified sorted list
+  const allRows: CombatRow[] = [
+    ...characters.map(c => ({ kind: 'character' as const, initiativeRoll: c.combat.initiative_roll, data: c })),
+    ...combatants.map(c => ({ kind: 'combatant' as const, initiativeRoll: c.initiative_roll, data: c })),
+  ].sort((a, b) => {
+    const ra = a.initiativeRoll ?? -Infinity
+    const rb = b.initiativeRoll ?? -Infinity
     if (rb !== ra) return (rb as number) - (ra as number)
-    return b.combat.initiative - a.combat.initiative
+    // tiebreak: character initiative mod vs combatant AC (proxy)
+    const modA = a.kind === 'character' ? a.data.combat.initiative : 0
+    const modB = b.kind === 'character' ? b.data.combat.initiative : 0
+    return modB - modA
   })
 
-  const withRoll = sorted.filter(c => c.combat.initiative_roll != null)
-  const withoutRoll = sorted.filter(c => c.combat.initiative_roll == null)
+  const withRoll = allRows.filter(r => r.initiativeRoll != null)
+  const withoutRoll = allRows.filter(r => r.initiativeRoll == null)
+  const sorted = [...withRoll, ...withoutRoll]
+
+  const activeCombatant = withRoll[activeTurn % Math.max(1, withRoll.length)] ?? null
 
   function updateCharacter(updated: Character) {
     setCharacters(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
-  async function handleSetInitiative(id: number, roll: number | null) {
+  async function handleSetCharacterInitiative(id: number, roll: number | null) {
     const updated = await setInitiativeRoll(id, roll)
     updateCharacter(updated)
+  }
+
+  async function handleSetCombatantInitiative(id: number, roll: number | null) {
+    if (!campaignId) return
+    const updated = await updateCombatantInitiative(campaignId, id, roll)
+    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+  }
+
+  async function handleCombatantHp(combatantId: number, type: 'damage' | 'heal') {
+    if (!campaignId) return
+    const raw = combatantHpInputs[combatantId] ?? ''
+    const amount = parseInt(raw, 10)
+    if (!amount || amount <= 0) return
+    const updated = await updateCombatantHp(campaignId, combatantId, amount, type)
+    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+    setCombatantHpInputs(prev => ({ ...prev, [combatantId]: '' }))
+  }
+
+  async function handleDeleteCombatant(id: number) {
+    if (!campaignId) return
+    await deleteCombatant(campaignId, id)
+    setCombatants(prev => prev.filter(c => c.id !== id))
+  }
+
+  async function handleAddCombatant() {
+    if (!campaignId || !combatantDraft.name.trim()) return
+    const maxHp = parseInt(combatantDraft.max_hp, 10)
+    if (!maxHp || maxHp < 1) return
+    const created = await createCombatant(campaignId, {
+      name: combatantDraft.name.trim(),
+      max_hp: maxHp,
+      armor_class: combatantDraft.ac ? parseInt(combatantDraft.ac, 10) || null : null,
+      initiative_roll: combatantDraft.initiative ? parseInt(combatantDraft.initiative, 10) || null : null,
+    })
+    setCombatants(prev => [...prev, created])
+    setCombatantDraft({ name: '', max_hp: '', ac: '', initiative: '' })
+    setAddingCombatant(false)
   }
 
   async function handleLogout() {
@@ -155,17 +233,25 @@ export function CombatPage() {
     navigate('/login')
   }
 
-  // Reset all initiatives
   async function handleReset() {
     await Promise.all(characters.map(c => setInitiativeRoll(c.id, null)))
     setCharacters(prev => prev.map(c => ({
       ...c,
       combat: { ...c.combat, initiative_roll: null },
     })))
+    if (campaignId) {
+      await Promise.all(combatants.map(c => updateCombatantInitiative(campaignId, c.id, null)))
+      setCombatants(prev => prev.map(c => ({ ...c, initiative_roll: null })))
+    }
     setActiveTurn(0)
   }
 
-  // Advance to next living character in sorted order
+  async function handleClearCombatants() {
+    if (!campaignId || combatants.length === 0) return
+    await Promise.all(combatants.map(c => deleteCombatant(campaignId, c.id)))
+    setCombatants([])
+  }
+
   function nextTurn() {
     if (withRoll.length === 0) return
     setActiveTurn(t => (t + 1) % withRoll.length)
@@ -184,7 +270,17 @@ export function CombatPage() {
     )
   }
 
-  const activeCombatant = withRoll[activeTurn % withRoll.length] ?? null
+  // Active row info for the turn banner
+  const activeRowName = activeCombatant
+    ? activeCombatant.kind === 'character'
+      ? activeCombatant.data.name
+      : activeCombatant.data.name
+    : '—'
+  const activeRowSubtitle = activeCombatant
+    ? activeCombatant.kind === 'character'
+      ? `${activeCombatant.data.race} · ${activeCombatant.data.character_class} · Niv. ${activeCombatant.data.level} · ${activeCombatant.data.combat.current_hp}/${activeCombatant.data.combat.max_hp} PV`
+      : `Ennemi · ${activeCombatant.data.current_hp}/${activeCombatant.data.max_hp} PV${activeCombatant.data.armor_class ? ` · CA ${activeCombatant.data.armor_class}` : ''}`
+    : null
 
   return (
     <div className="min-h-screen bg-stone-950">
@@ -223,12 +319,9 @@ export function CombatPage() {
           <div className="bg-stone-900 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
             <div>
               <p className="text-stone-400 text-xs uppercase tracking-widest mb-0.5">Tour actif</p>
-              <p className="text-white font-bold text-lg">{activeCombatant?.name ?? '—'}</p>
-              {activeCombatant && (
-                <p className="text-stone-400 text-xs mt-0.5">
-                  {activeCombatant.race} · {activeCombatant.character_class} · Niv. {activeCombatant.level}
-                  {' · '}{activeCombatant.combat.current_hp}/{activeCombatant.combat.max_hp} PV
-                </p>
+              <p className="text-white font-bold text-lg">{activeRowName}</p>
+              {activeRowSubtitle && (
+                <p className="text-stone-400 text-xs mt-0.5">{activeRowSubtitle}</p>
               )}
             </div>
             <div className="flex items-center gap-2">
@@ -257,37 +350,159 @@ export function CombatPage() {
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Ordre d'initiative
             </h2>
-            <button
-              onClick={handleReset}
-              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
-            >
-              Réinitialiser
-            </button>
+            <div className="flex items-center gap-3">
+              {campaignId && combatants.length > 0 && (
+                <button
+                  onClick={handleClearCombatants}
+                  className="text-red-600 hover:text-red-400 text-xs transition-colors"
+                >
+                  Vider ennemis
+                </button>
+              )}
+              <button
+                onClick={handleReset}
+                className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+              >
+                Réinitialiser
+              </button>
+            </div>
           </div>
 
-          {characters.length === 0 ? (
+          {sorted.length === 0 ? (
             <div className="px-5 py-10 text-center text-stone-500 text-sm">
-              Aucun personnage.{' '}
+              Aucun combattant.{' '}
               <Link to="/characters" className="text-amber-400 hover:text-amber-300">
                 Créer un personnage
               </Link>
             </div>
           ) : (
             <div className="divide-y divide-stone-800">
-              {[...withRoll, ...withoutRoll].map((character) => {
-                const isActive = withRoll.length > 0 && character.id === activeCombatant?.id
-                const isDying = character.combat.current_hp <= 0
-                const hpPct = Math.max(0, Math.min(100,
-                  (character.combat.current_hp / character.combat.max_hp) * 100,
-                ))
-                const position = withRoll.indexOf(character)
+              {sorted.map((row) => {
+                const isActive = withRoll.length > 0 && activeCombatant && rowId(row) === rowId(activeCombatant)
+                const position = withRoll.findIndex(r => rowId(r) === rowId(row))
+
+                if (row.kind === 'character') {
+                  const character = row.data
+                  const isDying = character.combat.current_hp <= 0
+                  const hpPct = Math.max(0, Math.min(100,
+                    (character.combat.current_hp / character.combat.max_hp) * 100,
+                  ))
+
+                  return (
+                    <div
+                      key={rowId(row)}
+                      className={`px-5 py-4 transition-colors ${
+                        isActive
+                          ? 'bg-amber-500/10 border-l-2 border-amber-500'
+                          : 'hover:bg-stone-800/40'
+                      }`}
+                    >
+                      <div className="flex items-center gap-4">
+                        {/* Position */}
+                        <div className="w-6 shrink-0 text-center">
+                          {position >= 0 ? (
+                            <span className={`text-sm font-bold ${isActive ? 'text-amber-400' : 'text-stone-500'}`}>
+                              {position + 1}
+                            </span>
+                          ) : (
+                            <span className="text-stone-700 text-sm">—</span>
+                          )}
+                        </div>
+
+                        {/* Initiative */}
+                        <div className="w-36 shrink-0">
+                          <InitInput
+                            value={character.combat.initiative_roll}
+                            mod={character.combat.initiative}
+                            onSet={roll => handleSetCharacterInitiative(character.id, roll)}
+                          />
+                        </div>
+
+                        {/* Name */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <Link
+                              to={`/characters/${character.id}`}
+                              className={`font-semibold truncate hover:underline ${
+                                isActive ? 'text-amber-300' : isDying ? 'text-red-400' : 'text-white'
+                              }`}
+                            >
+                              {character.name}
+                            </Link>
+                            {isDying && (
+                              <span className="shrink-0 text-xs bg-red-900/60 border border-red-700/50 text-red-300 rounded px-1.5 py-0.5">
+                                À terre
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-stone-500 text-xs truncate mt-0.5">
+                            {character.race} · {character.character_class} · Niv.{character.level}
+                            {' · '}CA {character.combat.armor_class}
+                          </p>
+                        </div>
+
+                        {/* HP */}
+                        <div className="w-40 shrink-0 hidden sm:block">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
+                              {character.combat.current_hp}
+                            </span>
+                            <span className="text-stone-500 text-xs">/ {character.combat.max_hp}</span>
+                            {character.combat.temporary_hp > 0 && (
+                              <span className="text-sky-400 text-xs font-semibold">
+                                +{character.combat.temporary_hp} tmp
+                              </span>
+                            )}
+                          </div>
+                          <div className="h-2 bg-stone-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${hpColor(character.combat.current_hp, character.combat.max_hp)}`}
+                              style={{ width: `${hpPct}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Conditions */}
+                        <div className="hidden lg:flex flex-wrap gap-1 w-36 shrink-0">
+                          {character.state.conditions.length === 0 ? (
+                            <span className="text-stone-700 text-xs">—</span>
+                          ) : (
+                            character.state.conditions.map(c => (
+                              <span
+                                key={c}
+                                className="text-xs bg-purple-900/60 border border-purple-700/50 text-purple-300 rounded px-1.5 py-0.5"
+                              >
+                                {CONDITIONS_FR[c] ?? c}
+                              </span>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Sheet link */}
+                        <Link
+                          to={`/characters/${character.id}`}
+                          className="text-stone-600 hover:text-stone-400 transition-colors shrink-0 text-sm"
+                          title="Ouvrir la fiche"
+                        >
+                          ↗
+                        </Link>
+                      </div>
+                    </div>
+                  )
+                }
+
+                // Combatant row
+                const cb = row.data
+                const isDying = cb.current_hp <= 0
+                const hpPct = Math.max(0, Math.min(100, (cb.current_hp / cb.max_hp) * 100))
+                const hpInput = combatantHpInputs[cb.id] ?? ''
 
                 return (
                   <div
-                    key={character.id}
+                    key={rowId(row)}
                     className={`px-5 py-4 transition-colors ${
                       isActive
-                        ? 'bg-amber-500/10 border-l-2 border-amber-500'
+                        ? 'bg-red-500/10 border-l-2 border-red-500'
                         : 'hover:bg-stone-800/40'
                     }`}
                   >
@@ -295,7 +510,7 @@ export function CombatPage() {
                       {/* Position */}
                       <div className="w-6 shrink-0 text-center">
                         {position >= 0 ? (
-                          <span className={`text-sm font-bold ${isActive ? 'text-amber-400' : 'text-stone-500'}`}>
+                          <span className={`text-sm font-bold ${isActive ? 'text-red-400' : 'text-stone-500'}`}>
                             {position + 1}
                           </span>
                         ) : (
@@ -303,90 +518,172 @@ export function CombatPage() {
                         )}
                       </div>
 
-                      {/* Initiative input */}
+                      {/* Initiative */}
                       <div className="w-36 shrink-0">
-                        <InitInput character={character} onSet={handleSetInitiative} />
+                        <InitInput
+                          value={cb.initiative_roll}
+                          mod={0}
+                          onSet={roll => handleSetCombatantInitiative(cb.id, roll)}
+                        />
                       </div>
 
-                      {/* Name + identity */}
+                      {/* Name */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
-                          <Link
-                            to={`/characters/${character.id}`}
-                            className={`font-semibold truncate hover:underline ${
-                              isActive ? 'text-amber-300' : isDying ? 'text-red-400' : 'text-white'
-                            }`}
-                          >
-                            {character.name}
-                          </Link>
+                          <span className={`font-semibold truncate ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}>
+                            {cb.name}
+                          </span>
+                          <span className="shrink-0 text-xs bg-red-900/40 border border-red-800/50 text-red-400 rounded px-1.5 py-0.5">
+                            Ennemi
+                          </span>
                           {isDying && (
-                            <span className="shrink-0 text-xs bg-red-900/60 border border-red-700/50 text-red-300 rounded px-1.5 py-0.5">
+                            <span className="shrink-0 text-xs bg-stone-800 border border-stone-700 text-stone-400 rounded px-1.5 py-0.5">
                               À terre
                             </span>
                           )}
                         </div>
-                        <p className="text-stone-500 text-xs truncate mt-0.5">
-                          {character.race} · {character.character_class} · Niv.{character.level}
-                          {' · '}CA {character.combat.armor_class}
-                        </p>
-                      </div>
-
-                      {/* HP */}
-                      <div className="w-40 shrink-0 hidden sm:block">
-                        <div className="flex items-center justify-between mb-1">
-                          <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
-                            {character.combat.current_hp}
-                          </span>
-                          <span className="text-stone-500 text-xs">/ {character.combat.max_hp}</span>
-                          {character.combat.temporary_hp > 0 && (
-                            <span className="text-sky-400 text-xs font-semibold">
-                              +{character.combat.temporary_hp} tmp
-                            </span>
-                          )}
-                        </div>
-                        <div className="h-2 bg-stone-700 rounded-full overflow-hidden">
-                          <div
-                            className={`h-full rounded-full transition-all duration-300 ${hpColor(character.combat.current_hp, character.combat.max_hp)}`}
-                            style={{ width: `${hpPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Conditions */}
-                      <div className="hidden lg:flex flex-wrap gap-1 w-36 shrink-0">
-                        {character.state.conditions.length === 0 ? (
-                          <span className="text-stone-700 text-xs">—</span>
-                        ) : (
-                          character.state.conditions.map(c => (
-                            <span
-                              key={c}
-                              className="text-xs bg-purple-900/60 border border-purple-700/50 text-purple-300 rounded px-1.5 py-0.5"
-                            >
-                              {CONDITIONS_FR[c] ?? c}
-                            </span>
-                          ))
+                        {cb.armor_class != null && (
+                          <p className="text-stone-500 text-xs mt-0.5">CA {cb.armor_class}</p>
                         )}
                       </div>
 
-                      {/* Sheet link */}
-                      <Link
-                        to={`/characters/${character.id}`}
-                        className="text-stone-600 hover:text-stone-400 transition-colors shrink-0 text-sm"
-                        title="Ouvrir la fiche"
+                      {/* HP + controls */}
+                      <div className="w-48 shrink-0 hidden sm:block">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
+                            {cb.current_hp}
+                          </span>
+                          <span className="text-stone-500 text-xs">/ {cb.max_hp}</span>
+                        </div>
+                        <div className="h-2 bg-stone-700 rounded-full overflow-hidden mb-2">
+                          <div
+                            className={`h-full rounded-full transition-all duration-300 ${hpColor(cb.current_hp, cb.max_hp)}`}
+                            style={{ width: `${hpPct}%` }}
+                          />
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="number"
+                            value={hpInput}
+                            min={1}
+                            onChange={e => setCombatantHpInputs(prev => ({ ...prev, [cb.id]: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter') handleCombatantHp(cb.id, 'damage') }}
+                            placeholder="PV"
+                            className="w-14 bg-stone-800 border border-stone-700 rounded px-1.5 py-1 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+                          <button
+                            onClick={() => handleCombatantHp(cb.id, 'damage')}
+                            className="bg-red-900/60 hover:bg-red-800/80 border border-red-700/50 text-red-300 text-xs rounded px-1.5 py-1 transition-colors"
+                          >
+                            Dmg
+                          </button>
+                          <button
+                            onClick={() => handleCombatantHp(cb.id, 'heal')}
+                            className="bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-700/50 text-emerald-300 text-xs rounded px-1.5 py-1 transition-colors"
+                          >
+                            Soin
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Conditions placeholder */}
+                      <div className="hidden lg:block w-36 shrink-0">
+                        {cb.conditions.length === 0 ? (
+                          <span className="text-stone-700 text-xs">—</span>
+                        ) : (
+                          <div className="flex flex-wrap gap-1">
+                            {cb.conditions.map(c => (
+                              <span key={c} className="text-xs bg-purple-900/60 border border-purple-700/50 text-purple-300 rounded px-1.5 py-0.5">
+                                {CONDITIONS_FR[c] ?? c}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Delete */}
+                      <button
+                        onClick={() => handleDeleteCombatant(cb.id)}
+                        className="text-stone-700 hover:text-red-500 transition-colors shrink-0 text-sm"
+                        title="Supprimer"
                       >
-                        ↗
-                      </Link>
+                        ✕
+                      </button>
                     </div>
                   </div>
                 )
               })}
             </div>
           )}
+
+          {/* Add combatant section */}
+          {campaignId && (
+            <div className="border-t border-stone-800 px-5 py-3">
+              {!addingCombatant ? (
+                <button
+                  onClick={() => setAddingCombatant(true)}
+                  className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
+                >
+                  + Ajouter un ennemi / PNJ
+                </button>
+              ) : (
+                <div className="space-y-3">
+                  <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Nouvel adversaire</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <input
+                      type="text"
+                      value={combatantDraft.name}
+                      onChange={e => setCombatantDraft(prev => ({ ...prev, name: e.target.value }))}
+                      placeholder="Nom *"
+                      className="col-span-2 sm:col-span-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                    />
+                    <input
+                      type="number"
+                      value={combatantDraft.max_hp}
+                      onChange={e => setCombatantDraft(prev => ({ ...prev, max_hp: e.target.value }))}
+                      placeholder="PV max *"
+                      min={1}
+                      className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <input
+                      type="number"
+                      value={combatantDraft.ac}
+                      onChange={e => setCombatantDraft(prev => ({ ...prev, ac: e.target.value }))}
+                      placeholder="CA"
+                      className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <input
+                      type="number"
+                      value={combatantDraft.initiative}
+                      onChange={e => setCombatantDraft(prev => ({ ...prev, initiative: e.target.value }))}
+                      placeholder="Initiative"
+                      className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={handleAddCombatant}
+                      disabled={!combatantDraft.name.trim() || !combatantDraft.max_hp}
+                      className="bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2 transition-colors"
+                    >
+                      Ajouter
+                    </button>
+                    <button
+                      onClick={() => { setAddingCombatant(false); setCombatantDraft({ name: '', max_hp: '', ac: '', initiative: '' }) }}
+                      className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
+                    >
+                      Annuler
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Legend */}
         <p className="text-stone-600 text-xs text-center">
-          Cliquer sur le champ d'initiative pour le modifier · Le tour actif est mis en surbrillance · Les PV se synchronisent en temps réel
+          Initiative modifiable · PV ennemis avec Dmg / Soin · Sync temps réel
         </p>
 
         {/* Dice log */}

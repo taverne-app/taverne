@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Character;
+use App\Models\Combatant;
 use Illuminate\Support\Facades\Broadcast;
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
@@ -10,5 +11,11 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 Broadcast::channel('character.{characterId}', function ($user, int $characterId) {
     return Character::where('id', $characterId)
         ->where('user_id', $user->id)
+        ->exists();
+});
+
+Broadcast::channel('combatant.{combatantId}', function ($user, int $combatantId) {
+    return Combatant::where('id', $combatantId)
+        ->whereHas('campaign', fn ($q) => $q->where('user_id', $user->id))
         ->exists();
 });

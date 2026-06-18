@@ -16,7 +16,7 @@ class CampaignController extends Controller
     {
         $campaigns = $request->user()
             ->campaigns()
-            ->with('characters')
+            ->with(['characters', 'combatants'])
             ->orderBy('name')
             ->get();
 
@@ -32,14 +32,14 @@ class CampaignController extends Controller
 
         $campaign = $request->user()->campaigns()->create($validated);
 
-        return new CampaignResource($campaign->load('characters'));
+        return new CampaignResource($campaign->load(['characters', 'combatants']));
     }
 
     public function show(Request $request, Campaign $campaign): CampaignResource
     {
         $this->authorize($request, $campaign);
 
-        return new CampaignResource($campaign->load('characters'));
+        return new CampaignResource($campaign->load(['characters', 'combatants']));
     }
 
     public function update(Request $request, Campaign $campaign): CampaignResource
@@ -53,7 +53,7 @@ class CampaignController extends Controller
 
         $campaign->update($validated);
 
-        return new CampaignResource($campaign->fresh()->load('characters'));
+        return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
     }
 
     public function destroy(Request $request, Campaign $campaign): JsonResponse
@@ -80,7 +80,7 @@ class CampaignController extends Controller
 
         $character->update(['campaign_id' => $campaign->id]);
 
-        return new CampaignResource($campaign->fresh()->load('characters'));
+        return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
     }
 
     public function removeCharacter(Request $request, Campaign $campaign, Character $character): CampaignResource
@@ -90,7 +90,25 @@ class CampaignController extends Controller
 
         $character->update(['campaign_id' => null]);
 
-        return new CampaignResource($campaign->fresh()->load('characters'));
+        return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
+    }
+
+    public function share(Request $request, Campaign $campaign): CampaignResource
+    {
+        $this->authorize($request, $campaign);
+
+        $campaign->update(['share_token' => bin2hex(random_bytes(32))]);
+
+        return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
+    }
+
+    public function revokeShare(Request $request, Campaign $campaign): CampaignResource
+    {
+        $this->authorize($request, $campaign);
+
+        $campaign->update(['share_token' => null]);
+
+        return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
     }
 
     private function authorize(Request $request, Campaign $campaign): void

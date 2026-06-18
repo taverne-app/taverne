@@ -1,11 +1,14 @@
 import { apiFetch, ApiError } from './client'
 import type { Character } from './characters'
+import type { Combatant } from './combatants'
 
 export interface Campaign {
   id: number
   name: string
   description: string | null
+  share_token: string | null
   characters: Character[]
+  combatants?: Combatant[]
   created_at: string
   updated_at: string
 }
