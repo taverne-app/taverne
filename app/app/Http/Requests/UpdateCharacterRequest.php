@@ -54,6 +54,11 @@ class UpdateCharacterRequest extends FormRequest
             'attack_macros.*.damage_dice'     => ['required_with:attack_macros', 'string', 'max:40'],
             'attack_macros.*.damage_type'     => ['sometimes', 'nullable', 'string', 'max:40'],
             'attack_macros.*.crit_dice'       => ['sometimes', 'nullable', 'string', 'max:20'],
+            'resources'                 => ['sometimes', 'nullable', 'array'],
+            'resources.*.name'          => ['required_with:resources', 'string', 'max:80'],
+            'resources.*.max'           => ['required_with:resources', 'integer', 'min:0'],
+            'resources.*.current'       => ['required_with:resources', 'integer', 'min:0'],
+            'resources.*.reset'         => ['required_with:resources', 'string', 'in:short,long,manual'],
             'notes'               => ['sometimes', 'nullable', 'string'],
 
             'save_proficiencies'    => ['sometimes', 'array'],

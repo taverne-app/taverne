@@ -203,9 +203,18 @@ class CharacterController extends Controller
         $rolls = array_map(fn () => random_int(1, $diceType), range(1, $diceSpent));
         $totalHealed = max(0, array_sum($rolls) + ($conMod * $diceSpent));
 
+        $resources = $character->resources ?? [];
+        foreach ($resources as &$res) {
+            if (($res['reset'] ?? '') === 'short') {
+                $res['current'] = $res['max'];
+            }
+        }
+        unset($res);
+
         $character->update([
             'current_hp'         => min($character->max_hp, $character->current_hp + $totalHealed),
             'hit_dice_remaining' => $remaining - $diceSpent,
+            'resources'          => $resources,
         ]);
 
         $fresh = $character->fresh();
@@ -232,11 +241,20 @@ class CharacterController extends Controller
         $remaining = $character->hit_dice_remaining ?? $character->level;
         $restored  = (int) ceil($character->level / 2);
 
+        $resources = $character->resources ?? [];
+        foreach ($resources as &$res) {
+            if (($res['reset'] ?? '') === 'long') {
+                $res['current'] = $res['max'];
+            }
+        }
+        unset($res);
+
         $character->update([
             'spell_slots'           => $slots,
             'death_saves_successes' => 0,
             'death_saves_failures'  => 0,
             'hit_dice_remaining'    => min($character->level, $remaining + $restored),
+            'resources'             => $resources,
         ]);
         $fresh = $character->fresh();
         CharacterUpdated::dispatch($fresh);

@@ -82,6 +82,7 @@ class CharacterResource extends JsonResource
             ],
 
             'attack_macros' => $this->attack_macros ?? [],
+            'resources'     => $this->resources ?? [],
             'features'    => $this->features ?? [],
             'currency'    => $this->currency ?? ['pc' => 0, 'pa' => 0, 'pe' => 0, 'po' => 0, 'pp' => 0],
             'damage_modifiers' => [

@@ -1,6 +1,9 @@
 import { apiFetch, ApiError } from './client'
 import type { Character } from './characters'
 import type { Combatant } from './combatants'
+import type { CampaignSession } from './sessions'
+
+export type { CampaignSession }
 
 export interface Campaign {
   id: number
@@ -9,6 +12,7 @@ export interface Campaign {
   share_token: string | null
   characters: Character[]
   combatants?: Combatant[]
+  sessions?: CampaignSession[]
   created_at: string
   updated_at: string
 }

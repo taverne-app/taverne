@@ -71,6 +71,7 @@ class Character extends Model
         'damage_modifiers',
         'concentrating_on',
         'attack_macros',
+        'resources',
         'temp_max_hp_bonus',
         'campaign_id',
     ];
@@ -88,6 +89,7 @@ class Character extends Model
         'currency'           => 'array',
         'damage_modifiers'   => 'array',
         'attack_macros'      => 'array',
+        'resources'          => 'array',
     ];
 
     /** Modificateur d'une caractéristique : floor((score - 10) / 2) */

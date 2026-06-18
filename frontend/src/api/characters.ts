@@ -42,6 +42,13 @@ export interface AttackMacro {
   crit_dice?: string
 }
 
+export interface ClassResource {
+  name: string
+  max: number
+  current: number
+  reset: 'short' | 'long' | 'manual'
+}
+
 export interface Currency {
   pc: number
   pa: number
@@ -101,6 +108,7 @@ export interface Character {
     capacity: number
   }
   attack_macros: AttackMacro[]
+  resources: ClassResource[]
   features: Feature[]
   currency: Currency
   damage_modifiers: {
@@ -437,6 +445,18 @@ export async function updateAttackMacros(
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ attack_macros: macros }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateResources(
+  id: number,
+  resources: ClassResource[],
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ resources }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data

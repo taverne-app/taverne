@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCampaign } from '../api/share'
-import type { Campaign } from '../api/campaigns'
+import type { Campaign, CampaignSession } from '../api/campaigns'
 import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
 import { createPublicEcho } from '../lib/echo'
@@ -192,6 +192,7 @@ export function SharedCampaignPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [characters, setCharacters] = useState<Character[]>([])
   const [combatants, setCombatants] = useState<Combatant[]>([])
+  const [sessions, setSessions] = useState<CampaignSession[]>([])
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
@@ -204,6 +205,7 @@ export function SharedCampaignPage() {
         setCampaign(c)
         setCharacters(c.characters)
         setCombatants(c.combatants ?? [])
+        setSessions(c.sessions ?? [])
         setLastUpdate(new Date())
       })
       .catch(() => setError(true))
@@ -277,6 +279,32 @@ export function SharedCampaignPage() {
       <main className="max-w-6xl mx-auto px-4 py-6 space-y-8">
         {campaign.description && (
           <p className="text-stone-400 text-sm">{campaign.description}</p>
+        )}
+
+        {/* Journal de session */}
+        {sessions.length > 0 && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">
+              Journal de session
+            </h2>
+            <div className="space-y-3">
+              {sessions.slice(0, 5).map(s => (
+                <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+                  <div className="flex items-start justify-between gap-3 mb-1">
+                    <h3 className="text-white font-semibold text-sm">{s.title}</h3>
+                    {s.session_date && (
+                      <span className="text-stone-500 text-xs shrink-0">
+                        {new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                      </span>
+                    )}
+                  </div>
+                  {s.notes && (
+                    <p className="text-stone-400 text-sm whitespace-pre-wrap leading-relaxed">{s.notes}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </section>
         )}
 
         {characters.length === 0 && combatants.length === 0 ? (

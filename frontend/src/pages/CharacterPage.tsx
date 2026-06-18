@@ -23,6 +23,7 @@ import {
   updateNotes,
   shortRest,
   updateAttackMacros,
+  updateResources,
   type Character,
   type AbilityName,
   type SkillName,
@@ -34,6 +35,7 @@ import {
   type IdentityPayload,
   type Currency,
   type AttackMacro,
+  type ClassResource,
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -707,6 +709,38 @@ export function CharacterPage() {
     const parsed = parseDice(macro.damage_dice)
     if (!parsed) return
     handleRoll({ sides: parsed.sides, count: parsed.count, modifier: parsed.bonus, label: `Dégâts: ${macro.name}` })
+  }
+
+  // ── Ressources de classe ─────────────────────────────────────────────────────
+
+  interface ResourceDraft { name: string; max: string; reset: 'short' | 'long' | 'manual' }
+  const emptyResourceDraft = (): ResourceDraft => ({ name: '', max: '1', reset: 'long' })
+  const [addingResource, setAddingResource] = useState(false)
+  const [resourceDraft, setResourceDraft] = useState<ResourceDraft>(emptyResourceDraft)
+
+  async function handleAddResource() {
+    if (!character || !resourceDraft.name.trim()) return
+    const maxVal = Math.max(0, parseInt(resourceDraft.max, 10) || 0)
+    const res: ClassResource = { name: resourceDraft.name.trim(), max: maxVal, current: maxVal, reset: resourceDraft.reset }
+    const next = [...character.resources, res]
+    const updated = await withSave(() => updateResources(character.id, next))
+    if (updated) { setCharacter(updated); setResourceDraft(emptyResourceDraft()); setAddingResource(false) }
+  }
+
+  async function handleResourceChange(index: number, delta: number) {
+    if (!character) return
+    const next = character.resources.map((r, i) =>
+      i === index ? { ...r, current: Math.max(0, Math.min(r.max, r.current + delta)) } : r
+    )
+    const updated = await withSave(() => updateResources(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleDeleteResource(index: number) {
+    if (!character) return
+    const next = character.resources.filter((_, i) => i !== index)
+    const updated = await withSave(() => updateResources(character.id, next))
+    if (updated) setCharacter(updated)
   }
 
   // ── Assistant de montée de niveau ─────────────────────────────────────────────
@@ -1850,6 +1884,111 @@ export function CharacterPage() {
                   </div>
                   <button
                     onClick={() => handleDeleteMacro(i)}
+                    disabled={saving}
+                    className="text-stone-700 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-sm shrink-0"
+                    title="Supprimer"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Ressources de classe */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Ressources
+            </h2>
+            <button
+              onClick={() => { setAddingResource(v => !v); setResourceDraft(emptyResourceDraft()) }}
+              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+            >
+              {addingResource ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {addingResource && (
+            <div className="bg-stone-800 border border-stone-700 rounded-xl p-4 mb-4 space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Nom *</label>
+                  <input
+                    type="text"
+                    placeholder="Inspiration bardique"
+                    value={resourceDraft.name}
+                    onChange={e => setResourceDraft(d => ({ ...d, name: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Maximum *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={resourceDraft.max}
+                    onChange={e => setResourceDraft(d => ({ ...d, max: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-stone-500 text-xs mb-1 block">Récupération</label>
+                <select
+                  value={resourceDraft.reset}
+                  onChange={e => setResourceDraft(d => ({ ...d, reset: e.target.value as ClassResource['reset'] }))}
+                  className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                >
+                  <option value="long">Repos long</option>
+                  <option value="short">Repos court</option>
+                  <option value="manual">Manuel</option>
+                </select>
+              </div>
+              <button
+                onClick={handleAddResource}
+                disabled={saving || !resourceDraft.name.trim()}
+                className="w-full bg-amber-600 hover:bg-amber-500 disabled:bg-stone-700 disabled:text-stone-500 text-white text-sm font-medium py-2 rounded-lg transition-colors"
+              >
+                Ajouter
+              </button>
+            </div>
+          )}
+
+          {character.resources.length === 0 && !addingResource ? (
+            <p className="text-stone-600 text-sm italic">Aucune ressource — Ki, Inspiration bardique, etc.</p>
+          ) : (
+            <div className="space-y-2">
+              {character.resources.map((res, i) => (
+                <div key={i} className="flex items-center gap-3 py-2 border-b border-stone-800/60 last:border-0">
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm text-white truncate">{res.name}</div>
+                    <div className="text-xs text-stone-500 mt-0.5">
+                      {res.reset === 'long' ? 'Repos long' : res.reset === 'short' ? 'Repos court' : 'Manuel'}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleResourceChange(i, -1)}
+                      disabled={saving || res.current <= 0}
+                      className="w-6 h-6 flex items-center justify-center rounded bg-stone-800 hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-300 text-sm font-bold transition-colors"
+                    >
+                      −
+                    </button>
+                    <span className="text-sm font-semibold text-white w-10 text-center">
+                      {res.current}<span className="text-stone-500 font-normal">/{res.max}</span>
+                    </span>
+                    <button
+                      onClick={() => handleResourceChange(i, +1)}
+                      disabled={saving || res.current >= res.max}
+                      className="w-6 h-6 flex items-center justify-center rounded bg-stone-800 hover:bg-stone-700 disabled:opacity-30 disabled:cursor-not-allowed text-stone-300 text-sm font-bold transition-colors"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => handleDeleteResource(i)}
                     disabled={saving}
                     className="text-stone-700 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-sm shrink-0"
                     title="Supprimer"
