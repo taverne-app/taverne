@@ -62,6 +62,7 @@ class CharacterResource extends JsonResource
                 'death_saves_successes' => $this->death_saves_successes,
                 'death_saves_failures'  => $this->death_saves_failures,
                 'conditions'            => $this->conditions ?? [],
+                'concentrating_on'      => $this->concentrating_on,
             ],
 
             'spellcasting' => [

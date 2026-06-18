@@ -16,6 +16,7 @@ import {
   updateFeatures,
   updateCurrency,
   updateDamageModifiers,
+  updateConcentration,
   updateIdentity,
   updateNotes,
   shortRest,
@@ -512,6 +513,15 @@ export function CharacterPage() {
     const updated = await withSave(() =>
       updateDamageModifiers(character.id, { ...current, [category]: next }),
     )
+    if (updated) setCharacter(updated)
+  }
+
+  // ── Concentration ────────────────────────────────────────────────────────────
+
+  async function handleConcentrate(spellName: string) {
+    if (!character) return
+    const next = character.state.concentrating_on === spellName ? null : spellName
+    const updated = await withSave(() => updateConcentration(character.id, next))
     if (updated) setCharacter(updated)
   }
 
@@ -1183,6 +1193,26 @@ export function CharacterPage() {
                 </button>
               </div>
 
+              {/* Concentration banner */}
+              {character.state.concentrating_on && (
+                <div className="mt-3 flex items-center justify-between gap-2 bg-violet-950/50 border border-violet-700/50 rounded-lg px-3 py-2">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="text-violet-400 text-xs shrink-0">⊙ Concentration</span>
+                    <span className="text-violet-200 text-sm font-medium truncate">
+                      {character.state.concentrating_on}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleConcentrate(character.state.concentrating_on!)}
+                    disabled={saving}
+                    className="text-violet-500 hover:text-violet-300 text-xs shrink-0 transition-colors disabled:opacity-40"
+                    title="Relâcher la concentration"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+
               {/* Temporary HP */}
               <div className="mt-3 flex items-center gap-2">
                 <span className="text-stone-400 text-sm shrink-0">PV temporaires</span>
@@ -1819,32 +1849,51 @@ export function CharacterPage() {
                     </p>
                     <div className="flex flex-wrap gap-2">
                       {spells.map(spell => (
-                        <div
-                          key={spell._idx}
-                          className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition-colors ${
-                            spell.prepared
-                              ? 'bg-violet-900/40 border-violet-700/60 text-violet-200'
-                              : 'bg-stone-800 border-stone-700 text-stone-400'
-                          }`}
-                        >
-                          <button
-                            onClick={() => handleTogglePrepared(spell._idx)}
-                            disabled={saving}
-                            title={spell.prepared ? 'Marquer comme non préparé' : 'Marquer comme préparé'}
-                            className={`w-2.5 h-2.5 rounded-full border transition-colors disabled:cursor-not-allowed shrink-0 ${
-                              spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
-                            }`}
-                          />
-                          <span>{spell.name}</span>
-                          <button
-                            onClick={() => handleRemoveSpell(spell._idx)}
-                            disabled={saving}
-                            className="text-stone-600 hover:text-red-400 transition-colors disabled:cursor-not-allowed ml-1 text-xs leading-none"
-                            title="Supprimer ce sort"
-                          >
-                            ×
-                          </button>
-                        </div>
+                        {(() => {
+                          const isConcentrating = character.state.concentrating_on === spell.name
+                          return (
+                            <div
+                              key={spell._idx}
+                              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition-colors ${
+                                isConcentrating
+                                  ? 'bg-violet-700/50 border-violet-500 text-violet-100'
+                                  : spell.prepared
+                                    ? 'bg-violet-900/40 border-violet-700/60 text-violet-200'
+                                    : 'bg-stone-800 border-stone-700 text-stone-400'
+                              }`}
+                            >
+                              <button
+                                onClick={() => handleTogglePrepared(spell._idx)}
+                                disabled={saving}
+                                title={spell.prepared ? 'Marquer comme non préparé' : 'Marquer comme préparé'}
+                                className={`w-2.5 h-2.5 rounded-full border transition-colors disabled:cursor-not-allowed shrink-0 ${
+                                  spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
+                                }`}
+                              />
+                              <span>{spell.name}</span>
+                              <button
+                                onClick={() => handleConcentrate(spell.name)}
+                                disabled={saving}
+                                title={isConcentrating ? 'Relâcher la concentration' : 'Se concentrer sur ce sort'}
+                                className={`ml-1 text-xs transition-colors disabled:cursor-not-allowed ${
+                                  isConcentrating
+                                    ? 'text-violet-300 hover:text-violet-100'
+                                    : 'text-stone-600 hover:text-violet-400'
+                                }`}
+                              >
+                                ⊙
+                              </button>
+                              <button
+                                onClick={() => handleRemoveSpell(spell._idx)}
+                                disabled={saving}
+                                className="text-stone-600 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-xs leading-none"
+                                title="Supprimer ce sort"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          )
+                        })()}
                       ))}
                     </div>
                   </div>

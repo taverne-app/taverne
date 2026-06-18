@@ -24,6 +24,7 @@ export interface Spell {
   name: string
   level: number
   prepared: boolean
+  concentration?: boolean
 }
 
 export interface Feature {
@@ -74,6 +75,7 @@ export interface Character {
     conditions: string[]
     death_saves_successes: number
     death_saves_failures: number
+    concentrating_on: string | null
   }
   spellcasting: {
     ability: AbilityName | null
@@ -380,4 +382,16 @@ export async function updateDeathSaves(
   if (!res.ok) throw new ApiError(res.status, await res.json())
   const json = await res.json()
   return json.data
+}
+
+export async function updateConcentration(
+  id: number,
+  spellName: string | null,
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ concentrating_on: spellName }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
 }

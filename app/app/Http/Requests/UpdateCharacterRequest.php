@@ -45,6 +45,7 @@ class UpdateCharacterRequest extends FormRequest
             'damage_modifiers.immunities.*'       => ['string', 'in:acid,bludgeoning,cold,fire,force,lightning,necrotic,piercing,poison,psychic,radiant,slashing,thunder'],
             'damage_modifiers.vulnerabilities'    => ['sometimes', 'array'],
             'damage_modifiers.vulnerabilities.*'  => ['string', 'in:acid,bludgeoning,cold,fire,force,lightning,necrotic,piercing,poison,psychic,radiant,slashing,thunder'],
+            'concentrating_on'    => ['sometimes', 'nullable', 'string', 'max:150'],
             'notes'               => ['sometimes', 'nullable', 'string'],
 
             'save_proficiencies'    => ['sometimes', 'array'],

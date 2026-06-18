@@ -68,6 +68,7 @@ class Character extends Model
         'hit_dice_type',
         'hit_dice_remaining',
         'damage_modifiers',
+        'concentrating_on',
         'campaign_id',
     ];
 
