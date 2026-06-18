@@ -439,6 +439,36 @@ export function CombatPage() {
                             {character.race} · {character.character_class} · Niv.{character.level}
                             {' · '}CA {character.combat.armor_class}
                           </p>
+                          {(character.damage_modifiers.resistances.length > 0 ||
+                            character.damage_modifiers.immunities.length > 0 ||
+                            character.damage_modifiers.vulnerabilities.length > 0) && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {character.damage_modifiers.resistances.length > 0 && (
+                                <span
+                                  title={`Résistances : ${character.damage_modifiers.resistances.join(', ')}`}
+                                  className="text-xs bg-sky-900/60 border border-sky-700/50 text-sky-300 rounded px-1.5 py-0.5"
+                                >
+                                  R×{character.damage_modifiers.resistances.length}
+                                </span>
+                              )}
+                              {character.damage_modifiers.immunities.length > 0 && (
+                                <span
+                                  title={`Immunités : ${character.damage_modifiers.immunities.join(', ')}`}
+                                  className="text-xs bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 rounded px-1.5 py-0.5"
+                                >
+                                  I×{character.damage_modifiers.immunities.length}
+                                </span>
+                              )}
+                              {character.damage_modifiers.vulnerabilities.length > 0 && (
+                                <span
+                                  title={`Vulnérabilités : ${character.damage_modifiers.vulnerabilities.join(', ')}`}
+                                  className="text-xs bg-red-900/60 border border-red-700/50 text-red-300 rounded px-1.5 py-0.5"
+                                >
+                                  V×{character.damage_modifiers.vulnerabilities.length}
+                                </span>
+                              )}
+                            </div>
+                          )}
                         </div>
 
                         {/* HP */}
