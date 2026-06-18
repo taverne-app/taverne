@@ -9,6 +9,7 @@ import { CombatPage } from './pages/CombatPage'
 import { CampaignsPage } from './pages/CampaignsPage'
 import { CampaignPage } from './pages/CampaignPage'
 import { SharedCampaignPage } from './pages/SharedCampaignPage'
+import { DashboardPage } from './pages/DashboardPage'
 
 export default function App() {
   return (
@@ -57,8 +58,16 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/share/:token" element={<SharedCampaignPage />} />
-          <Route path="*" element={<Navigate to="/characters" replace />} />
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
