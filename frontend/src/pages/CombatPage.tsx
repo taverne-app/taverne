@@ -63,6 +63,57 @@ const CONDITIONS_FR: Record<string, string> = {
   restrained: 'Entravé', stunned: 'Étourdi', unconscious: 'Inconscient',
 }
 
+// ── Encounter builder helpers ─────────────────────────────────────────────────
+
+// [easy, medium, hard, deadly] XP thresholds per character level
+const XP_THRESHOLDS: Record<number, [number, number, number, number]> = {
+   1: [25,  50,   75,   100],
+   2: [50,  100,  150,  200],
+   3: [75,  150,  225,  400],
+   4: [125, 250,  375,  500],
+   5: [250, 500,  750,  1100],
+   6: [300, 600,  900,  1400],
+   7: [350, 750,  1100, 1700],
+   8: [450, 900,  1400, 2100],
+   9: [550, 1100, 1600, 2400],
+  10: [600, 1200, 1900, 2800],
+  11: [800, 1600, 2400, 3600],
+  12: [1000,2000, 3000, 4500],
+  13: [1100,2200, 3400, 5100],
+  14: [1250,2500, 3800, 5700],
+  15: [1400,2800, 4300, 6400],
+  16: [1600,3200, 4800, 7200],
+  17: [2000,3900, 5900, 8800],
+  18: [2100,4200, 6300, 9500],
+  19: [2400,4900, 7300, 10900],
+  20: [2800,5700, 8500, 12700],
+}
+
+function encounterMultiplier(count: number): number {
+  if (count <= 1) return 1
+  if (count === 2) return 1.5
+  if (count <= 6) return 2
+  if (count <= 10) return 2.5
+  if (count <= 14) return 3
+  return 4
+}
+
+function encounterDifficultyLabel(adjustedXp: number, thresholds: [number, number, number, number]): string {
+  if (adjustedXp >= thresholds[3]) return 'Mortelle'
+  if (adjustedXp >= thresholds[2]) return 'Difficile'
+  if (adjustedXp >= thresholds[1]) return 'Moyen'
+  if (adjustedXp >= thresholds[0]) return 'Facile'
+  return 'Triviale'
+}
+
+function difficultyColor(label: string): string {
+  if (label === 'Mortelle')  return 'text-red-400'
+  if (label === 'Difficile') return 'text-orange-400'
+  if (label === 'Moyen')     return 'text-amber-400'
+  if (label === 'Facile')    return 'text-emerald-400'
+  return 'text-stone-400'
+}
+
 // ── Unified row type ──────────────────────────────────────────────────────────
 
 type CombatRow =
@@ -137,6 +188,12 @@ export function CombatPage() {
   const [showXpPanel, setShowXpPanel] = useState(false)
   const [xpInputs, setXpInputs] = useState<Record<number, string>>({})
   const [xpResult, setXpResult] = useState<{ total: number; share: number } | null>(null)
+  const [monsterMap, setMonsterMap] = useState<Record<number, MonsterTemplate>>({})
+
+  // Encounter builder
+  const [showEncounterBuilder, setShowEncounterBuilder] = useState(false)
+  const [encounterSearch, setEncounterSearch] = useState('')
+  const [encounterEntries, setEncounterEntries] = useState<{ monster: MonsterTemplate; count: number }[]>([])
 
   function handleRollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage') {
     const result = rollMacro(character, macro, type)
@@ -326,8 +383,20 @@ export function CombatPage() {
       initiative_roll: initRoll,
     })
     setCombatants(prev => [...prev, created])
+    setMonsterMap(prev => ({ ...prev, [created.id]: m }))
     setAddedMonster(m.name)
     setTimeout(() => setAddedMonster(null), 2000)
+  }
+
+  async function handleLaunchEncounter() {
+    for (const entry of encounterEntries) {
+      for (let i = 0; i < entry.count; i++) {
+        await handleAddMonster(entry.monster)
+      }
+    }
+    setEncounterEntries([])
+    setShowEncounterBuilder(false)
+    setEncounterSearch('')
   }
 
   async function handleLogout() {
@@ -582,7 +651,9 @@ export function CombatPage() {
                     setShowXpPanel(v => !v)
                     if (!showXpPanel) {
                       const defaults: Record<number, string> = {}
-                      combatants.filter(c => c.current_hp <= 0).forEach(c => { defaults[c.id] = '' })
+                      combatants.filter(c => c.current_hp <= 0).forEach(c => {
+                        defaults[c.id] = monsterMap[c.id] ? String(monsterMap[c.id].xp) : ''
+                      })
                       setXpInputs(defaults)
                     }
                   }}
@@ -1028,8 +1099,8 @@ export function CombatPage() {
           {/* Add combatant section */}
           {campaignId && (
             <div className="border-t border-stone-800 px-5 py-3">
-              {!addingCombatant && !showBestiary ? (
-                <div className="flex items-center gap-4">
+              {!addingCombatant && !showBestiary && !showEncounterBuilder ? (
+                <div className="flex items-center gap-4 flex-wrap">
                   <button
                     onClick={() => setAddingCombatant(true)}
                     className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors"
@@ -1041,6 +1112,12 @@ export function CombatPage() {
                     className="text-stone-500 hover:text-stone-300 text-xs font-medium transition-colors"
                   >
                     📚 Bestiaire SRD
+                  </button>
+                  <button
+                    onClick={() => { setShowEncounterBuilder(true); setEncounterEntries([]) }}
+                    className="text-violet-400 hover:text-violet-300 text-xs font-medium transition-colors"
+                  >
+                    ⚔ Constructeur
                   </button>
                 </div>
               ) : addingCombatant ? (
@@ -1137,7 +1214,147 @@ export function CombatPage() {
                     )}
                   </div>
                 </div>
-              ) : null}
+              ) : showEncounterBuilder ? (() => {
+                const totalRawXp = encounterEntries.reduce((s, e) => s + e.monster.xp * e.count, 0)
+                const totalCount = encounterEntries.reduce((s, e) => s + e.count, 0)
+                const multiplier = encounterMultiplier(totalCount)
+                const adjustedXp = Math.floor(totalRawXp * multiplier)
+                const partyThresholds = characters.reduce(
+                  (acc, c) => {
+                    const lvl = Math.max(1, Math.min(20, c.level))
+                    const t = XP_THRESHOLDS[lvl] ?? XP_THRESHOLDS[1]
+                    return [acc[0] + t[0], acc[1] + t[1], acc[2] + t[2], acc[3] + t[3]] as [number, number, number, number]
+                  },
+                  [0, 0, 0, 0] as [number, number, number, number],
+                )
+                const difficulty = encounterEntries.length > 0 ? encounterDifficultyLabel(adjustedXp, partyThresholds) : null
+                const filteredMonsters = MONSTERS.filter(m =>
+                  m.name.toLowerCase().includes(encounterSearch.toLowerCase()),
+                )
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <p className="text-violet-400 text-xs font-semibold uppercase tracking-widest">⚔ Constructeur de rencontre</p>
+                      <button
+                        onClick={() => { setShowEncounterBuilder(false); setEncounterEntries([]); setEncounterSearch('') }}
+                        className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                      >
+                        Fermer
+                      </button>
+                    </div>
+
+                    {/* Monster search */}
+                    <input
+                      type="text"
+                      placeholder="Ajouter un monstre…"
+                      value={encounterSearch}
+                      onChange={e => setEncounterSearch(e.target.value)}
+                      autoFocus
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                    />
+
+                    {encounterSearch && (
+                      <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1">
+                        {filteredMonsters.slice(0, 12).map(m => (
+                          <button
+                            key={m.name}
+                            onClick={() => {
+                              setEncounterEntries(prev => {
+                                const idx = prev.findIndex(e => e.monster.name === m.name)
+                                if (idx >= 0) {
+                                  const next = [...prev]
+                                  next[idx] = { ...next[idx], count: next[idx].count + 1 }
+                                  return next
+                                }
+                                return [...prev, { monster: m, count: 1 }]
+                              })
+                              setEncounterSearch('')
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-1.5 rounded hover:bg-stone-800 transition-colors text-left group"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-stone-500 text-xs w-8 shrink-0 font-mono">CR{m.cr}</span>
+                              <span className="text-stone-200 text-sm truncate">{m.name}</span>
+                            </div>
+                            <span className="text-stone-500 text-xs shrink-0">{m.xp} XP</span>
+                          </button>
+                        ))}
+                        {filteredMonsters.length === 0 && (
+                          <p className="text-stone-600 text-sm text-center py-2">Aucun monstre trouvé.</p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Selected monsters */}
+                    {encounterEntries.length > 0 && (
+                      <div className="space-y-1.5">
+                        {encounterEntries.map((entry, i) => (
+                          <div key={entry.monster.name} className="flex items-center gap-3 bg-stone-800/60 rounded-lg px-3 py-2">
+                            <span className="text-stone-500 text-xs font-mono w-8 shrink-0">CR{entry.monster.cr}</span>
+                            <span className="flex-1 text-stone-200 text-sm min-w-0 truncate">{entry.monster.name}</span>
+                            <span className="text-stone-500 text-xs shrink-0">{entry.monster.xp * entry.count} XP</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button
+                                onClick={() => setEncounterEntries(prev => {
+                                  const next = [...prev]
+                                  if (next[i].count <= 1) return next.filter((_, j) => j !== i)
+                                  next[i] = { ...next[i], count: next[i].count - 1 }
+                                  return next
+                                })}
+                                className="w-5 h-5 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs flex items-center justify-center transition-colors"
+                              >
+                                −
+                              </button>
+                              <span className="text-white text-sm w-5 text-center">{entry.count}</span>
+                              <button
+                                onClick={() => setEncounterEntries(prev => {
+                                  const next = [...prev]
+                                  next[i] = { ...next[i], count: next[i].count + 1 }
+                                  return next
+                                })}
+                                className="w-5 h-5 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs flex items-center justify-center transition-colors"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Difficulty summary */}
+                    {difficulty && (
+                      <div className="flex items-center justify-between border-t border-stone-800 pt-3">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold ${difficultyColor(difficulty)}`}>{difficulty}</span>
+                            <span className="text-stone-500 text-xs">
+                              {adjustedXp} XP ajustés
+                              {multiplier !== 1 && <span className="text-stone-600"> (×{multiplier} pour {totalCount} monstre{totalCount > 1 ? 's' : ''})</span>}
+                            </span>
+                          </div>
+                          {characters.length > 0 && (
+                            <p className="text-stone-600 text-xs">
+                              Groupe : F {partyThresholds[0]} · M {partyThresholds[1]} · D {partyThresholds[2]} · ☠ {partyThresholds[3]}
+                            </p>
+                          )}
+                        </div>
+                        <button
+                          onClick={handleLaunchEncounter}
+                          disabled={encounterEntries.length === 0}
+                          className="bg-violet-700 hover:bg-violet-600 disabled:opacity-40 text-white font-semibold text-sm rounded-lg px-4 py-2 transition-colors shrink-0"
+                        >
+                          Lancer →
+                        </button>
+                      </div>
+                    )}
+
+                    {encounterEntries.length === 0 && (
+                      <p className="text-stone-600 text-xs text-center py-2">Recherchez des monstres pour composer la rencontre.</p>
+                    )}
+                  </div>
+                )
+              })() : null}
             </div>
           )}
         </div>
