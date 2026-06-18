@@ -99,6 +99,7 @@ export function CombatPage() {
   const [loading, setLoading] = useState(true)
   const [activeTurn, setActiveTurn] = useState(0)
   const [diceLog, setDiceLog] = useState<DiceRoll[]>([])
+  const [actionState, setActionState] = useState<Record<string, { action: boolean; bonus: boolean; reaction: boolean }>>({})
 
   // Combatant HP input per combatant id
   const [combatantHpInputs, setCombatantHpInputs] = useState<Record<number, string>>({})
@@ -269,9 +270,27 @@ export function CombatPage() {
     setCombatants([])
   }
 
+  function getActions(key: string) {
+    return actionState[key] ?? { action: false, bonus: false, reaction: false }
+  }
+
+  function toggleAction(key: string, type: 'action' | 'bonus' | 'reaction') {
+    setActionState(prev => {
+      const cur = prev[key] ?? { action: false, bonus: false, reaction: false }
+      return { ...prev, [key]: { ...cur, [type]: !cur[type] } }
+    })
+  }
+
   function nextTurn() {
     if (withRoll.length === 0) return
-    setActiveTurn(t => (t + 1) % withRoll.length)
+    setActiveTurn(t => {
+      const next = (t + 1) % withRoll.length
+      const nextRow = withRoll[next]
+      if (nextRow) {
+        setActionState(prev => ({ ...prev, [rowId(nextRow)]: { action: false, bonus: false, reaction: false } }))
+      }
+      return next
+    })
   }
 
   function prevTurn() {
@@ -534,6 +553,32 @@ export function CombatPage() {
                           )}
                         </div>
 
+                        {/* Action economy */}
+                        <div className="hidden md:flex items-center gap-1 shrink-0">
+                          {(['action', 'bonus', 'reaction'] as const).map(type => {
+                            const key = rowId(row)
+                            const used = getActions(key)[type]
+                            return (
+                              <button
+                                key={type}
+                                onClick={() => toggleAction(key, type)}
+                                title={type === 'action' ? 'Action' : type === 'bonus' ? 'Action bonus' : 'Réaction'}
+                                className={`w-6 h-6 rounded text-xs font-bold border transition-colors ${
+                                  used
+                                    ? 'bg-stone-800 border-stone-700 text-stone-600 line-through'
+                                    : type === 'action'
+                                      ? 'bg-amber-600/20 border-amber-600/50 text-amber-400 hover:bg-amber-600/30'
+                                      : type === 'bonus'
+                                        ? 'bg-sky-600/20 border-sky-600/50 text-sky-400 hover:bg-sky-600/30'
+                                        : 'bg-rose-600/20 border-rose-600/50 text-rose-400 hover:bg-rose-600/30'
+                                }`}
+                              >
+                                {type === 'action' ? 'A' : type === 'bonus' ? 'B' : 'R'}
+                              </button>
+                            )
+                          })}
+                        </div>
+
                         {/* Sheet link */}
                         <Link
                           to={`/characters/${character.id}`}
@@ -655,6 +700,32 @@ export function CombatPage() {
                             ))}
                           </div>
                         )}
+                      </div>
+
+                      {/* Action economy */}
+                      <div className="hidden md:flex items-center gap-1 shrink-0">
+                        {(['action', 'bonus', 'reaction'] as const).map(type => {
+                          const key = rowId(row)
+                          const used = getActions(key)[type]
+                          return (
+                            <button
+                              key={type}
+                              onClick={() => toggleAction(key, type)}
+                              title={type === 'action' ? 'Action' : type === 'bonus' ? 'Action bonus' : 'Réaction'}
+                              className={`w-6 h-6 rounded text-xs font-bold border transition-colors ${
+                                used
+                                  ? 'bg-stone-800 border-stone-700 text-stone-600 line-through'
+                                  : type === 'action'
+                                    ? 'bg-amber-600/20 border-amber-600/50 text-amber-400 hover:bg-amber-600/30'
+                                    : type === 'bonus'
+                                      ? 'bg-sky-600/20 border-sky-600/50 text-sky-400 hover:bg-sky-600/30'
+                                      : 'bg-rose-600/20 border-rose-600/50 text-rose-400 hover:bg-rose-600/30'
+                              }`}
+                            >
+                              {type === 'action' ? 'A' : type === 'bonus' ? 'B' : 'R'}
+                            </button>
+                          )
+                        })}
                       </div>
 
                       {/* Delete */}
