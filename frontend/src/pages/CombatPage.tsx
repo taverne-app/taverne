@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, type Character, type DiceRoll } from '../api/characters'
+import { listCharacters, setInitiativeRoll, updateInspiration, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
 import { getCampaign, type Campaign } from '../api/campaigns'
 import {
   listCombatants,
@@ -26,6 +26,32 @@ function hpColor(current: number, max: number) {
   if (pct > 0.5) return 'bg-emerald-500'
   if (pct > 0.25) return 'bg-amber-500'
   return 'bg-red-500'
+}
+
+function parseDice(str: string): { count: number; sides: number; bonus: number } | null {
+  const m = str.trim().match(/^(\d+)d(\d+)([+-]\d+)?$/i)
+  if (!m) return null
+  return { count: parseInt(m[1]), sides: parseInt(m[2]), bonus: parseInt(m[3] ?? '0') }
+}
+
+function rollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage'): { label: string; total: number; detail: string } {
+  if (type === 'attack') {
+    const bonus = macro.attack_bonus ?? 0
+    const roll = Math.floor(Math.random() * 20) + 1
+    const total = roll + bonus
+    const nat = roll === 20 ? ' (critique!)' : roll === 1 ? ' (échec crit.)' : ''
+    return {
+      label: `${character.name} — Attaque: ${macro.name}`,
+      detail: `[${roll}]${bonus !== 0 ? ` ${bonus >= 0 ? '+' : ''}${bonus}` : ''}${nat}`,
+      total,
+    }
+  }
+  const parsed = parseDice(macro.damage_dice)
+  if (!parsed) return { label: `${character.name} — Dégâts: ${macro.name}`, detail: '?', total: 0 }
+  const rolls = Array.from({ length: parsed.count }, () => Math.floor(Math.random() * parsed.sides) + 1)
+  const total = rolls.reduce((s, r) => s + r, 0) + parsed.bonus
+  const detail = `[${rolls.join('+')}]${parsed.bonus !== 0 ? ` ${parsed.bonus >= 0 ? '+' : ''}${parsed.bonus}` : ''}`
+  return { label: `${character.name} — Dégâts: ${macro.name}`, detail, total }
 }
 
 const CONDITIONS_FR: Record<string, string> = {
@@ -103,6 +129,15 @@ export function CombatPage() {
   const [actionState, setActionState] = useState<Record<string, { action: boolean; bonus: boolean; reaction: boolean }>>({})
   const [expandedConditions, setExpandedConditions] = useState<number | null>(null)
   const [conditionDurationDraft, setConditionDurationDraft] = useState<Record<string, string>>({})
+  const [macroResult, setMacroResult] = useState<{ label: string; detail: string; total: number; isAttack: boolean } | null>(null)
+  const macroResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  function handleRollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage') {
+    const result = rollMacro(character, macro, type)
+    if (macroResultTimer.current) clearTimeout(macroResultTimer.current)
+    setMacroResult({ ...result, isAttack: type === 'attack' })
+    macroResultTimer.current = setTimeout(() => setMacroResult(null), 6000)
+  }
 
   // Combatant HP input per combatant id
   const [combatantHpInputs, setCombatantHpInputs] = useState<Record<number, string>>({})
@@ -406,6 +441,24 @@ export function CombatPage() {
           </div>
         )}
 
+        {/* Macro roll result */}
+        {macroResult && (
+          <div className={`border rounded-xl px-5 py-3 flex items-center justify-between gap-4 ${
+            macroResult.isAttack ? 'bg-rose-950/40 border-rose-700/50' : 'bg-orange-950/40 border-orange-700/50'
+          }`}>
+            <div>
+              <p className="text-stone-400 text-xs">{macroResult.label}</p>
+              <p className="text-stone-400 text-xs font-mono">{macroResult.detail}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-4xl font-black ${macroResult.isAttack ? 'text-rose-300' : 'text-orange-300'}`}>
+                {macroResult.total}
+              </span>
+              <button onClick={() => setMacroResult(null)} className="text-stone-600 hover:text-stone-400 text-lg">×</button>
+            </div>
+          </div>
+        )}
+
         {/* Initiative table */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-stone-800">
@@ -538,6 +591,28 @@ export function CombatPage() {
                                   V×{character.damage_modifiers.vulnerabilities.length}
                                 </span>
                               )}
+                            </div>
+                          )}
+                          {character.attack_macros.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1">
+                              {character.attack_macros.map((macro, mi) => (
+                                <span key={mi} className="inline-flex items-center gap-0.5">
+                                  <button
+                                    onClick={() => handleRollMacro(character, macro, 'attack')}
+                                    title={`Attaque: 1d20${macro.attack_bonus != null ? (macro.attack_bonus >= 0 ? '+' : '') + macro.attack_bonus : ''}`}
+                                    className="text-xs bg-rose-900/50 border border-rose-700/40 text-rose-300 rounded-l px-1.5 py-0.5 hover:bg-rose-800/60 transition-colors"
+                                  >
+                                    {macro.name}
+                                  </button>
+                                  <button
+                                    onClick={() => handleRollMacro(character, macro, 'damage')}
+                                    title={`Dégâts: ${macro.damage_dice}`}
+                                    className="text-xs bg-orange-900/50 border border-orange-700/40 text-orange-300 rounded-r px-1.5 py-0.5 hover:bg-orange-800/60 transition-colors"
+                                  >
+                                    {macro.damage_dice}
+                                  </button>
+                                </span>
+                              ))}
                             </div>
                           )}
                         </div>
