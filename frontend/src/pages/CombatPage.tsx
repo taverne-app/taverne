@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
-import { getCampaign, type Campaign } from '../api/campaigns'
+import { getCampaign, broadcastCombatTurn, type Campaign } from '../api/campaigns'
 import {
   listCombatants,
   createCombatant,
@@ -382,15 +382,24 @@ export function CombatPage() {
     if (withRoll.length === 0) return
     const currentRow = withRoll[activeTurn % withRoll.length]
     if (currentRow) decrementConditions(currentRow)
-    setActiveTurn(t => {
-      const next = (t + 1) % withRoll.length
-      if (next === 0) setRoundNumber(r => r + 1)
-      const nextRow = withRoll[next]
-      if (nextRow) {
-        setActionState(prev => ({ ...prev, [rowId(nextRow)]: { action: false, bonus: false, reaction: false } }))
-      }
-      return next
-    })
+
+    const next = (activeTurn + 1) % withRoll.length
+    const newRound = next === 0 ? roundNumber + 1 : roundNumber
+    if (next === 0) setRoundNumber(newRound)
+    setActiveTurn(next)
+
+    const nextRow = withRoll[next]
+    if (nextRow) {
+      setActionState(prev => ({ ...prev, [rowId(nextRow)]: { action: false, bonus: false, reaction: false } }))
+    }
+
+    if (campaignId && campaign?.share_token) {
+      broadcastCombatTurn(campaignId, {
+        active_kind: nextRow ? nextRow.kind : null,
+        active_id:   nextRow ? nextRow.data.id : null,
+        round:       newRound,
+      })
+    }
   }
 
   async function handleDistributeXp() {

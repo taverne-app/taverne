@@ -66,3 +66,13 @@ export async function removeCharacterFromCampaign(campaignId: number, characterI
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data
 }
+
+export async function broadcastCombatTurn(
+  campaignId: number,
+  payload: { active_kind: 'character' | 'combatant' | null; active_id: number | null; round: number },
+): Promise<void> {
+  await apiFetch(`/campaigns/${campaignId}/combat-turn`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}

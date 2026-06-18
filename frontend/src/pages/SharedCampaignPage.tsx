@@ -193,6 +193,7 @@ export function SharedCampaignPage() {
   const [characters, setCharacters] = useState<Character[]>([])
   const [combatants, setCombatants] = useState<Combatant[]>([])
   const [sessions, setSessions] = useState<CampaignSession[]>([])
+  const [activeTurn, setActiveTurn] = useState<{ kind: 'character' | 'combatant'; id: number; round: number } | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
@@ -227,6 +228,13 @@ export function SharedCampaignPage() {
           return [...prev, e.combatant]
         })
         setLastUpdate(new Date())
+      })
+      .listen('.combat.turn-updated', (e: { active_kind: 'character' | 'combatant' | null; active_id: number | null; round: number }) => {
+        if (e.active_kind && e.active_id != null) {
+          setActiveTurn({ kind: e.active_kind, id: e.active_id, round: e.round })
+        } else {
+          setActiveTurn(null)
+        }
       })
     return () => {
       echo.leave(`campaign-share.${token}`)
@@ -333,9 +341,16 @@ export function SharedCampaignPage() {
               {/* Initiative order — shown when combat is active */}
               {inCombat && (
                 <section>
-                  <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">
-                    ⚔ Ordre d'initiative
-                  </h2>
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">
+                      ⚔ Ordre d'initiative
+                    </h2>
+                    {activeTurn && (
+                      <span className="text-amber-400 text-xs font-semibold">
+                        Round {activeTurn.round}
+                      </span>
+                    )}
+                  </div>
                   <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
                     <div className="divide-y divide-stone-800">
                       {allWithRoll.map((entry, pos) => {
@@ -349,8 +364,10 @@ export function SharedCampaignPage() {
                         const conditions = isChar ? c.state.conditions : cb.conditions
                         const name       = isChar ? c.name : cb.name
 
+                        const isActive = activeTurn?.kind === entry.kind && activeTurn?.id === entry.data.id
+
                         return (
-                          <div key={`${entry.kind}-${entry.data.id}`} className="flex items-center gap-4 px-5 py-3">
+                          <div key={`${entry.kind}-${entry.data.id}`} className={`flex items-center gap-4 px-5 py-3 transition-colors ${isActive ? 'bg-amber-900/30 border-l-2 border-amber-400' : ''}`}>
                             {/* Position */}
                             <span className="text-stone-600 text-sm font-mono w-5 shrink-0">{pos + 1}</span>
 

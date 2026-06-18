@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\CombatTurnUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CampaignResource;
 use App\Models\Campaign;
@@ -109,6 +110,27 @@ class CampaignController extends Controller
         $campaign->update(['share_token' => null]);
 
         return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
+    }
+
+    public function broadcastTurn(Request $request, Campaign $campaign): JsonResponse
+    {
+        $this->authorize($request, $campaign);
+        abort_unless($campaign->share_token, 422, 'La campagne n\'est pas partagée.');
+
+        $request->validate([
+            'active_kind' => ['nullable', 'string', 'in:character,combatant'],
+            'active_id'   => ['nullable', 'integer'],
+            'round'       => ['required', 'integer', 'min:1'],
+        ]);
+
+        CombatTurnUpdated::dispatch(
+            $campaign->share_token,
+            $request->input('active_kind'),
+            $request->input('active_id') ? (int) $request->input('active_id') : null,
+            $request->integer('round'),
+        );
+
+        return response()->json(['ok' => true]);
     }
 
     private function authorize(Request $request, Campaign $campaign): void

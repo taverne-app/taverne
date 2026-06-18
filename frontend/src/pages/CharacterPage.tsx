@@ -1374,7 +1374,7 @@ export function CharacterPage() {
                 {SAVE_LABELS.map(([ability, label]) => {
                   const save = character.saving_throws[ability]
                   return (
-                    <div key={ability} className="flex items-center justify-between py-1">
+                    <div key={ability} className="flex items-center justify-between py-1 group">
                       <div className="flex items-center gap-2">
                         <button
                           onClick={() => toggleSaveProficiency(ability)}
@@ -1388,14 +1388,19 @@ export function CharacterPage() {
                         />
                         <span className="text-stone-300 text-xs">{label}</span>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => { quickRoll(`Save: ${label}`, 20, save.modifier); setDiceOpen(true) }}
+                        className="flex items-center gap-1.5 rounded px-1.5 py-0.5 hover:bg-stone-800 transition-colors"
+                        title={`Lancer ${label}`}
+                      >
                         <span className="text-stone-500 text-xs font-mono">{ABILITY_ABBR[ability]}</span>
                         <span className={`text-xs font-bold w-7 text-right ${
                           save.modifier > 0 ? 'text-emerald-400' : save.modifier < 0 ? 'text-red-400' : 'text-stone-400'
                         }`}>
                           {sign(save.modifier)}
                         </span>
-                      </div>
+                        <span className="text-stone-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity">🎲</span>
+                      </button>
                     </div>
                   )
                 })}
@@ -2010,7 +2015,7 @@ export function CharacterPage() {
             {SKILL_LABELS.map(([skill, label]) => {
               const entry = character.skills[skill]
               return (
-                <div key={skill} className="flex items-center justify-between py-1.5 border-b border-stone-800/60">
+                <div key={skill} className="flex items-center justify-between py-1.5 border-b border-stone-800/60 group">
                   <div className="flex items-center gap-2 min-w-0">
                     <button
                       onClick={() => toggleSkillProficiency(skill)}
@@ -2024,14 +2029,19 @@ export function CharacterPage() {
                     />
                     <span className="text-stone-300 text-xs truncate">{label}</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <button
+                    onClick={() => { quickRoll(label, 20, entry.modifier); setDiceOpen(true) }}
+                    className="flex items-center gap-1.5 shrink-0 ml-2 rounded px-1.5 py-0.5 hover:bg-stone-800 transition-colors"
+                    title={`Lancer ${label}`}
+                  >
                     <span className="text-stone-500 text-xs font-mono">{ABILITY_ABBR[entry.ability]}</span>
                     <span className={`text-xs font-bold w-7 text-right ${
                       entry.modifier > 0 ? 'text-emerald-400' : entry.modifier < 0 ? 'text-red-400' : 'text-stone-400'
                     }`}>
                       {sign(entry.modifier)}
                     </span>
-                  </div>
+                    <span className="text-stone-600 text-xs opacity-0 group-hover:opacity-100 transition-opacity">🎲</span>
+                  </button>
                 </div>
               )
             })}
