@@ -25,6 +25,7 @@ export interface Spell {
   level: number
   prepared: boolean
   concentration?: boolean
+  damage_dice?: string
 }
 
 export interface Feature {

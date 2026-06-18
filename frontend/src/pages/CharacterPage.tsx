@@ -465,18 +465,25 @@ export function CharacterPage() {
   const [addingSpell, setAddingSpell] = useState(false)
   const [spellNameDraft, setSpellNameDraft] = useState('')
   const [spellLevelDraft, setSpellLevelDraft] = useState('1')
+  const [spellDamageDraft, setSpellDamageDraft] = useState('')
   const [spellFilter, setSpellFilter] = useState<'all' | 'prepared'>('all')
 
   async function handleAddSpell() {
     if (!character || !spellNameDraft.trim()) return
     const lvl = parseInt(spellLevelDraft, 10)
-    const newSpell: Spell = { name: spellNameDraft.trim(), level: isNaN(lvl) ? 0 : lvl, prepared: true }
+    const newSpell: Spell = {
+      name: spellNameDraft.trim(),
+      level: isNaN(lvl) ? 0 : lvl,
+      prepared: true,
+      ...(spellDamageDraft.trim() ? { damage_dice: spellDamageDraft.trim() } : {}),
+    }
     const next = [...character.spellcasting.spells, newSpell]
     const updated = await withSave(() => updateSpells(character.id, next))
     if (updated) {
       setCharacter(updated)
       setSpellNameDraft('')
       setSpellLevelDraft('1')
+      setSpellDamageDraft('')
       setAddingSpell(false)
     }
   }
@@ -1000,6 +1007,33 @@ export function CharacterPage() {
                           </button>
                         </span>
                       ))}
+                    </>
+                  )}
+                  {character.spellcasting.ability && character.spellcasting.spells.some(s => s.damage_dice) && (
+                    <>
+                      <span className="self-center text-stone-600 text-xs">•</span>
+                      {character.spellcasting.ability && (
+                        <button
+                          onClick={() => quickRoll('Attaque de sort', 20, character.spellcasting.attack_bonus)}
+                          className="bg-violet-900/60 hover:bg-violet-800/60 border border-violet-700/50 text-violet-300 rounded-lg px-2.5 py-1 text-xs transition-colors"
+                        >
+                          Sort {sign(character.spellcasting.attack_bonus)}
+                        </button>
+                      )}
+                      {character.spellcasting.spells.filter(s => s.damage_dice).map((spell, i) => {
+                        const p = parseDice(spell.damage_dice!)
+                        if (!p) return null
+                        return (
+                          <button
+                            key={i}
+                            onClick={() => handleRoll({ sides: p.sides, count: p.count, modifier: p.bonus, label: `Dégâts: ${spell.name}` })}
+                            className="bg-indigo-900/60 hover:bg-indigo-800/60 border border-indigo-700/50 text-indigo-300 rounded-lg px-2.5 py-1 text-xs transition-colors"
+                            title={spell.name}
+                          >
+                            {spell.name.length > 12 ? spell.name.slice(0, 10) + '…' : spell.name} {spell.damage_dice}
+                          </button>
+                        )
+                      })}
                     </>
                   )}
                 </div>
@@ -2231,7 +2265,7 @@ export function CharacterPage() {
 
           {/* Add spell form */}
           {addingSpell && (
-            <div className="mb-4 pb-4 border-b border-stone-800">
+            <div className="mb-4 pb-4 border-b border-stone-800 space-y-2">
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <input
@@ -2282,6 +2316,16 @@ export function CharacterPage() {
                   Ajouter
                 </button>
               </div>
+              <div className="flex items-center gap-2">
+                <span className="text-stone-500 text-xs shrink-0">Dés de dégâts</span>
+                <input
+                  type="text"
+                  placeholder="ex: 2d6+3 (optionnel)"
+                  value={spellDamageDraft}
+                  onChange={e => setSpellDamageDraft(e.target.value)}
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+              </div>
             </div>
           )}
 
@@ -2323,11 +2367,35 @@ export function CharacterPage() {
                                 }`}
                               />
                               <span>{spell.name}</span>
+                              {character.spellcasting.ability && (
+                                <button
+                                  onClick={() => {
+                                    handleRoll({ sides: 20, modifier: character.spellcasting.attack_bonus, label: `Attaque sort: ${spell.name}`, count: 1 })
+                                    setDiceOpen(true)
+                                  }}
+                                  title={`Jet d'attaque: 1d20${sign(character.spellcasting.attack_bonus)}`}
+                                  className="ml-0.5 text-xs text-violet-500 hover:text-violet-300 transition-colors shrink-0"
+                                >
+                                  ⚔
+                                </button>
+                              )}
+                              {spell.damage_dice && (
+                                <button
+                                  onClick={() => {
+                                    const p = parseDice(spell.damage_dice!)
+                                    if (p) { handleRoll({ sides: p.sides, count: p.count, modifier: p.bonus, label: `Dégâts: ${spell.name}` }); setDiceOpen(true) }
+                                  }}
+                                  title={`Dégâts: ${spell.damage_dice}`}
+                                  className="text-xs text-orange-500 hover:text-orange-300 transition-colors shrink-0"
+                                >
+                                  {spell.damage_dice}
+                                </button>
+                              )}
                               <button
                                 onClick={() => handleConcentrate(spell.name)}
                                 disabled={saving}
                                 title={isConcentrating ? 'Relâcher la concentration' : 'Se concentrer sur ce sort'}
-                                className={`ml-1 text-xs transition-colors disabled:cursor-not-allowed ${
+                                className={`ml-0.5 text-xs transition-colors disabled:cursor-not-allowed ${
                                   isConcentrating
                                     ? 'text-violet-300 hover:text-violet-100'
                                     : 'text-stone-600 hover:text-violet-400'
