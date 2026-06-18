@@ -525,6 +525,23 @@ export function CharacterPage() {
     if (updated) setCharacter(updated)
   }
 
+  const [concSaveDmg, setConcSaveDmg] = useState('')
+  const [concSaveResult, setConcSaveResult] = useState<{
+    roll: number; modifier: number; total: number; dc: number; success: boolean
+  } | null>(null)
+
+  function handleConcentrationSave() {
+    if (!character) return
+    const dmg = parseInt(concSaveDmg, 10)
+    const dc = dmg > 0 ? Math.max(10, Math.ceil(dmg / 2)) : 10
+    const roll = Math.floor(Math.random() * 20) + 1
+    const modifier = character.saving_throws.constitution.modifier
+    const total = roll + modifier
+    setConcSaveResult({ roll, modifier, total, dc, success: total >= dc })
+    setConcSaveDmg('')
+    setTimeout(() => setConcSaveResult(null), 8000)
+  }
+
   // ── Sorts autocomplete ────────────────────────────────────────────────────────
 
   const [spellSuggestions, setSpellSuggestions] = useState<[string, number][]>([])
@@ -1195,21 +1212,49 @@ export function CharacterPage() {
 
               {/* Concentration banner */}
               {character.state.concentrating_on && (
-                <div className="mt-3 flex items-center justify-between gap-2 bg-violet-950/50 border border-violet-700/50 rounded-lg px-3 py-2">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="text-violet-400 text-xs shrink-0">⊙ Concentration</span>
-                    <span className="text-violet-200 text-sm font-medium truncate">
-                      {character.state.concentrating_on}
-                    </span>
+                <div className="mt-3 bg-violet-950/50 border border-violet-700/50 rounded-lg px-3 py-2 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="text-violet-400 text-xs shrink-0">⊙ Concentration</span>
+                      <span className="text-violet-200 text-sm font-medium truncate">
+                        {character.state.concentrating_on}
+                      </span>
+                    </div>
+                    <button
+                      onClick={() => handleConcentrate(character.state.concentrating_on!)}
+                      disabled={saving}
+                      className="text-violet-500 hover:text-violet-300 text-xs shrink-0 transition-colors disabled:opacity-40"
+                      title="Relâcher la concentration"
+                    >
+                      ✕
+                    </button>
                   </div>
-                  <button
-                    onClick={() => handleConcentrate(character.state.concentrating_on!)}
-                    disabled={saving}
-                    className="text-violet-500 hover:text-violet-300 text-xs shrink-0 transition-colors disabled:opacity-40"
-                    title="Relâcher la concentration"
-                  >
-                    ✕
-                  </button>
+                  {/* Concentration save */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-violet-500 text-xs">
+                      Jet CON {sign(character.saving_throws.constitution.modifier)}
+                    </span>
+                    <input
+                      type="number"
+                      min={1}
+                      placeholder="Dégâts reçus"
+                      value={concSaveDmg}
+                      onChange={e => setConcSaveDmg(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') handleConcentrationSave() }}
+                      className="w-28 bg-violet-900/40 border border-violet-700/50 rounded px-2 py-1 text-violet-200 text-xs focus:outline-none focus:border-violet-400 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                    <button
+                      onClick={handleConcentrationSave}
+                      className="bg-violet-700/40 hover:bg-violet-700/60 border border-violet-600/50 text-violet-200 text-xs rounded px-2.5 py-1 transition-colors"
+                    >
+                      Lancer
+                    </button>
+                    {concSaveResult && (
+                      <span className={`text-xs font-semibold ${concSaveResult.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {concSaveResult.total} vs DD {concSaveResult.dc} — {concSaveResult.success ? 'Réussi ✓' : 'Raté ✗'}
+                      </span>
+                    )}
+                  </div>
                 </div>
               )}
 
