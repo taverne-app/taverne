@@ -14,6 +14,7 @@ import {
   rollDice,
   updateInventory,
   updateFeatures,
+  updateCurrency,
   updateIdentity,
   updateNotes,
   type Character,
@@ -25,6 +26,7 @@ import {
   type InventoryItem,
   type Feature,
   type IdentityPayload,
+  type Currency,
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
@@ -468,6 +470,21 @@ export function CharacterPage() {
       setCharacter(updated)
       if (expandedFeature === index) setExpandedFeature(null)
     }
+  }
+
+  // ── Monnaie ──────────────────────────────────────────────────────────────────
+
+  const emptyCurrency = (): Currency => ({ pc: 0, pa: 0, pe: 0, po: 0, pp: 0 })
+  const [currencyDraft, setCurrencyDraft] = useState<Currency>(emptyCurrency)
+
+  useEffect(() => {
+    if (character) setCurrencyDraft(character.currency ?? emptyCurrency())
+  }, [character?.id])
+
+  async function handleSaveCurrency() {
+    if (!character) return
+    const updated = await withSave(() => updateCurrency(character.id, currencyDraft))
+    if (updated) setCharacter(updated)
   }
 
   // ── Notes ────────────────────────────────────────────────────────────────────
@@ -1332,6 +1349,36 @@ export function CharacterPage() {
               ))}
             </div>
           )}
+        </div>
+
+        {/* Monnaie */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">Monnaie</h2>
+          <div className="grid grid-cols-5 gap-3">
+            {([
+              ['pc', 'Cuivre',   'text-orange-400'],
+              ['pa', 'Argent',   'text-stone-300'],
+              ['pe', 'Électrum', 'text-teal-400'],
+              ['po', 'Or',       'text-amber-400'],
+              ['pp', 'Platine',  'text-sky-300'],
+            ] as const).map(([key, label, color]) => (
+              <div key={key} className="text-center">
+                <p className={`text-xs font-semibold mb-1.5 ${color}`}>{label}</p>
+                <input
+                  type="number"
+                  min={0}
+                  value={currencyDraft[key]}
+                  onChange={e => setCurrencyDraft(prev => ({
+                    ...prev,
+                    [key]: Math.max(0, parseInt(e.target.value, 10) || 0),
+                  }))}
+                  onBlur={handleSaveCurrency}
+                  disabled={saving}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors disabled:opacity-50 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+            ))}
+          </div>
         </div>
 
         {/* Spell slots */}

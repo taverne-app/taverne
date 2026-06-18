@@ -202,6 +202,24 @@ class CharacterController extends Controller
         return new CharacterResource($fresh);
     }
 
+    public function updateCurrency(Request $request, Character $character): CharacterResource
+    {
+        $this->authorizeCharacter($request, $character);
+
+        $request->validate([
+            'pc' => ['sometimes', 'integer', 'min:0'],
+            'pa' => ['sometimes', 'integer', 'min:0'],
+            'pe' => ['sometimes', 'integer', 'min:0'],
+            'po' => ['sometimes', 'integer', 'min:0'],
+            'pp' => ['sometimes', 'integer', 'min:0'],
+        ]);
+
+        $current = $character->currency ?? ['pc' => 0, 'pa' => 0, 'pe' => 0, 'po' => 0, 'pp' => 0];
+        $character->update(['currency' => array_merge($current, $request->only(['pc', 'pa', 'pe', 'po', 'pp']))]);
+
+        return new CharacterResource($character->fresh());
+    }
+
     public function updateDeathSaves(Request $request, Character $character): CharacterResource
     {
         $this->authorizeCharacter($request, $character);

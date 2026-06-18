@@ -32,6 +32,14 @@ export interface Feature {
   description: string
 }
 
+export interface Currency {
+  pc: number
+  pa: number
+  pe: number
+  po: number
+  pp: number
+}
+
 export interface Character {
   id: number
   name: string
@@ -77,6 +85,7 @@ export interface Character {
     capacity: number
   }
   features: Feature[]
+  currency: Currency
   notes: string | null
 }
 
@@ -226,6 +235,15 @@ export async function updateInventory(id: number, items: InventoryItem[]): Promi
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ inventory: items }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateCurrency(id: number, currency: Currency): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}/currency`, {
+    method: 'PATCH',
+    body: JSON.stringify(currency),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data

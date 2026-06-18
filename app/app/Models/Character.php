@@ -63,6 +63,8 @@ class Character extends Model
         'spells_known',
         'spellcasting_ability',
         'inventory',
+        'features',
+        'currency',
         'campaign_id',
     ];
 
@@ -74,6 +76,8 @@ class Character extends Model
         'spell_slots'        => 'array',
         'spells_known'       => 'array',
         'inventory'          => 'array',
+        'features'           => 'array',
+        'currency'           => 'array',
     ];
 
     /** Modificateur d'une caractéristique : floor((score - 10) / 2) */
