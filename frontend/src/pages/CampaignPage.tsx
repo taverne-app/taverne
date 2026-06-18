@@ -19,6 +19,7 @@ import {
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
+import { canLevelUp } from '../data/xp'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,9 @@ export function CampaignPage() {
   // Group rest
   const [restingAll, setRestingAll] = useState(false)
   const [restDone, setRestDone]     = useState<'long' | null>(null)
+
+  // DM Screen
+  const [showDmScreen, setShowDmScreen] = useState(false)
 
   // Sessions
   const [sessions, setSessions]               = useState<CampaignSession[]>([])
@@ -398,14 +402,27 @@ export function CampaignPage() {
             </h2>
             <div className="flex items-center gap-3">
               {characters.length > 0 && (
-                <button
-                  onClick={handleGroupLongRest}
-                  disabled={restingAll}
-                  className="text-stone-500 hover:text-amber-400 text-xs font-medium transition-colors disabled:opacity-40 flex items-center gap-1"
-                  title="Appliquer un repos long à tous les personnages"
-                >
-                  {restingAll ? '…' : restDone === 'long' ? '✓ Repos terminé' : '🌙 Repos long'}
-                </button>
+                <>
+                  <button
+                    onClick={() => setShowDmScreen(v => !v)}
+                    className={`text-xs font-medium transition-colors ${
+                      showDmScreen
+                        ? 'text-violet-400 hover:text-violet-300'
+                        : 'text-stone-500 hover:text-violet-400'
+                    }`}
+                    title="Vue MJ — toutes les infos en tableau"
+                  >
+                    {showDmScreen ? '⊞ Cartes' : '☰ Vue MJ'}
+                  </button>
+                  <button
+                    onClick={handleGroupLongRest}
+                    disabled={restingAll}
+                    className="text-stone-500 hover:text-amber-400 text-xs font-medium transition-colors disabled:opacity-40 flex items-center gap-1"
+                    title="Appliquer un repos long à tous les personnages"
+                  >
+                    {restingAll ? '…' : restDone === 'long' ? '✓ Repos terminé' : '🌙 Repos long'}
+                  </button>
+                </>
               )}
               <button
                 onClick={openAddModal}
@@ -425,6 +442,107 @@ export function CampaignPage() {
                 </button>
               </p>
             </div>
+          ) : showDmScreen ? (
+            /* ── Vue MJ ── */
+            <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+              <div className="divide-y divide-stone-800">
+                {characters.map(c => {
+                  const hpPct = Math.max(0, Math.min(100, (c.combat.current_hp / c.combat.max_hp) * 100))
+                  const isDying = c.combat.current_hp <= 0
+                  const levelUp = canLevelUp(c.level, c.experience_points)
+                  return (
+                    <div key={c.id} className="px-4 py-3 hover:bg-stone-800/40 transition-colors relative group">
+                      <Link to={`/characters/${c.id}`} className="absolute inset-0" />
+                      <div className="flex items-center gap-4 min-w-0">
+
+                        {/* Name + class */}
+                        <div className="w-44 shrink-0 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
+                            <span className={`font-semibold text-sm truncate ${isDying ? 'text-red-400' : 'text-white'}`}>
+                              {c.name}
+                            </span>
+                            {levelUp && (
+                              <span className="shrink-0 text-xs bg-amber-900/50 border border-amber-600/50 text-amber-400 rounded px-1 py-0.5 font-semibold">
+                                ⬆ Niv
+                              </span>
+                            )}
+                            {c.combat.inspiration && (
+                              <span className="shrink-0 text-amber-400 text-xs" title="Inspiration">✦</span>
+                            )}
+                          </div>
+                          <p className="text-stone-500 text-xs truncate mt-0.5">
+                            {c.character_class} Niv.{c.level} · CA {c.combat.armor_class}
+                          </p>
+                        </div>
+
+                        {/* HP */}
+                        <div className="w-40 shrink-0">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
+                              {c.combat.current_hp}
+                            </span>
+                            <span className="text-stone-500 text-xs">/ {c.combat.max_hp}</span>
+                            {c.combat.temporary_hp > 0 && (
+                              <span className="text-sky-400 text-xs">+{c.combat.temporary_hp}</span>
+                            )}
+                          </div>
+                          <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
+                            <div
+                              className={`h-full rounded-full transition-all duration-300 ${hpColor(c.combat.current_hp, c.combat.max_hp)}`}
+                              style={{ width: `${hpPct}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        {/* Death saves */}
+                        {isDying && (
+                          <div className="flex items-center gap-1 shrink-0">
+                            {[1,2,3].map(n => (
+                              <div key={n} className={`w-3 h-3 rounded-full border ${n <= c.state.death_saves_successes ? 'bg-emerald-500 border-emerald-400' : 'border-stone-600'}`} />
+                            ))}
+                            <span className="text-stone-600 text-xs mx-0.5">/</span>
+                            {[1,2,3].map(n => (
+                              <div key={n} className={`w-3 h-3 rounded-full border ${n <= c.state.death_saves_failures ? 'bg-red-500 border-red-400' : 'border-stone-600'}`} />
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Conditions */}
+                        <div className="flex flex-wrap gap-1 flex-1 min-w-0">
+                          {c.state.conditions.length === 0 && !isDying ? (
+                            <span className="text-stone-700 text-xs">—</span>
+                          ) : (
+                            c.state.conditions.map(cond => (
+                              <span key={cond} className="text-xs bg-purple-900/50 border border-purple-700 text-purple-300 rounded px-1.5 py-0.5">
+                                {CONDITIONS_FR[cond] ?? cond}
+                              </span>
+                            ))
+                          )}
+                        </div>
+
+                        {/* Resources */}
+                        {c.resources.length > 0 && (
+                          <div className="hidden lg:flex items-center gap-1.5 shrink-0 flex-wrap max-w-[180px]">
+                            {c.resources.map((r, i) => (
+                              <span key={i} className={`text-xs rounded px-1.5 py-0.5 border ${
+                                r.current === 0
+                                  ? 'bg-stone-800 border-stone-700 text-stone-600'
+                                  : 'bg-stone-800 border-stone-600 text-stone-300'
+                              }`}>
+                                {r.name} {r.current}/{r.max}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Link arrow */}
+                        <span className="text-stone-700 group-hover:text-stone-500 text-sm transition-colors shrink-0 relative z-10">↗</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {characters.map(c => {
@@ -441,9 +559,16 @@ export function CampaignPage() {
                     {/* Header */}
                     <div className="flex items-start justify-between mb-3">
                       <div>
-                        <h3 className={`font-semibold text-sm ${isDying ? 'text-red-400' : 'text-white'}`}>
-                          {c.name}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <h3 className={`font-semibold text-sm ${isDying ? 'text-red-400' : 'text-white'}`}>
+                            {c.name}
+                          </h3>
+                          {canLevelUp(c.level, c.experience_points) && (
+                            <span className="text-xs bg-amber-900/50 border border-amber-600/50 text-amber-400 rounded px-1 py-0.5 font-semibold">
+                              ⬆ Niv
+                            </span>
+                          )}
+                        </div>
                         <p className="text-stone-500 text-xs mt-0.5">
                           {c.race} · {c.character_class} · Niv. {c.level}
                         </p>

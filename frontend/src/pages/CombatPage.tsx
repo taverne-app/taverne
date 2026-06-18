@@ -15,6 +15,7 @@ import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
 import { MONSTERS, rollMonsterHp, type MonsterTemplate } from '../data/monsters'
+import { canLevelUp } from '../data/xp'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -187,7 +188,7 @@ export function CombatPage() {
   const [linkCopied, setLinkCopied] = useState(false)
   const [showXpPanel, setShowXpPanel] = useState(false)
   const [xpInputs, setXpInputs] = useState<Record<number, string>>({})
-  const [xpResult, setXpResult] = useState<{ total: number; share: number } | null>(null)
+  const [xpResult, setXpResult] = useState<{ total: number; share: number; levelUps: string[] } | null>(null)
   const [monsterMap, setMonsterMap] = useState<Record<number, MonsterTemplate>>({})
 
   // Encounter builder
@@ -505,8 +506,11 @@ export function CombatPage() {
       characters.map(c => updateIdentity(c.id, { experience_points: c.experience_points + share })),
     )
     updated.forEach(updateCharacter)
-    setXpResult({ total, share })
-    setTimeout(() => { setXpResult(null); setShowXpPanel(false); setXpInputs({}) }, 6000)
+    const levelUps = updated
+      .filter((c, i) => canLevelUp(c.level, c.experience_points) && !canLevelUp(characters[i].level, characters[i].experience_points))
+      .map(c => c.name)
+    setXpResult({ total, share, levelUps })
+    setTimeout(() => { setXpResult(null); setShowXpPanel(false); setXpInputs({}) }, 8000)
   }
 
   function prevTurn() {
@@ -1439,12 +1443,21 @@ export function CombatPage() {
               </div>
 
               {xpResult ? (
-                <div className="text-center py-4">
-                  <p className="text-emerald-400 font-bold text-2xl">{xpResult.share} XP</p>
-                  <p className="text-stone-400 text-sm mt-1">
-                    par personnage ({xpResult.total} XP au total · {characters.length} joueur{characters.length > 1 ? 's' : ''})
-                  </p>
-                  <p className="text-stone-500 text-xs mt-2">Les fiches sont mises à jour — vérifiez les montées de niveau.</p>
+                <div className="py-4 space-y-3">
+                  <div className="text-center">
+                    <p className="text-emerald-400 font-bold text-2xl">{xpResult.share} XP</p>
+                    <p className="text-stone-400 text-sm mt-1">
+                      par personnage ({xpResult.total} XP au total · {characters.length} joueur{characters.length > 1 ? 's' : ''})
+                    </p>
+                  </div>
+                  {xpResult.levelUps.length > 0 && (
+                    <div className="bg-amber-900/20 border border-amber-700/40 rounded-lg px-4 py-3 text-center space-y-1">
+                      <p className="text-amber-400 font-semibold text-sm">⬆ Montée de niveau disponible !</p>
+                      <p className="text-amber-300/80 text-xs">
+                        {xpResult.levelUps.join(', ')}
+                      </p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <>
