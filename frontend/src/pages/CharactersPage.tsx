@@ -4,6 +4,7 @@ import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { Link, useNavigate } from 'react-router-dom'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
+import { canLevelUp } from '../data/xp'
 
 function HpBar({ current, max }: { current: number; max: number }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100))
@@ -47,9 +48,16 @@ function CharacterCard({
             {character.race} · {character.character_class}
           </p>
         </div>
-        <span className="text-amber-400 text-sm font-semibold bg-stone-800 rounded-lg px-2 py-0.5">
-          Niv.&nbsp;{character.level}
-        </span>
+        <div className="flex items-center gap-1.5">
+          {canLevelUp(character.level, character.experience_points) && (
+            <span className="text-xs bg-amber-500/20 border border-amber-500/50 text-amber-400 rounded px-1.5 py-0.5 font-semibold animate-pulse">
+              ↑ Niv.
+            </span>
+          )}
+          <span className="text-amber-400 text-sm font-semibold bg-stone-800 rounded-lg px-2 py-0.5">
+            Niv.&nbsp;{character.level}
+          </span>
+        </div>
       </div>
 
       <div className="mt-3 flex gap-3 text-center">
@@ -122,6 +130,7 @@ export function CharactersPage() {
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
+  const [search, setSearch] = useState('')
 
   async function load() {
     setLoading(true)
@@ -177,7 +186,7 @@ export function CharactersPage() {
 
       {/* Main */}
       <main className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-4">
           <div>
             <h1 className="text-white text-xl font-semibold">Mes personnages</h1>
             <p className="text-stone-500 text-sm mt-0.5">
@@ -193,6 +202,16 @@ export function CharactersPage() {
           </button>
         </div>
 
+        {characters.length > 4 && (
+          <input
+            type="text"
+            placeholder="Rechercher par nom, race ou classe…"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="w-full mb-4 bg-stone-900 border border-stone-800 rounded-lg px-4 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+          />
+        )}
+
         {loading ? (
           <div className="flex justify-center py-20">
             <div className="w-6 h-6 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
@@ -207,9 +226,19 @@ export function CharactersPage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {characters.map(c => (
-              <CharacterCard key={c.id} character={c} onDelete={handleDelete} />
-            ))}
+            {characters
+              .filter(c => {
+                if (!search.trim()) return true
+                const q = search.toLowerCase()
+                return (
+                  c.name.toLowerCase().includes(q) ||
+                  c.race.toLowerCase().includes(q) ||
+                  c.character_class.toLowerCase().includes(q)
+                )
+              })
+              .map(c => (
+                <CharacterCard key={c.id} character={c} onDelete={handleDelete} />
+              ))}
           </div>
         )}
       </main>

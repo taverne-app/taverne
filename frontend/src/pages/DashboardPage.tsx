@@ -5,6 +5,7 @@ import { listCharacters, type Character } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
+import { canLevelUp } from '../data/xp'
 
 function hpColor(current: number, max: number) {
   const pct = max > 0 ? current / max : 0
@@ -23,7 +24,12 @@ function CharacterMini({ c }: { c: Character }) {
     >
       <div className="flex-1 min-w-0">
         <p className={`text-sm font-medium truncate ${isDying ? 'text-red-400' : 'text-white'}`}>{c.name}</p>
-        <p className="text-stone-500 text-xs truncate">{c.character_class} · Niv.{c.level}</p>
+        <div className="flex items-center gap-1.5">
+          <p className="text-stone-500 text-xs truncate">{c.character_class} · Niv.{c.level}</p>
+          {canLevelUp(c.level, c.experience_points) && (
+            <span className="shrink-0 text-xs bg-amber-500/20 border border-amber-500/40 text-amber-400 rounded px-1 py-0.5 font-semibold leading-none">↑</span>
+          )}
+        </div>
         <div className="mt-1.5 h-1.5 bg-stone-700 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all ${hpColor(c.combat.current_hp, c.combat.max_hp)}`}
