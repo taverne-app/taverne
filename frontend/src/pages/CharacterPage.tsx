@@ -17,6 +17,8 @@ import {
   updateCurrency,
   updateDamageModifiers,
   updateConcentration,
+  updateInspiration,
+  updateTempMaxHp,
   updateIdentity,
   updateNotes,
   shortRest,
@@ -35,6 +37,7 @@ import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho } from '../lib/echo'
 import { SRD_SPELLS } from '../data/spells'
+import { canLevelUp, xpForNextLevel } from '../data/xp'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -584,6 +587,26 @@ export function CharacterPage() {
     }
   }
 
+  // ── HP max temporaire ────────────────────────────────────────────────────────
+
+  const [tempMaxInput, setTempMaxInput] = useState('')
+  const [showTempMax, setShowTempMax] = useState(false)
+
+  useEffect(() => {
+    if (character) {
+      setTempMaxInput(String(character.combat.temp_max_hp_bonus ?? 0))
+      if ((character.combat.temp_max_hp_bonus ?? 0) > 0) setShowTempMax(true)
+    }
+  }, [character?.id])
+
+  async function handleTempMaxHp() {
+    if (!character) return
+    const bonus = parseInt(tempMaxInput, 10)
+    if (isNaN(bonus) || bonus < 0) return
+    const updated = await withSave(() => updateTempMaxHp(character.id, bonus))
+    if (updated) setCharacter(updated)
+  }
+
   // ── Monnaie ──────────────────────────────────────────────────────────────────
 
   const emptyCurrency = (): Currency => ({ pc: 0, pa: 0, pe: 0, po: 0, pp: 0 })
@@ -996,6 +1019,14 @@ export function CharacterPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {canLevelUp(character.level, character.experience_points) && (
+                  <span
+                    title={`${xpForNextLevel(character.level)?.toLocaleString()} XP requis pour le niveau ${character.level + 1}`}
+                    className="bg-amber-500/20 border border-amber-500/50 text-amber-400 font-bold text-xs rounded-lg px-2.5 py-1.5 animate-pulse"
+                  >
+                    ↑ Niveau {character.level + 1} disponible
+                  </span>
+                )}
                 <span className="bg-amber-500/10 border border-amber-500/30 text-amber-400 font-bold text-sm rounded-lg px-3 py-1.5">
                   Niveau {character.level}
                 </span>
@@ -1210,6 +1241,41 @@ export function CharacterPage() {
                   Soigner
                 </button>
               </div>
+
+              {/* Temporary max HP bonus */}
+              {showTempMax ? (
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-stone-400 text-sm shrink-0">Bonus PV max</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={tempMaxInput}
+                    onChange={e => setTempMaxInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') handleTempMaxHp() }}
+                    className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm text-center focus:outline-none focus:border-emerald-500 transition-colors"
+                  />
+                  <button
+                    onClick={handleTempMaxHp}
+                    disabled={saving}
+                    className="text-emerald-400 hover:text-emerald-300 text-sm transition-colors disabled:opacity-40"
+                  >
+                    Définir
+                  </button>
+                  <button
+                    onClick={() => { setShowTempMax(false); setTempMaxInput('0'); updateTempMaxHp(character.id, 0) }}
+                    className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => setShowTempMax(true)}
+                  className="mt-2 text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                >
+                  + Bonus PV max temporaire
+                </button>
+              )}
 
               {/* Concentration banner */}
               {character.state.concentrating_on && (
