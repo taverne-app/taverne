@@ -9,6 +9,7 @@ export interface Combatant {
   armor_class: number | null
   initiative_roll: number | null
   conditions: string[]
+  condition_durations: Record<string, number>
   created_at: string
   updated_at: string
 }
@@ -62,10 +63,11 @@ export async function updateCombatantConditions(
   campaignId: number,
   combatantId: number,
   conditions: string[],
+  condition_durations?: Record<string, number>,
 ): Promise<Combatant> {
   const res = await apiFetch(`/campaigns/${campaignId}/combatants/${combatantId}/conditions`, {
     method: 'PATCH',
-    body: JSON.stringify({ conditions }),
+    body: JSON.stringify({ conditions, condition_durations }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data

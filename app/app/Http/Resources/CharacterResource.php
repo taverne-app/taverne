@@ -45,6 +45,7 @@ class CharacterResource extends JsonResource
 
             'combat' => [
                 'max_hp'             => $this->max_hp,
+                'temp_max_hp_bonus'  => $this->temp_max_hp_bonus ?? 0,
                 'current_hp'         => $this->current_hp,
                 'temporary_hp'       => $this->temporary_hp,
                 'armor_class'        => $this->armor_class,
@@ -62,6 +63,7 @@ class CharacterResource extends JsonResource
                 'death_saves_successes' => $this->death_saves_successes,
                 'death_saves_failures'  => $this->death_saves_failures,
                 'conditions'            => $this->conditions ?? [],
+                'condition_durations'   => $this->condition_durations ?? [],
                 'concentrating_on'      => $this->concentrating_on,
             ],
 

@@ -37,6 +37,8 @@ class UpdateCharacterRequest extends FormRequest
             'initiative_roll'     => ['sometimes', 'nullable', 'integer', 'min:-10', 'max:30'],
             'hit_dice_type'       => ['sometimes', 'integer', 'in:4,6,8,10,12'],
             'hit_dice_remaining'  => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'temp_max_hp_bonus'   => ['sometimes', 'integer', 'min:0'],
+            'condition_durations' => ['sometimes', 'nullable', 'array'],
 
             'damage_modifiers'                    => ['sometimes', 'nullable', 'array'],
             'damage_modifiers.resistances'        => ['sometimes', 'array'],

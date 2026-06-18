@@ -17,10 +17,12 @@ class Combatant extends Model
         'armor_class',
         'initiative_roll',
         'conditions',
+        'condition_durations',
     ];
 
     protected $casts = [
-        'conditions' => 'array',
+        'conditions'          => 'array',
+        'condition_durations' => 'array',
     ];
 
     public function campaign(): BelongsTo

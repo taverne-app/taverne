@@ -55,6 +55,7 @@ class Character extends Model
         'death_saves_successes',
         'death_saves_failures',
         'conditions',
+        'condition_durations',
         'save_proficiencies',
         'skill_proficiencies',
         'initiative_roll',
@@ -69,12 +70,14 @@ class Character extends Model
         'hit_dice_remaining',
         'damage_modifiers',
         'concentrating_on',
+        'temp_max_hp_bonus',
         'campaign_id',
     ];
 
     protected $casts = [
         'inspiration'        => 'boolean',
-        'conditions'         => 'array',
+        'conditions'          => 'array',
+        'condition_durations' => 'array',
         'save_proficiencies' => 'array',
         'skill_proficiencies'=> 'array',
         'spell_slots'        => 'array',

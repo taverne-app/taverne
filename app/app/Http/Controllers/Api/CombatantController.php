@@ -91,11 +91,15 @@ class CombatantController extends Controller
         abort_if($combatant->campaign_id !== $campaign->id, 403);
 
         $request->validate([
-            'conditions'   => ['required', 'array'],
-            'conditions.*' => ['string', 'in:blinded,charmed,deafened,exhaustion,frightened,grappled,incapacitated,invisible,paralyzed,petrified,poisoned,prone,restrained,stunned,unconscious'],
+            'conditions'          => ['required', 'array'],
+            'conditions.*'        => ['string', 'in:blinded,charmed,deafened,exhaustion,frightened,grappled,incapacitated,invisible,paralyzed,petrified,poisoned,prone,restrained,stunned,unconscious'],
+            'condition_durations' => ['sometimes', 'nullable', 'array'],
         ]);
 
-        $combatant->update(['conditions' => array_values(array_unique($request->conditions))]);
+        $combatant->update([
+            'conditions'          => array_values(array_unique($request->conditions)),
+            'condition_durations' => $request->condition_durations ?? $combatant->condition_durations ?? [],
+        ]);
 
         $fresh = $combatant->fresh();
         CombatantUpdated::dispatch($fresh);

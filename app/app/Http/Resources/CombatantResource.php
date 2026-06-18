@@ -17,7 +17,8 @@ class CombatantResource extends JsonResource
             'current_hp'      => $this->current_hp,
             'armor_class'     => $this->armor_class,
             'initiative_roll' => $this->initiative_roll,
-            'conditions'      => $this->conditions ?? [],
+            'conditions'          => $this->conditions ?? [],
+            'condition_durations' => $this->condition_durations ?? [],
             'created_at'      => $this->created_at,
             'updated_at'      => $this->updated_at,
         ];

@@ -60,6 +60,7 @@ export interface Character {
   combat: {
     current_hp: number
     max_hp: number
+    temp_max_hp_bonus: number
     temporary_hp: number
     armor_class: number
     initiative: number
@@ -73,6 +74,7 @@ export interface Character {
   }
   state: {
     conditions: string[]
+    condition_durations: Record<string, number>
     death_saves_successes: number
     death_saves_failures: number
     concentrating_on: string | null
@@ -382,6 +384,24 @@ export async function updateDeathSaves(
   if (!res.ok) throw new ApiError(res.status, await res.json())
   const json = await res.json()
   return json.data
+}
+
+export async function updateInspiration(id: number, value: boolean): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ inspiration: value }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateTempMaxHp(id: number, bonus: number): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ temp_max_hp_bonus: bonus }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
 }
 
 export async function updateConcentration(
