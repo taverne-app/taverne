@@ -196,6 +196,23 @@ export function CombatPage() {
     setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
+  async function handleRollAllInitiative() {
+    const d20 = () => Math.floor(Math.random() * 20) + 1
+    await Promise.all([
+      ...characters.map(async c => {
+        const roll = d20() + c.combat.initiative
+        const updated = await setInitiativeRoll(c.id, roll)
+        updateCharacter(updated)
+      }),
+      ...combatants.map(async cb => {
+        if (!campaignId) return
+        const roll = d20()
+        const updated = await updateCombatantInitiative(campaignId, cb.id, roll)
+        setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
+      }),
+    ])
+  }
+
   async function handleCombatantHp(combatantId: number, type: 'damage' | 'heal') {
     if (!campaignId) return
     const raw = combatantHpInputs[combatantId] ?? ''
@@ -351,6 +368,15 @@ export function CombatPage() {
               Ordre d'initiative
             </h2>
             <div className="flex items-center gap-3">
+              {(characters.length > 0 || combatants.length > 0) && (
+                <button
+                  onClick={handleRollAllInitiative}
+                  className="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/40 text-amber-400 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
+                  title="Lance 1d20 + modificateur pour tous les participants"
+                >
+                  ⚅ Lancer l'initiative
+                </button>
+              )}
               {campaignId && combatants.length > 0 && (
                 <button
                   onClick={handleClearCombatants}
