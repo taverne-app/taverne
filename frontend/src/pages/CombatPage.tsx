@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, type Character, type DiceRoll } from '../api/characters'
+import { listCharacters, setInitiativeRoll, updateInspiration, type Character, type DiceRoll } from '../api/characters'
 import { getCampaign, type Campaign } from '../api/campaigns'
 import {
   listCombatants,
@@ -102,6 +102,7 @@ export function CombatPage() {
   const [diceLog, setDiceLog] = useState<DiceRoll[]>([])
   const [actionState, setActionState] = useState<Record<string, { action: boolean; bonus: boolean; reaction: boolean }>>({})
   const [expandedConditions, setExpandedConditions] = useState<number | null>(null)
+  const [conditionDurationDraft, setConditionDurationDraft] = useState<Record<string, string>>({})
 
   // Combatant HP input per combatant id
   const [combatantHpInputs, setCombatantHpInputs] = useState<Record<number, string>>({})
@@ -232,14 +233,26 @@ export function CombatPage() {
     setCombatants(prev => prev.filter(c => c.id !== id))
   }
 
-  async function handleToggleCombatantCondition(id: number, condition: string) {
+  async function handleToggleInspiration(character: Character) {
+    const updated = await updateInspiration(character.id, !character.combat.inspiration)
+    updateCharacter(updated)
+  }
+
+  async function handleToggleCombatantCondition(id: number, condition: string, duration?: number) {
     if (!campaignId) return
     const cb = combatants.find(c => c.id === id)
     if (!cb) return
-    const next = cb.conditions.includes(condition)
+    const isActive = cb.conditions.includes(condition)
+    const nextConditions = isActive
       ? cb.conditions.filter(c => c !== condition)
       : [...cb.conditions, condition]
-    const updated = await updateCombatantConditions(campaignId, id, next)
+    const nextDurations = { ...cb.condition_durations }
+    if (isActive) {
+      delete nextDurations[condition]
+    } else if (duration) {
+      nextDurations[condition] = duration
+    }
+    const updated = await updateCombatantConditions(campaignId, id, nextConditions, nextDurations)
     setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
@@ -566,8 +579,19 @@ export function CombatPage() {
                           )}
                         </div>
 
-                        {/* Action economy */}
+                        {/* Inspiration + action economy */}
                         <div className="hidden md:flex items-center gap-1 shrink-0">
+                          <button
+                            onClick={() => handleToggleInspiration(character)}
+                            title={character.combat.inspiration ? 'Retirer l\'inspiration' : 'Accorder l\'inspiration'}
+                            className={`w-6 h-6 rounded text-xs border transition-colors ${
+                              character.combat.inspiration
+                                ? 'bg-amber-500/30 border-amber-500 text-amber-300'
+                                : 'bg-stone-800 border-stone-700 text-stone-600 hover:text-amber-500 hover:border-amber-600/50'
+                            }`}
+                          >
+                            ✦
+                          </button>
                           {(['action', 'bonus', 'reaction'] as const).map(type => {
                             const key = rowId(row)
                             const used = getActions(key)[type]
@@ -754,23 +778,43 @@ export function CombatPage() {
 
                     {/* Condition picker (expanded) */}
                     {expandedConditions === cb.id && (
-                      <div className="mt-3 flex flex-wrap gap-1.5 pt-3 border-t border-stone-800">
-                        {Object.entries(CONDITIONS_FR).map(([key, label]) => {
-                          const active = cb.conditions.includes(key)
-                          return (
-                            <button
-                              key={key}
-                              onClick={() => handleToggleCombatantCondition(cb.id, key)}
-                              className={`rounded px-2 py-1 text-xs font-medium transition-colors ${
-                                active
-                                  ? 'bg-purple-600 border border-purple-500 text-white'
-                                  : 'bg-stone-800 border border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-300'
-                              }`}
-                            >
-                              {label}
-                            </button>
-                          )
-                        })}
+                      <div className="mt-3 pt-3 border-t border-stone-800">
+                        <div className="flex flex-wrap gap-1.5">
+                          {Object.entries(CONDITIONS_FR).map(([key, label]) => {
+                            const active = cb.conditions.includes(key)
+                            const duration = cb.condition_durations[key]
+                            return (
+                              <div key={key} className="flex items-center gap-0.5">
+                                <button
+                                  onClick={() => {
+                                    const d = parseInt(conditionDurationDraft[key] ?? '', 10)
+                                    handleToggleCombatantCondition(cb.id, key, isNaN(d) ? undefined : d)
+                                  }}
+                                  className={`rounded-l px-2 py-1 text-xs font-medium transition-colors ${
+                                    active
+                                      ? 'bg-purple-600 border border-purple-500 text-white'
+                                      : 'bg-stone-800 border border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-300'
+                                  }`}
+                                >
+                                  {label}{duration ? ` (${duration})` : ''}
+                                </button>
+                                {!active && (
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    max={99}
+                                    placeholder="∞"
+                                    value={conditionDurationDraft[key] ?? ''}
+                                    onChange={e => setConditionDurationDraft(d => ({ ...d, [key]: e.target.value }))}
+                                    className="w-10 rounded-r bg-stone-700 border border-l-0 border-stone-600 px-1 py-1 text-stone-300 text-xs text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                    title="Durée en rounds (optionnel)"
+                                  />
+                                )}
+                              </div>
+                            )
+                          })}
+                        </div>
+                        <p className="text-stone-700 text-xs mt-2">Entrer une durée en rounds avant d'activer (optionnel)</p>
                       </div>
                     )}
                   </div>
