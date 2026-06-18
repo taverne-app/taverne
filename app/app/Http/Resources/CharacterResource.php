@@ -81,6 +81,7 @@ class CharacterResource extends JsonResource
                 'capacity' => round(($this->strength ?? 10) * 6.75, 1),
             ],
 
+            'attack_macros' => $this->attack_macros ?? [],
             'features'    => $this->features ?? [],
             'currency'    => $this->currency ?? ['pc' => 0, 'pa' => 0, 'pe' => 0, 'po' => 0, 'pp' => 0],
             'damage_modifiers' => [

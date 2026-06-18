@@ -70,6 +70,7 @@ class Character extends Model
         'hit_dice_remaining',
         'damage_modifiers',
         'concentrating_on',
+        'attack_macros',
         'temp_max_hp_bonus',
         'campaign_id',
     ];
@@ -86,6 +87,7 @@ class Character extends Model
         'features'           => 'array',
         'currency'           => 'array',
         'damage_modifiers'   => 'array',
+        'attack_macros'      => 'array',
     ];
 
     /** Modificateur d'une caractéristique : floor((score - 10) / 2) */

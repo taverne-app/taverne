@@ -33,6 +33,14 @@ export interface Feature {
   description: string
 }
 
+export interface AttackMacro {
+  name: string
+  attack_bonus: number | null
+  damage_dice: string
+  damage_type?: string
+  crit_dice?: string
+}
+
 export interface Currency {
   pc: number
   pa: number
@@ -91,6 +99,7 @@ export interface Character {
     items: InventoryItem[]
     capacity: number
   }
+  attack_macros: AttackMacro[]
   features: Feature[]
   currency: Currency
   damage_modifiers: {
@@ -177,10 +186,14 @@ export async function updateHp(
   return json.data
 }
 
-export async function updateConditions(id: number, conditions: string[]): Promise<Character> {
+export async function updateConditions(
+  id: number,
+  conditions: string[],
+  condition_durations?: Record<string, number>,
+): Promise<Character> {
   const res = await apiFetch(`/characters/${id}/conditions`, {
     method: 'PATCH',
-    body: JSON.stringify({ conditions }),
+    body: JSON.stringify({ conditions, ...(condition_durations !== undefined ? { condition_durations } : {}) }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   const json = await res.json()
@@ -411,6 +424,18 @@ export async function updateConcentration(
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ concentrating_on: spellName }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateAttackMacros(
+  id: number,
+  macros: AttackMacro[],
+): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ attack_macros: macros }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data

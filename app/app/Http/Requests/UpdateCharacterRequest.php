@@ -48,6 +48,12 @@ class UpdateCharacterRequest extends FormRequest
             'damage_modifiers.vulnerabilities'    => ['sometimes', 'array'],
             'damage_modifiers.vulnerabilities.*'  => ['string', 'in:acid,bludgeoning,cold,fire,force,lightning,necrotic,piercing,poison,psychic,radiant,slashing,thunder'],
             'concentrating_on'    => ['sometimes', 'nullable', 'string', 'max:150'],
+            'attack_macros'                   => ['sometimes', 'nullable', 'array'],
+            'attack_macros.*.name'            => ['required_with:attack_macros', 'string', 'max:80'],
+            'attack_macros.*.attack_bonus'    => ['nullable', 'integer', 'min:-20', 'max:30'],
+            'attack_macros.*.damage_dice'     => ['required_with:attack_macros', 'string', 'max:40'],
+            'attack_macros.*.damage_type'     => ['sometimes', 'nullable', 'string', 'max:40'],
+            'attack_macros.*.crit_dice'       => ['sometimes', 'nullable', 'string', 'max:20'],
             'notes'               => ['sometimes', 'nullable', 'string'],
 
             'save_proficiencies'    => ['sometimes', 'array'],

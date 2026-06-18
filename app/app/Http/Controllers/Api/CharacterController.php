@@ -92,11 +92,15 @@ class CharacterController extends Controller
         $this->authorizeCharacter($request, $character);
 
         $request->validate([
-            'conditions'   => ['required', 'array'],
-            'conditions.*' => ['string', 'in:blinded,charmed,deafened,exhaustion,frightened,grappled,incapacitated,invisible,paralyzed,petrified,poisoned,prone,restrained,stunned,unconscious'],
+            'conditions'          => ['required', 'array'],
+            'conditions.*'        => ['string', 'in:blinded,charmed,deafened,exhaustion,frightened,grappled,incapacitated,invisible,paralyzed,petrified,poisoned,prone,restrained,stunned,unconscious'],
+            'condition_durations' => ['sometimes', 'nullable', 'array'],
         ]);
 
-        $character->update(['conditions' => array_values(array_unique($request->conditions))]);
+        $character->update([
+            'conditions'          => array_values(array_unique($request->conditions)),
+            'condition_durations' => $request->condition_durations ?? $character->condition_durations ?? [],
+        ]);
 
         $fresh = $character->fresh();
         CharacterUpdated::dispatch($fresh);
