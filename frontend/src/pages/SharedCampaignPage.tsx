@@ -274,40 +274,147 @@ export function SharedCampaignPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 py-6">
+      <main className="max-w-6xl mx-auto px-4 py-6 space-y-8">
         {campaign.description && (
-          <p className="text-stone-400 text-sm mb-6">{campaign.description}</p>
+          <p className="text-stone-400 text-sm">{campaign.description}</p>
         )}
 
         {characters.length === 0 && combatants.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-stone-500 text-sm">Aucun personnage dans cette campagne.</p>
           </div>
-        ) : (
-          <div className="space-y-8">
-            {characters.length > 0 && (
-              <section>
-                <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-4">Personnages</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {characters.map(c => (
-                    <CharacterCard key={c.id} c={c} />
-                  ))}
-                </div>
-              </section>
-            )}
+        ) : (() => {
+          // Build initiative order when combat is active
+          type CombatEntry =
+            | { kind: 'character'; initiative_roll: number; data: Character }
+            | { kind: 'combatant'; initiative_roll: number; data: Combatant }
 
-            {combatants.length > 0 && (
-              <section>
-                <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-4">Ennemis & PNJ</h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-                  {combatants.map(c => (
-                    <CombatantCard key={c.id} c={c} />
-                  ))}
-                </div>
-              </section>
-            )}
-          </div>
-        )}
+          const allWithRoll: CombatEntry[] = [
+            ...characters
+              .filter(c => c.combat.initiative_roll != null)
+              .map(c => ({ kind: 'character' as const, initiative_roll: c.combat.initiative_roll!, data: c })),
+            ...combatants
+              .filter(c => c.initiative_roll != null)
+              .map(c => ({ kind: 'combatant' as const, initiative_roll: c.initiative_roll!, data: c })),
+          ].sort((a, b) => b.initiative_roll - a.initiative_roll)
+
+          const inCombat = allWithRoll.length > 0
+
+          return (
+            <>
+              {/* Initiative order — shown when combat is active */}
+              {inCombat && (
+                <section>
+                  <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">
+                    ⚔ Ordre d'initiative
+                  </h2>
+                  <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                    <div className="divide-y divide-stone-800">
+                      {allWithRoll.map((entry, pos) => {
+                        const isChar = entry.kind === 'character'
+                        const c = entry.data as Character
+                        const cb = entry.data as Combatant
+                        const currentHp  = isChar ? c.combat.current_hp  : cb.current_hp
+                        const maxHp      = isChar ? c.combat.max_hp      : cb.max_hp
+                        const isDying    = currentHp <= 0
+                        const hpPct      = Math.max(0, Math.min(100, (currentHp / maxHp) * 100))
+                        const conditions = isChar ? c.state.conditions : cb.conditions
+                        const name       = isChar ? c.name : cb.name
+
+                        return (
+                          <div key={`${entry.kind}-${entry.data.id}`} className="flex items-center gap-4 px-5 py-3">
+                            {/* Position */}
+                            <span className="text-stone-600 text-sm font-mono w-5 shrink-0">{pos + 1}</span>
+
+                            {/* Initiative roll */}
+                            <span className="text-amber-400 font-bold text-sm w-8 text-center shrink-0">
+                              {entry.initiative_roll}
+                            </span>
+
+                            {/* Name + type */}
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2 min-w-0">
+                                <span className={`font-semibold text-sm truncate ${isDying ? 'text-red-400' : 'text-white'}`}>
+                                  {name}
+                                </span>
+                                {!isChar && (
+                                  <span className="shrink-0 text-xs bg-red-900/40 border border-red-800/50 text-red-400 rounded px-1.5 py-0.5">
+                                    Ennemi
+                                  </span>
+                                )}
+                                {isDying && (
+                                  <span className="shrink-0 text-xs bg-red-900/40 border border-red-700/50 text-red-300 rounded px-1.5 py-0.5">
+                                    À terre
+                                  </span>
+                                )}
+                              </div>
+                              {conditions.length > 0 && (
+                                <div className="flex flex-wrap gap-1 mt-1">
+                                  {conditions.map(cond => (
+                                    <span key={cond} className="text-xs bg-purple-900/40 border border-purple-700/40 text-purple-300 rounded px-1.5 py-0.5">
+                                      {CONDITIONS_FR[cond] ?? cond}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* HP bar */}
+                            <div className="w-36 shrink-0 hidden sm:block">
+                              <div className="flex items-center justify-between mb-1">
+                                <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
+                                  {currentHp}
+                                </span>
+                                <span className="text-stone-500 text-xs">/ {maxHp}</span>
+                              </div>
+                              <div className="h-2 bg-stone-700 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full rounded-full transition-all duration-500 ${hpColor(currentHp, maxHp)}`}
+                                  style={{ width: `${hpPct}%` }}
+                                />
+                              </div>
+                            </div>
+
+                            {/* HP text on mobile */}
+                            <div className="sm:hidden shrink-0">
+                              <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
+                                {currentHp}/{maxHp}
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                </section>
+              )}
+
+              {/* Character cards */}
+              {characters.length > 0 && (
+                <section>
+                  <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-4">Personnages</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {characters.map(c => (
+                      <CharacterCard key={c.id} c={c} />
+                    ))}
+                  </div>
+                </section>
+              )}
+
+              {/* Combatant cards — only shown when not in combat (to avoid redundancy) */}
+              {combatants.length > 0 && !inCombat && (
+                <section>
+                  <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-4">Ennemis & PNJ</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                    {combatants.map(c => (
+                      <CombatantCard key={c.id} c={c} />
+                    ))}
+                  </div>
+                </section>
+              )}
+            </>
+          )
+        })()}
       </main>
     </div>
   )
