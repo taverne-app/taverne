@@ -1,9 +1,12 @@
 import { apiFetch, ApiError } from './client'
 
+export type CombatantFaction = 'ennemi' | 'allié' | 'neutre'
+
 export interface Combatant {
   id: number
   campaign_id: number
   name: string
+  faction: CombatantFaction
   max_hp: number
   current_hp: number
   armor_class: number | null
@@ -22,7 +25,7 @@ export async function listCombatants(campaignId: number): Promise<Combatant[]> {
 
 export async function createCombatant(
   campaignId: number,
-  data: { name: string; max_hp: number; armor_class?: number | null; initiative_roll?: number | null },
+  data: { name: string; faction?: CombatantFaction; max_hp: number; armor_class?: number | null; initiative_roll?: number | null },
 ): Promise<Combatant> {
   const res = await apiFetch(`/campaigns/${campaignId}/combatants`, {
     method: 'POST',
@@ -68,6 +71,19 @@ export async function updateCombatantConditions(
   const res = await apiFetch(`/campaigns/${campaignId}/combatants/${combatantId}/conditions`, {
     method: 'PATCH',
     body: JSON.stringify({ conditions, condition_durations }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateCombatantFaction(
+  campaignId: number,
+  combatantId: number,
+  faction: CombatantFaction,
+): Promise<Combatant> {
+  const res = await apiFetch(`/campaigns/${campaignId}/combatants/${combatantId}/faction`, {
+    method: 'PATCH',
+    body: JSON.stringify({ faction }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data

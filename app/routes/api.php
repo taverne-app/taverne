@@ -15,8 +15,9 @@ Route::prefix('auth')->group(function () {
     Route::post('login',    [AuthController::class, 'login']);
 });
 
-// Vue MJ (public)
-Route::get('/share/{token}', [ShareController::class, 'show']);
+// Vues partagées (public)
+Route::get('/share/{token}',           [ShareController::class, 'show']);
+Route::get('/share/character/{token}', [ShareController::class, 'showCharacter']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());
@@ -35,6 +36,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('combatants/{combatant}/hp',         [CombatantController::class, 'updateHp']);
         Route::patch('combatants/{combatant}/initiative', [CombatantController::class, 'updateInitiative']);
         Route::patch('combatants/{combatant}/conditions', [CombatantController::class, 'updateConditions']);
+        Route::patch('combatants/{combatant}/faction',    [CombatantController::class, 'updateFaction']);
     });
 
     // Personnages
@@ -49,5 +51,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('rest',          [CharacterController::class, 'longRest']);
         Route::post('short-rest',    [CharacterController::class, 'shortRest']);
         Route::post('roll',         [CharacterController::class, 'roll']);
+        Route::post('share',        [CharacterController::class, 'share']);
+        Route::delete('share',      [CharacterController::class, 'revokeShare']);
     });
 });

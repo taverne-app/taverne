@@ -108,6 +108,23 @@ class CombatantController extends Controller
         return new CombatantResource($fresh);
     }
 
+    public function updateFaction(Request $request, Campaign $campaign, Combatant $combatant): CombatantResource
+    {
+        $this->authorize($request, $campaign);
+        abort_if($combatant->campaign_id !== $campaign->id, 403);
+
+        $request->validate([
+            'faction' => ['required', 'string', 'in:ennemi,allié,neutre'],
+        ]);
+
+        $combatant->update(['faction' => $request->faction]);
+
+        $fresh = $combatant->fresh();
+        CombatantUpdated::dispatch($fresh);
+
+        return new CombatantResource($fresh);
+    }
+
     public function destroy(Request $request, Campaign $campaign, Combatant $combatant): JsonResponse
     {
         $this->authorize($request, $campaign);

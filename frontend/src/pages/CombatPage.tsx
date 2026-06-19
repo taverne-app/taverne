@@ -9,6 +9,7 @@ import {
   updateCombatantHp,
   updateCombatantInitiative,
   updateCombatantConditions,
+  updateCombatantFaction,
   deleteCombatant,
   type Combatant,
   type CombatantFaction,
@@ -20,6 +21,7 @@ import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, type 
 import { canLevelUp } from '../data/xp'
 import { CONDITIONS_FR } from '../data/conditions'
 import { ConditionTag } from '../components/ConditionTag'
+import { RulesCompendium } from '../components/RulesCompendium'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -656,6 +658,16 @@ export function CombatPage() {
     setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
+  async function handleCycleFaction(id: number) {
+    if (!campaignId) return
+    const cb = combatants.find(c => c.id === id)
+    if (!cb) return
+    const cycle: CombatantFaction[] = ['ennemi', 'allié', 'neutre']
+    const next = cycle[(cycle.indexOf(cb.faction) + 1) % cycle.length]
+    const updated = await updateCombatantFaction(campaignId, id, next)
+    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+  }
+
   async function handleAddCombatant() {
     if (!campaignId || !combatantDraft.name.trim()) return
     const maxHp = parseInt(combatantDraft.max_hp, 10)
@@ -944,6 +956,7 @@ export function CombatPage() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            <RulesCompendium />
             <button
               onClick={() => setDmDiceOpen(v => !v)}
               className={`text-sm font-bold px-3 py-1 rounded-lg border transition-colors ${
@@ -1782,15 +1795,19 @@ export function CombatPage() {
                           <span className={`font-semibold truncate ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}>
                             {cb.name}
                           </span>
-                          <span className={`shrink-0 text-xs rounded px-1.5 py-0.5 ${
-                            cb.faction === 'allié'
-                              ? 'bg-emerald-900/40 border border-emerald-800/50 text-emerald-400'
-                              : cb.faction === 'neutre'
-                                ? 'bg-stone-800 border border-stone-700 text-stone-400'
-                                : 'bg-red-900/40 border border-red-800/50 text-red-400'
-                          }`}>
+                          <button
+                            onClick={() => handleCycleFaction(cb.id)}
+                            title="Changer la faction"
+                            className={`shrink-0 text-xs rounded px-1.5 py-0.5 transition-opacity hover:opacity-70 ${
+                              cb.faction === 'allié'
+                                ? 'bg-emerald-900/40 border border-emerald-800/50 text-emerald-400'
+                                : cb.faction === 'neutre'
+                                  ? 'bg-stone-800 border border-stone-700 text-stone-400'
+                                  : 'bg-red-900/40 border border-red-800/50 text-red-400'
+                            }`}
+                          >
                             {cb.faction === 'allié' ? 'Allié' : cb.faction === 'neutre' ? 'Neutre' : 'Ennemi'}
-                          </span>
+                          </button>
                           {isDying && (
                             <span className="shrink-0 text-xs bg-stone-800 border border-stone-700 text-stone-400 rounded px-1.5 py-0.5">
                               À terre
