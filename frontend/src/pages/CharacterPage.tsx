@@ -834,21 +834,40 @@ export function CharacterPage() {
 
   interface MacroDraft { name: string; attack_bonus: string; damage_dice: string; damage_type: string; crit_dice: string }
   const emptyMacroDraft = (): MacroDraft => ({ name: '', attack_bonus: '', damage_dice: '', damage_type: '', crit_dice: '' })
+  const draftFromMacro = (m: AttackMacro): MacroDraft => ({
+    name: m.name,
+    attack_bonus: m.attack_bonus !== null ? String(m.attack_bonus) : '',
+    damage_dice: m.damage_dice,
+    damage_type: m.damage_type ?? '',
+    crit_dice: m.crit_dice ?? '',
+  })
   const [addingMacro, setAddingMacro] = useState(false)
   const [macroDraft, setMacroDraft] = useState<MacroDraft>(emptyMacroDraft)
+  const [editingMacroIndex, setEditingMacroIndex] = useState<number | null>(null)
+  const [editMacroDraft, setEditMacroDraft] = useState<MacroDraft>(emptyMacroDraft)
+
+  function draftToMacro(d: MacroDraft): AttackMacro {
+    return {
+      name: d.name.trim(),
+      attack_bonus: d.attack_bonus !== '' ? parseInt(d.attack_bonus, 10) : null,
+      damage_dice: d.damage_dice.trim(),
+      damage_type: d.damage_type.trim() || undefined,
+      crit_dice: d.crit_dice.trim() || undefined,
+    }
+  }
 
   async function handleAddMacro() {
     if (!character || !macroDraft.name.trim() || !macroDraft.damage_dice.trim()) return
-    const macro: AttackMacro = {
-      name: macroDraft.name.trim(),
-      attack_bonus: macroDraft.attack_bonus !== '' ? parseInt(macroDraft.attack_bonus, 10) : null,
-      damage_dice: macroDraft.damage_dice.trim(),
-      damage_type: macroDraft.damage_type.trim() || undefined,
-      crit_dice: macroDraft.crit_dice.trim() || undefined,
-    }
-    const next = [...character.attack_macros, macro]
+    const next = [...character.attack_macros, draftToMacro(macroDraft)]
     const updated = await withSave(() => updateAttackMacros(character.id, next))
     if (updated) { setCharacter(updated); setMacroDraft(emptyMacroDraft()); setAddingMacro(false) }
+  }
+
+  async function handleSaveMacroEdit(index: number) {
+    if (!character || !editMacroDraft.name.trim() || !editMacroDraft.damage_dice.trim()) return
+    const next = character.attack_macros.map((m, i) => i === index ? draftToMacro(editMacroDraft) : m)
+    const updated = await withSave(() => updateAttackMacros(character.id, next))
+    if (updated) { setCharacter(updated); setEditingMacroIndex(null) }
   }
 
   async function handleDeleteMacro(index: number) {
@@ -2144,6 +2163,42 @@ export function CharacterPage() {
           ) : (
             <div className="space-y-2">
               {character.attack_macros.map((macro, i) => (
+                editingMacroIndex === i ? (
+                  <div key={i} className="bg-stone-800 border border-rose-800/50 rounded-xl p-4 space-y-3">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-stone-500 text-xs mb-1 block">Nom *</label>
+                        <input type="text" value={editMacroDraft.name} onChange={e => setEditMacroDraft(d => ({ ...d, name: e.target.value }))}
+                          className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-rose-500 transition-colors" />
+                      </div>
+                      <div>
+                        <label className="text-stone-500 text-xs mb-1 block">Bonus d'attaque</label>
+                        <input type="number" value={editMacroDraft.attack_bonus} onChange={e => setEditMacroDraft(d => ({ ...d, attack_bonus: e.target.value }))}
+                          className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-rose-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                      </div>
+                      <div>
+                        <label className="text-stone-500 text-xs mb-1 block">Dégâts *</label>
+                        <input type="text" value={editMacroDraft.damage_dice} onChange={e => setEditMacroDraft(d => ({ ...d, damage_dice: e.target.value }))}
+                          className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-rose-500 transition-colors" />
+                      </div>
+                      <div>
+                        <label className="text-stone-500 text-xs mb-1 block">Type de dégâts</label>
+                        <select value={editMacroDraft.damage_type} onChange={e => setEditMacroDraft(d => ({ ...d, damage_type: e.target.value }))}
+                          className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-rose-500 transition-colors">
+                          <option value="">— aucun —</option>
+                          {DAMAGE_TYPES.map(([type, label]) => <option key={type} value={type}>{label}</option>)}
+                        </select>
+                      </div>
+                    </div>
+                    <div className="flex justify-between pt-1">
+                      <button onClick={() => setEditingMacroIndex(null)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
+                      <button onClick={() => handleSaveMacroEdit(i)} disabled={saving || !editMacroDraft.name.trim() || !editMacroDraft.damage_dice.trim()}
+                        className="bg-rose-700 hover:bg-rose-600 disabled:opacity-40 text-white font-semibold text-sm rounded-lg px-5 py-2 transition-colors">
+                        Enregistrer
+                      </button>
+                    </div>
+                  </div>
+                ) : (
                 <div key={i} className="flex items-center gap-3 bg-stone-800/50 border border-stone-800 rounded-lg px-3 py-2.5">
                   <div className="flex-1 min-w-0">
                     <span className="text-white text-sm font-medium">{macro.name}</span>
@@ -2170,6 +2225,14 @@ export function CharacterPage() {
                     </button>
                   </div>
                   <button
+                    onClick={() => { setEditingMacroIndex(i); setEditMacroDraft(draftFromMacro(macro)) }}
+                    disabled={saving}
+                    className="text-stone-600 hover:text-stone-300 transition-colors disabled:cursor-not-allowed text-sm shrink-0"
+                    title="Modifier"
+                  >
+                    ✎
+                  </button>
+                  <button
                     onClick={() => handleDeleteMacro(i)}
                     disabled={saving}
                     className="text-stone-700 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-sm shrink-0"
@@ -2178,6 +2241,7 @@ export function CharacterPage() {
                     ×
                   </button>
                 </div>
+                )
               ))}
             </div>
           )}

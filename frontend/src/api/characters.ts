@@ -61,6 +61,7 @@ export interface Currency {
 export interface Character {
   id: number
   name: string
+  portrait_url: string | null
   race: string
   character_class: string
   subclass: string | null
@@ -72,7 +73,7 @@ export interface Character {
   abilities: Record<AbilityName, number | null>
   modifiers: Record<AbilityName, number>
   saving_throws: Record<AbilityName, { modifier: number; proficient: boolean }>
-  skills: Record<SkillName, { modifier: number; proficient: boolean; ability: AbilityName }>
+  skills: Record<SkillName, { modifier: number; proficient: boolean; expert: boolean; ability: AbilityName }>
   passive_perception: number
   combat: {
     current_hp: number
@@ -95,6 +96,7 @@ export interface Character {
     death_saves_successes: number
     death_saves_failures: number
     concentrating_on: string | null
+    exhaustion_level: number
   }
   spellcasting: {
     ability: AbilityName | null
@@ -118,6 +120,15 @@ export interface Character {
     vulnerabilities: string[]
   }
   notes: string | null
+  dm_notes: string | null
+  personality_traits: string | null
+  ideals: string | null
+  bonds: string | null
+  flaws: string | null
+  languages: string[]
+  tool_proficiencies: string[]
+  campaign_id: number | null
+  share_token: string | null
 }
 
 export interface CreateCharacterPayload {
@@ -131,6 +142,7 @@ export interface CreateCharacterPayload {
 
 export interface IdentityPayload {
   name?: string
+  portrait_url?: string | null
   race?: string
   character_class?: string
   subclass?: string | null
@@ -240,12 +252,14 @@ export async function updateProficiencies(
   id: number,
   saveProficiencies: string[],
   skillProficiencies: string[],
+  skillExpertise?: string[],
 ): Promise<Character> {
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({
       save_proficiencies: saveProficiencies,
       skill_proficiencies: skillProficiencies,
+      ...(skillExpertise !== undefined ? { skill_expertise: skillExpertise } : {}),
     }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
@@ -322,6 +336,50 @@ export async function updateNotes(id: number, notes: string): Promise<Character>
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ notes }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateDmNotes(id: number, dm_notes: string): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ dm_notes }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateLanguagesAndTools(id: number, payload: {
+  languages?: string[]
+  tool_proficiencies?: string[]
+}): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updatePersonality(id: number, payload: {
+  personality_traits?: string | null
+  ideals?: string | null
+  bonds?: string | null
+  flaws?: string | null
+}): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function updateExhaustion(id: number, exhaustion_level: number): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ exhaustion_level }),
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data
@@ -458,6 +516,26 @@ export async function updateResources(
   const res = await apiFetch(`/characters/${id}`, {
     method: 'PATCH',
     body: JSON.stringify({ resources }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function shareCharacter(id: number): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}/share`, { method: 'POST' })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function revokeCharacterShare(id: number): Promise<Character> {
+  const res = await apiFetch(`/characters/${id}/share`, { method: 'DELETE' })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
+export async function getSharedCharacter(token: string): Promise<Character> {
+  const res = await fetch(`/api/share/character/${token}`, {
+    headers: { 'Accept': 'application/json', 'Content-Type': 'application/json' },
   })
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data
