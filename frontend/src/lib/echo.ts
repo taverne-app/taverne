@@ -1,6 +1,8 @@
 import Echo from 'laravel-echo'
 import Pusher from 'pusher-js'
 
+export const REVERB_CONFIGURED = !!import.meta.env.VITE_REVERB_APP_KEY
+
 const reverbBase = {
   broadcaster: 'reverb' as const,
   key: import.meta.env.VITE_REVERB_APP_KEY as string,

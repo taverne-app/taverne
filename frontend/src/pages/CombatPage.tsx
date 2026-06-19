@@ -276,7 +276,13 @@ export function CombatPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [loading, setLoading] = useState(true)
   const [activeTurn, setActiveTurn] = useState(0)
-  const [diceLog, setDiceLog] = useState<DiceRoll[]>([])
+  const [diceLog, setDiceLog] = useState<DiceRoll[]>(() => {
+    if (!campaignId) return []
+    try {
+      const stored = localStorage.getItem(`taverne-dice-log-${campaignId}`)
+      return stored ? JSON.parse(stored) : []
+    } catch { return [] }
+  })
   const [actionState, setActionState] = useState<Record<string, { action: boolean; bonus: boolean; reaction: boolean }>>({})
   const [expandedConditions, setExpandedConditions] = useState<number | null>(null)
   const [conditionDurationDraft, setConditionDurationDraft] = useState<Record<string, string>>({})
@@ -446,7 +452,11 @@ export function CombatPage() {
           setCharacters(prev => prev.map(ch => ch.id === e.character.id ? e.character : ch))
         })
         .listen('.dice.rolled', (e: DiceRoll) => {
-          setDiceLog(log => [e, ...log].slice(0, 50))
+          setDiceLog(log => {
+            const next = [e, ...log].slice(0, 50)
+            if (campaignId) localStorage.setItem(`taverne-dice-log-${campaignId}`, JSON.stringify(next))
+            return next
+          })
         })
     })
 
@@ -2588,7 +2598,10 @@ export function CombatPage() {
                 Journal des jets
               </h2>
               <button
-                onClick={() => setDiceLog([])}
+                onClick={() => {
+                  setDiceLog([])
+                  if (campaignId) localStorage.removeItem(`taverne-dice-log-${campaignId}`)
+                }}
                 className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
               >
                 Effacer

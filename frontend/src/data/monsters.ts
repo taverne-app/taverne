@@ -120,3 +120,32 @@ export function rollMonsterHp(m: MonsterTemplate): number {
   }
   return Math.max(1, total)
 }
+
+// DMG "Monster Statistics by Challenge Rating"
+const CR_ATTACK_BONUS: Record<string, number> = {
+  '0': 3, '1/8': 3, '1/4': 3, '1/2': 3,
+  '1': 3, '2': 4, '3': 4, '4': 5,
+  '5': 6, '6': 6, '7': 6, '8': 7,
+  '9': 7, '10': 7, '11': 8, '12': 8,
+  '13': 8, '14': 8, '15': 8, '16': 9,
+  '17': 9, '18': 9, '19': 10, '20': 10,
+}
+
+export function crToAttackBonus(cr: string): number {
+  return CR_ATTACK_BONUS[cr] ?? 5
+}
+
+// Approximate damage dice per CR based on expected DPR (DMG table)
+const CR_DAMAGE: Record<string, [number, number, number]> = {
+  '0':   [1,  4,  0], '1/8': [1,  6,  1], '1/4': [1,  8,  2], '1/2': [1,  8,  3],
+  '1':   [2,  6,  2], '2':   [2,  8,  3], '3':   [3,  6,  4], '4':   [3,  8,  4],
+  '5':   [4,  6,  5], '6':   [4,  8,  5], '7':   [4, 10,  5], '8':   [5, 10,  5],
+  '9':   [5, 10,  6], '10':  [6, 10,  6], '11':  [6, 10,  7], '12':  [7, 10,  7],
+  '13':  [7, 10,  8], '14':  [8, 10,  8], '15':  [8, 10,  9], '16':  [9, 10,  9],
+  '17':  [9, 10, 10], '18': [10, 10, 10], '19': [10, 10, 11], '20': [11, 10, 11],
+}
+
+export function crToDamageDice(cr: string): { count: number; sides: number; bonus: number } {
+  const d = CR_DAMAGE[cr]
+  return d ? { count: d[0], sides: d[1], bonus: d[2] } : { count: 1, sides: 6, bonus: 0 }
+}

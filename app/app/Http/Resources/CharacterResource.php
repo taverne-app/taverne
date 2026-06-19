@@ -10,9 +10,10 @@ class CharacterResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'         => $this->id,
-            'name'       => $this->name,
-            'race'       => $this->race,
+            'id'           => $this->id,
+            'name'         => $this->name,
+            'portrait_url' => $this->portrait_url,
+            'race'         => $this->race,
             'class'      => $this->character_class,
             'subclass'   => $this->subclass,
             'level'      => $this->level,
@@ -65,6 +66,7 @@ class CharacterResource extends JsonResource
                 'conditions'            => $this->conditions ?? [],
                 'condition_durations'   => $this->condition_durations ?? [],
                 'concentrating_on'      => $this->concentrating_on,
+                'exhaustion_level'      => $this->exhaustion_level ?? 0,
             ],
 
             'spellcasting' => [
@@ -90,10 +92,18 @@ class CharacterResource extends JsonResource
                 'immunities'      => $this->damage_modifiers['immunities']      ?? [],
                 'vulnerabilities' => $this->damage_modifiers['vulnerabilities'] ?? [],
             ],
-            'notes'       => $this->notes,
-            'campaign_id' => $this->campaign_id,
-            'created_at'  => $this->created_at,
-            'updated_at'  => $this->updated_at,
+            'notes'              => $this->notes,
+            'dm_notes'           => $this->user_id === $request->user()?->id ? $this->dm_notes : null,
+            'personality_traits' => $this->personality_traits,
+            'ideals'             => $this->ideals,
+            'bonds'              => $this->bonds,
+            'flaws'              => $this->flaws,
+            'languages'          => $this->languages ?? [],
+            'tool_proficiencies' => $this->tool_proficiencies ?? [],
+            'campaign_id'  => $this->campaign_id,
+            'share_token'  => $this->share_token,
+            'created_at'   => $this->created_at,
+            'updated_at'   => $this->updated_at,
         ];
     }
 }

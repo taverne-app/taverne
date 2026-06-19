@@ -4,7 +4,7 @@ import { getSharedCampaign } from '../api/share'
 import type { Campaign, CampaignSession } from '../api/campaigns'
 import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
-import { createPublicEcho } from '../lib/echo'
+import { createPublicEcho, REVERB_CONFIGURED } from '../lib/echo'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -31,18 +31,38 @@ function CharacterCard({ c }: { c: Character }) {
   return (
     <div className={`bg-stone-900 border rounded-2xl p-5 transition-colors ${isDying ? 'border-red-800' : 'border-stone-800'}`}>
       {/* Name + class */}
-      <div className="mb-4">
-        <h2 className={`font-bold text-xl leading-tight ${isDying ? 'text-red-400' : 'text-white'}`}>
-          {c.name}
-          {(isDying || isUnconscious) && (
-            <span className="ml-2 text-sm font-normal text-red-400">
-              {isDying ? '— Mourant' : '— Inconscient'}
+      <div className="mb-4 flex items-start gap-3">
+        {c.portrait_url && (
+          <img
+            src={c.portrait_url}
+            alt={c.name}
+            className="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-stone-700"
+            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+          />
+        )}
+        <div className="min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <h2 className={`font-bold text-xl leading-tight ${isDying ? 'text-red-400' : 'text-white'}`}>
+              {c.name}
+            </h2>
+            {c.combat.inspiration && (
+              <span className="text-amber-400 text-sm" title="Inspiration">✦</span>
+            )}
+            {(isDying || isUnconscious) && (
+              <span className="text-sm font-normal text-red-400">
+                {isDying ? '— Mourant' : '— Inconscient'}
+              </span>
+            )}
+          </div>
+          <p className="text-stone-500 text-sm mt-0.5">
+            {c.race} · {c.character_class} · Niveau {c.level}
+          </p>
+          {c.state.concentrating_on && (
+            <span className="inline-flex items-center gap-1 mt-1 text-xs bg-violet-900/50 border border-violet-700/50 text-violet-300 rounded-full px-2 py-0.5">
+              ◈ {c.state.concentrating_on}
             </span>
           )}
-        </h2>
-        <p className="text-stone-500 text-sm mt-0.5">
-          {c.race} · {c.character_class} · Niveau {c.level}
-        </p>
+        </div>
       </div>
 
       {/* HP section */}
@@ -80,6 +100,26 @@ function CharacterCard({ c }: { c: Character }) {
           <p className="text-white font-bold text-xl">+{c.proficiency_bonus}</p>
         </div>
       </div>
+
+      {/* Resources */}
+      {c.resources.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {c.resources.map((r, i) => (
+            <div key={i} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${
+              r.current === 0 ? 'bg-stone-800 border-stone-700' : 'bg-stone-800 border-stone-600'
+            }`}>
+              <span className={`text-xs font-medium ${r.current === 0 ? 'text-stone-600' : 'text-stone-300'}`}>
+                {r.name}
+              </span>
+              <div className="flex gap-0.5">
+                {Array.from({ length: r.max }, (_, j) => (
+                  <div key={j} className={`w-2 h-2 rounded-full ${j < r.current ? 'bg-amber-400' : 'bg-stone-700'}`} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Conditions */}
       {c.state.conditions.length > 0 && (
@@ -214,7 +254,7 @@ export function SharedCampaignPage() {
   }, [token])
 
   useEffect(() => {
-    if (!token || (characters.length === 0 && combatants.length === 0)) return
+    if (!token || (characters.length === 0 && combatants.length === 0) || !REVERB_CONFIGURED) return
     const echo = createPublicEcho()
     echo.channel(`campaign-share.${token}`)
       .listen('.character.updated', (e: { character: Character }) => {
@@ -379,9 +419,20 @@ export function SharedCampaignPage() {
                             {/* Name + type */}
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2 min-w-0">
+                                {isChar && c.portrait_url && (
+                                  <img
+                                    src={c.portrait_url}
+                                    alt={c.name}
+                                    className="w-6 h-6 rounded-full object-cover shrink-0 border border-stone-700"
+                                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                                  />
+                                )}
                                 <span className={`font-semibold text-sm truncate ${isDying ? 'text-red-400' : 'text-white'}`}>
                                   {name}
                                 </span>
+                                {isChar && c.combat.inspiration && (
+                                  <span className="text-amber-400 text-xs shrink-0" title="Inspiration">✦</span>
+                                )}
                                 {!isChar && (
                                   <span className="shrink-0 text-xs bg-red-900/40 border border-red-800/50 text-red-400 rounded px-1.5 py-0.5">
                                     Ennemi
@@ -393,8 +444,13 @@ export function SharedCampaignPage() {
                                   </span>
                                 )}
                               </div>
-                              {conditions.length > 0 && (
+                              {(conditions.length > 0 || (isChar && c.state.concentrating_on)) && (
                                 <div className="flex flex-wrap gap-1 mt-1">
+                                  {isChar && c.state.concentrating_on && (
+                                    <span className="text-xs bg-violet-900/40 border border-violet-700/40 text-violet-300 rounded px-1.5 py-0.5">
+                                      ◈ {c.state.concentrating_on}
+                                    </span>
+                                  )}
                                   {conditions.map(cond => (
                                     <span key={cond} className="text-xs bg-purple-900/40 border border-purple-700/40 text-purple-300 rounded px-1.5 py-0.5">
                                       {CONDITIONS_FR[cond] ?? cond}

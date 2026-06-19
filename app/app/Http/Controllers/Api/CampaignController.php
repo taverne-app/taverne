@@ -48,8 +48,13 @@ class CampaignController extends Controller
         $this->authorize($request, $campaign);
 
         $validated = $request->validate([
-            'name'        => ['sometimes', 'string', 'max:255'],
-            'description' => ['sometimes', 'nullable', 'string'],
+            'name'             => ['sometimes', 'string', 'max:255'],
+            'description'      => ['sometimes', 'nullable', 'string'],
+            'dm_notes'         => ['sometimes', 'nullable', 'string'],
+            'saved_encounters' => ['sometimes', 'nullable', 'array'],
+            'npcs'             => ['sometimes', 'nullable', 'array'],
+            'game_calendar'    => ['sometimes', 'nullable', 'array'],
+            'party_treasury'   => ['sometimes', 'nullable', 'array'],
         ]);
 
         $campaign->update($validated);

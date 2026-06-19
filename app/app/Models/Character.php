@@ -33,6 +33,7 @@ class Character extends Model
 
     protected $fillable = [
         'name',
+        'portrait_url',
         'race',
         'character_class',
         'subclass',
@@ -58,6 +59,7 @@ class Character extends Model
         'condition_durations',
         'save_proficiencies',
         'skill_proficiencies',
+        'skill_expertise',
         'initiative_roll',
         'notes',
         'spell_slots',
@@ -74,6 +76,15 @@ class Character extends Model
         'resources',
         'temp_max_hp_bonus',
         'campaign_id',
+        'share_token',
+        'dm_notes',
+        'exhaustion_level',
+        'personality_traits',
+        'ideals',
+        'bonds',
+        'flaws',
+        'languages',
+        'tool_proficiencies',
     ];
 
     protected $casts = [
@@ -82,6 +93,7 @@ class Character extends Model
         'condition_durations' => 'array',
         'save_proficiencies' => 'array',
         'skill_proficiencies'=> 'array',
+        'skill_expertise'    => 'array',
         'spell_slots'        => 'array',
         'spells_known'       => 'array',
         'inventory'          => 'array',
@@ -90,6 +102,8 @@ class Character extends Model
         'damage_modifiers'   => 'array',
         'attack_macros'      => 'array',
         'resources'          => 'array',
+        'languages'          => 'array',
+        'tool_proficiencies' => 'array',
     ];
 
     /** Modificateur d'une caractéristique : floor((score - 10) / 2) */
@@ -126,14 +140,18 @@ class Character extends Model
 
     public function getSkillsAttribute(): array
     {
-        $profs = $this->skill_proficiencies ?? [];
-        $result = [];
+        $profs   = $this->skill_proficiencies ?? [];
+        $experts = $this->skill_expertise ?? [];
+        $result  = [];
         foreach (self::SKILLS as $skill => $ability) {
             $proficient = in_array($skill, $profs);
-            $mod = $this->modifier($this->$ability);
+            $expert     = $proficient && in_array($skill, $experts);
+            $mod        = $this->modifier($this->$ability);
+            $bonus      = $expert ? $this->proficiency_bonus * 2 : ($proficient ? $this->proficiency_bonus : 0);
             $result[$skill] = [
-                'modifier'   => $mod + ($proficient ? $this->proficiency_bonus : 0),
+                'modifier'   => $mod + $bonus,
                 'proficient' => $proficient,
+                'expert'     => $expert,
                 'ability'    => $ability,
             ];
         }

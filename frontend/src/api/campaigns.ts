@@ -5,10 +5,41 @@ import type { CampaignSession } from './sessions'
 
 export type { CampaignSession }
 
+export interface SavedEncounter {
+  name: string
+  entries: { monster_name: string; count: number }[]
+}
+
+export interface Npc {
+  name: string
+  role: string
+  status: 'allié' | 'neutre' | 'ennemi' | 'inconnu'
+  notes: string
+}
+
+export interface GameCalendar {
+  date: string
+  time: 'matin' | 'après-midi' | 'soir' | 'nuit'
+  weather: string
+  notes: string
+}
+
+export interface TreasureItem {
+  name: string
+  quantity: number
+  value: string
+  notes: string
+}
+
 export interface Campaign {
   id: number
   name: string
   description: string | null
+  dm_notes: string | null
+  saved_encounters: SavedEncounter[]
+  npcs: Npc[]
+  game_calendar: Partial<GameCalendar>
+  party_treasury: TreasureItem[]
   share_token: string | null
   characters: Character[]
   combatants?: Combatant[]
@@ -38,7 +69,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[] }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

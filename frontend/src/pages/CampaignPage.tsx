@@ -6,9 +6,12 @@ import {
   addCharacterToCampaign,
   removeCharacterFromCampaign,
   type Campaign,
+  type Npc,
+  type GameCalendar,
+  type TreasureItem,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, type Character } from '../api/characters'
+import { listCharacters, longRest, updateInventory, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -18,7 +21,7 @@ import {
 } from '../api/sessions'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
-import { createEcho } from '../lib/echo'
+import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { canLevelUp } from '../data/xp'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -72,6 +75,19 @@ export function CampaignPage() {
   // DM Screen
   const [showDmScreen, setShowDmScreen] = useState(false)
 
+  // Notes MJ
+  const [dmNotesDraft, setDmNotesDraft] = useState('')
+  const [savingNotes, setSavingNotes] = useState(false)
+
+  // PNJs
+  const [npcDraft, setNpcDraft] = useState<Omit<Npc, 'notes'> & { notes: string }>({ name: '', role: '', status: 'inconnu', notes: '' })
+  const [addingNpc, setAddingNpc] = useState(false)
+  const [expandedNpc, setExpandedNpc] = useState<number | null>(null)
+
+  // Calendrier
+  const [calendarDraft, setCalendarDraft] = useState<Partial<GameCalendar>>({})
+  const [savingCalendar, setSavingCalendar] = useState(false)
+
   // Sessions
   const [sessions, setSessions]               = useState<CampaignSession[]>([])
   const [addingSession, setAddingSession]     = useState(false)
@@ -79,6 +95,12 @@ export function CampaignPage() {
   const [editingSession, setEditingSession]   = useState<number | null>(null)
   const [editSessionDraft, setEditSessionDraft] = useState({ title: '', session_date: '', notes: '' })
   const [expandedSession, setExpandedSession] = useState<number | null>(null)
+
+  // Trésor partagé
+  const emptyTreasureDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
+  const [addingTreasury, setAddingTreasury]   = useState(false)
+  const [treasuryDraft, setTreasuryDraft]     = useState<TreasureItem>(emptyTreasureDraft)
+  const [distributingIdx, setDistributingIdx] = useState<number | null>(null)
 
   // Load campaign
   useEffect(() => {
@@ -88,6 +110,8 @@ export function CampaignPage() {
       .then(c => {
         setCampaign(c)
         setCharacters(c.characters)
+        setDmNotesDraft(c.dm_notes ?? '')
+        setCalendarDraft(c.game_calendar ?? {})
       })
       .catch(() => navigate('/campaigns'))
       .finally(() => setLoading(false))
@@ -101,7 +125,7 @@ export function CampaignPage() {
   // Real-time WS subscription per character
   const charIds = characters.map(c => c.id).join(',')
   useEffect(() => {
-    if (!token || characters.length === 0) return
+    if (!token || characters.length === 0 || !REVERB_CONFIGURED) return
     const echo = createEcho(token)
     characters.forEach(c => {
       echo.private(`character.${c.id}`).listen('.character.updated', (e: { character: Character }) => {
@@ -227,6 +251,50 @@ export function CampaignPage() {
     if (expandedSession === sessionId) setExpandedSession(null)
   }
 
+  async function handleSaveDmNotes() {
+    if (!campaign) return
+    setSavingNotes(true)
+    try {
+      const updated = await updateCampaign(campaign.id, { dm_notes: dmNotesDraft })
+      setCampaign(updated)
+    } finally { setSavingNotes(false) }
+  }
+
+  async function handleSaveCalendar(patch: Partial<GameCalendar>) {
+    if (!campaign) return
+    const next = { ...calendarDraft, ...patch }
+    setCalendarDraft(next)
+    setSavingCalendar(true)
+    try {
+      const updated = await updateCampaign(campaign.id, { game_calendar: next })
+      setCampaign(updated)
+    } finally { setSavingCalendar(false) }
+  }
+
+  async function handleAddNpc() {
+    if (!campaign || !npcDraft.name.trim()) return
+    const next: Npc[] = [...(campaign.npcs ?? []), { ...npcDraft, name: npcDraft.name.trim() }]
+    const updated = await updateCampaign(campaign.id, { npcs: next })
+    setCampaign(updated)
+    setNpcDraft({ name: '', role: '', status: 'inconnu', notes: '' })
+    setAddingNpc(false)
+  }
+
+  async function handleDeleteNpc(index: number) {
+    if (!campaign) return
+    const next = (campaign.npcs ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaign.id, { npcs: next })
+    setCampaign(updated)
+    if (expandedNpc === index) setExpandedNpc(null)
+  }
+
+  async function handleUpdateNpcStatus(index: number, status: Npc['status']) {
+    if (!campaign) return
+    const next = (campaign.npcs ?? []).map((n, i) => i === index ? { ...n, status } : n)
+    const updated = await updateCampaign(campaign.id, { npcs: next })
+    setCampaign(updated)
+  }
+
   async function handleGroupLongRest() {
     if (restingAll || characters.length === 0) return
     setRestingAll(true)
@@ -238,6 +306,43 @@ export function CampaignPage() {
     } finally {
       setRestingAll(false)
     }
+  }
+
+  async function handleAddTreasureItem() {
+    if (!campaign || !treasuryDraft.name.trim()) return
+    const next = [...(campaign.party_treasury ?? []), { ...treasuryDraft, name: treasuryDraft.name.trim() }]
+    const updated = await updateCampaign(campaign.id, { party_treasury: next })
+    setCampaign(updated)
+    setTreasuryDraft(emptyTreasureDraft())
+    setAddingTreasury(false)
+  }
+
+  async function handleRemoveTreasureItem(index: number) {
+    if (!campaign) return
+    const next = (campaign.party_treasury ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaign.id, { party_treasury: next })
+    setCampaign(updated)
+    if (distributingIdx === index) setDistributingIdx(null)
+  }
+
+  async function handleDistributeItem(index: number, character: Character) {
+    if (!campaign) return
+    const item = campaign.party_treasury[index]
+    const existingItems = character.inventory?.items ?? []
+    const existing = existingItems.findIndex(i => i.name === item.name && i.value === item.value)
+    let nextItems
+    if (existing >= 0) {
+      nextItems = existingItems.map((i, idx) =>
+        idx === existing ? { ...i, quantity: i.quantity + item.quantity } : i
+      )
+    } else {
+      nextItems = [...existingItems, { name: item.name, quantity: item.quantity, weight: 0, value: item.value, notes: item.notes, equipped: false }]
+    }
+    await updateInventory(character.id, nextItems)
+    const next = (campaign.party_treasury ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaign.id, { party_treasury: next })
+    setCampaign(updated)
+    setDistributingIdx(null)
   }
 
   async function handleLogout() {
@@ -520,20 +625,59 @@ export function CampaignPage() {
                           )}
                         </div>
 
-                        {/* Resources */}
-                        {c.resources.length > 0 && (
-                          <div className="hidden lg:flex items-center gap-1.5 shrink-0 flex-wrap max-w-[180px]">
-                            {c.resources.map((r, i) => (
-                              <span key={i} className={`text-xs rounded px-1.5 py-0.5 border ${
-                                r.current === 0
-                                  ? 'bg-stone-800 border-stone-700 text-stone-600'
-                                  : 'bg-stone-800 border-stone-600 text-stone-300'
-                              }`}>
-                                {r.name} {r.current}/{r.max}
-                              </span>
-                            ))}
-                          </div>
-                        )}
+                        {/* Spell slots + exhaustion + concentration */}
+                        <div className="hidden xl:flex flex-col gap-1 shrink-0 min-w-[120px]">
+                          {c.state.concentrating_on && (
+                            <span className="text-xs bg-violet-900/50 border border-violet-700/50 text-violet-300 rounded px-1.5 py-0.5 truncate max-w-[140px]" title={`◈ ${c.state.concentrating_on}`}>
+                              ◈ {c.state.concentrating_on}
+                            </span>
+                          )}
+                          {c.state.exhaustion_level > 0 && (
+                            <span className={`text-xs rounded px-1.5 py-0.5 border ${
+                              c.state.exhaustion_level <= 2 ? 'bg-amber-900/40 border-amber-700/50 text-amber-400' :
+                              c.state.exhaustion_level <= 4 ? 'bg-orange-900/40 border-orange-700/50 text-orange-400' :
+                              'bg-red-900/40 border-red-700/50 text-red-400'
+                            }`}>
+                              Épuisement {c.state.exhaustion_level}
+                            </span>
+                          )}
+                          {c.spellcasting.ability && Object.entries(c.spellcasting.slots)
+                            .filter(([, s]) => s.max > 0)
+                            .sort(([a], [b]) => Number(a) - Number(b))
+                            .slice(0, 4)
+                            .map(([lvl, slot]) => {
+                              const available = slot.max - slot.used
+                              return (
+                                <div key={lvl} className="flex items-center gap-1">
+                                  <span className="text-stone-600 text-xs w-3">{lvl}</span>
+                                  <div className="flex gap-0.5">
+                                    {Array.from({ length: slot.max }, (_, i) => (
+                                      <span
+                                        key={i}
+                                        className={`w-2.5 h-2.5 rounded-full border ${
+                                          i < available ? 'bg-violet-500 border-violet-400' : 'bg-transparent border-stone-600'
+                                        }`}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )
+                            })
+                          }
+                          {c.resources.length > 0 && (
+                            <div className="flex flex-wrap gap-1">
+                              {c.resources.map((r, i) => (
+                                <span key={i} className={`text-xs rounded px-1.5 py-0.5 border ${
+                                  r.current === 0
+                                    ? 'bg-stone-800 border-stone-700 text-stone-600'
+                                    : 'bg-stone-800 border-stone-600 text-stone-300'
+                                }`}>
+                                  {r.name} {r.current}/{r.max}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
 
                         {/* Link arrow */}
                         <span className="text-stone-700 group-hover:text-stone-500 text-sm transition-colors shrink-0 relative z-10">↗</span>
@@ -558,7 +702,16 @@ export function CampaignPage() {
 
                     {/* Header */}
                     <div className="flex items-start justify-between mb-3">
-                      <div>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {c.portrait_url && (
+                          <img
+                            src={c.portrait_url}
+                            alt={c.name}
+                            className="w-10 h-10 rounded-full object-cover shrink-0 border border-stone-700"
+                            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                          />
+                        )}
+                        <div>
                         <div className="flex items-center gap-2">
                           <h3 className={`font-semibold text-sm ${isDying ? 'text-red-400' : 'text-white'}`}>
                             {c.name}
@@ -572,6 +725,7 @@ export function CampaignPage() {
                         <p className="text-stone-500 text-xs mt-0.5">
                           {c.race} · {c.character_class} · Niv. {c.level}
                         </p>
+                        </div>
                       </div>
                       {/* Remove button */}
                       <div className="relative z-10 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -652,6 +806,327 @@ export function CampaignPage() {
                   </div>
                 )
               })}
+            </div>
+          )}
+        </div>
+
+        {/* Notes privées MJ */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-stone-300 text-sm font-semibold">Notes privées MJ</h2>
+              <p className="text-stone-500 text-xs mt-0.5">Visibles uniquement par vous — non partagées</p>
+            </div>
+            {savingNotes && <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />}
+          </div>
+          <textarea
+            value={dmNotesDraft}
+            onChange={e => setDmNotesDraft(e.target.value)}
+            onBlur={handleSaveDmNotes}
+            placeholder="Notes de préparation, secrets, PNJ, lieux, intrigues…"
+            rows={6}
+            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+          />
+        </div>
+
+        {/* Calendrier de campagne */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-stone-300 text-sm font-semibold">Calendrier de campagne</h2>
+            {savingCalendar && <div className="w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin shrink-0" />}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-stone-500 text-xs block mb-1">Date en jeu</label>
+              <input
+                type="text"
+                placeholder="ex. 14 Marpenoth, an 1492…"
+                value={calendarDraft.date ?? ''}
+                onChange={e => setCalendarDraft(d => ({ ...d, date: e.target.value }))}
+                onBlur={() => handleSaveCalendar({ date: calendarDraft.date })}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-stone-500 text-xs block mb-1">Moment de la journée</label>
+              <select
+                value={calendarDraft.time ?? ''}
+                onChange={e => handleSaveCalendar({ time: e.target.value as GameCalendar['time'] })}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors"
+              >
+                <option value="">—</option>
+                <option value="matin">🌅 Matin</option>
+                <option value="après-midi">☀️ Après-midi</option>
+                <option value="soir">🌆 Soir</option>
+                <option value="nuit">🌙 Nuit</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-stone-500 text-xs block mb-1">Météo</label>
+              <input
+                type="text"
+                placeholder="ex. Ensoleillé, Orage, Brouillard…"
+                value={calendarDraft.weather ?? ''}
+                onChange={e => setCalendarDraft(d => ({ ...d, weather: e.target.value }))}
+                onBlur={() => handleSaveCalendar({ weather: calendarDraft.weather })}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+              />
+            </div>
+            <div>
+              <label className="text-stone-500 text-xs block mb-1">Note rapide</label>
+              <input
+                type="text"
+                placeholder="ex. Pleine lune, marché à Phandalin…"
+                value={calendarDraft.notes ?? ''}
+                onChange={e => setCalendarDraft(d => ({ ...d, notes: e.target.value }))}
+                onBlur={() => handleSaveCalendar({ notes: calendarDraft.notes })}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+              />
+            </div>
+          </div>
+        </div>
+
+        {/* Tracker de PNJs */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              PNJ rencontrés ({(campaign.npcs ?? []).length})
+            </h2>
+            <button
+              onClick={() => { setAddingNpc(v => !v); setNpcDraft({ name: '', role: '', status: 'inconnu', notes: '' }) }}
+              className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors"
+            >
+              {addingNpc ? 'Annuler' : '+ Ajouter un PNJ'}
+            </button>
+          </div>
+
+          {addingNpc && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 mb-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  type="text"
+                  placeholder="Nom *"
+                  value={npcDraft.name}
+                  onChange={e => setNpcDraft(d => ({ ...d, name: e.target.value }))}
+                  autoFocus
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+                <input
+                  type="text"
+                  placeholder="Rôle / occupation"
+                  value={npcDraft.role}
+                  onChange={e => setNpcDraft(d => ({ ...d, role: e.target.value }))}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+              </div>
+              <div className="flex items-center gap-3">
+                <select
+                  value={npcDraft.status}
+                  onChange={e => setNpcDraft(d => ({ ...d, status: e.target.value as Npc['status'] }))}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500 transition-colors"
+                >
+                  <option value="inconnu">❓ Inconnu</option>
+                  <option value="allié">🟢 Allié</option>
+                  <option value="neutre">🟡 Neutre</option>
+                  <option value="ennemi">🔴 Ennemi</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Notes (lieu, secret, lien…)"
+                  value={npcDraft.notes}
+                  onChange={e => setNpcDraft(d => ({ ...d, notes: e.target.value }))}
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+                <button
+                  onClick={handleAddNpc}
+                  disabled={!npcDraft.name.trim()}
+                  className="bg-violet-700 hover:bg-violet-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2 transition-colors shrink-0"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(campaign.npcs ?? []).length === 0 && !addingNpc ? (
+            <p className="text-stone-600 text-sm text-center py-6">Aucun PNJ enregistré. Ajoutez les personnages importants rencontrés par le groupe.</p>
+          ) : (
+            <div className="space-y-2">
+              {(campaign.npcs ?? []).map((npc, i) => {
+                const statusColor = npc.status === 'allié' ? 'text-emerald-400' : npc.status === 'ennemi' ? 'text-red-400' : npc.status === 'neutre' ? 'text-amber-400' : 'text-stone-400'
+                const statusIcon = npc.status === 'allié' ? '🟢' : npc.status === 'ennemi' ? '🔴' : npc.status === 'neutre' ? '🟡' : '❓'
+                return (
+                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                    <div className="flex items-center gap-3 p-3">
+                      <span className="text-base shrink-0">{statusIcon}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-stone-200 text-sm font-medium truncate">{npc.name}</p>
+                        {npc.role && <p className="text-stone-500 text-xs truncate">{npc.role}</p>}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <select
+                          value={npc.status}
+                          onChange={e => handleUpdateNpcStatus(i, e.target.value as Npc['status'])}
+                          className={`bg-transparent text-xs border-none outline-none cursor-pointer ${statusColor}`}
+                        >
+                          <option value="inconnu">Inconnu</option>
+                          <option value="allié">Allié</option>
+                          <option value="neutre">Neutre</option>
+                          <option value="ennemi">Ennemi</option>
+                        </select>
+                        {npc.notes && (
+                          <button
+                            onClick={() => setExpandedNpc(expandedNpc === i ? null : i)}
+                            className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                          >
+                            {expandedNpc === i ? '▲' : '▼'}
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteNpc(i)}
+                          className="text-stone-700 hover:text-red-400 text-xs transition-colors"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                    {expandedNpc === i && npc.notes && (
+                      <div className="px-4 pb-3 pt-0">
+                        <p className="text-stone-400 text-xs leading-relaxed">{npc.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Trésor partagé */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Trésor du groupe ({(campaign?.party_treasury ?? []).length})
+            </h2>
+            <button
+              onClick={() => { setAddingTreasury(v => !v); setTreasuryDraft(emptyTreasureDraft()) }}
+              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              {addingTreasury ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {addingTreasury && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Nom de l'objet *"
+                  value={treasuryDraft.name}
+                  onChange={e => setTreasuryDraft(d => ({ ...d, name: e.target.value }))}
+                  autoFocus
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <input
+                  type="number"
+                  min={1}
+                  placeholder="Qté"
+                  value={treasuryDraft.quantity}
+                  onChange={e => setTreasuryDraft(d => ({ ...d, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
+                  className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <input
+                  type="text"
+                  placeholder="Valeur (ex: 50 po)"
+                  value={treasuryDraft.value}
+                  onChange={e => setTreasuryDraft(d => ({ ...d, value: e.target.value }))}
+                  className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <input
+                type="text"
+                placeholder="Notes (optionnel)"
+                value={treasuryDraft.notes}
+                onChange={e => setTreasuryDraft(d => ({ ...d, notes: e.target.value }))}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddTreasureItem}
+                  disabled={!treasuryDraft.name.trim()}
+                  className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(campaign?.party_treasury ?? []).length === 0 && !addingTreasury ? (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-8 text-center">
+              <p className="text-stone-500 text-sm">
+                Aucun objet dans le trésor.{' '}
+                <button onClick={() => setAddingTreasury(true)} className="text-amber-400 hover:text-amber-300 transition-colors">
+                  Ajouter le premier
+                </button>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(campaign?.party_treasury ?? []).map((item, i) => (
+                <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-stone-100 text-sm font-semibold">{item.name}</span>
+                        {item.quantity > 1 && (
+                          <span className="text-xs bg-stone-800 border border-stone-700 text-stone-400 rounded px-1.5 py-0.5">
+                            ×{item.quantity}
+                          </span>
+                        )}
+                        {item.value && (
+                          <span className="text-xs text-amber-400 font-medium">{item.value}</span>
+                        )}
+                      </div>
+                      {item.notes && (
+                        <p className="text-stone-500 text-xs mt-1">{item.notes}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <button
+                        onClick={() => setDistributingIdx(distributingIdx === i ? null : i)}
+                        className="text-xs text-sky-400 hover:text-sky-300 transition-colors font-medium"
+                      >
+                        Distribuer
+                      </button>
+                      <button
+                        onClick={() => handleRemoveTreasureItem(i)}
+                        className="text-xs text-stone-600 hover:text-red-400 transition-colors"
+                        title="Retirer du trésor"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+
+                  {distributingIdx === i && characters.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-stone-800">
+                      <p className="text-stone-500 text-xs mb-2">Donner à :</p>
+                      <div className="flex flex-wrap gap-2">
+                        {characters.map(c => (
+                          <button
+                            key={c.id}
+                            onClick={() => handleDistributeItem(i, c)}
+                            className="text-xs bg-stone-800 hover:bg-sky-900/40 border border-stone-700 hover:border-sky-700/50 text-stone-300 hover:text-sky-200 rounded-lg px-3 py-1.5 transition-colors"
+                          >
+                            {c.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           )}
         </div>

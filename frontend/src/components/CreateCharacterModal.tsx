@@ -10,7 +10,7 @@ interface Props {
 // ── Data ──────────────────────────────────────────────────────────────────────
 
 const RACES = [
-  'Humain', 'Elfe', 'Nain', 'Halfelin', 'Gnome',
+  'Humain', 'Elfe', 'Haut-Elfe', 'Elfe Sylvestre', 'Nain', 'Halfelin', 'Gnome',
   'Demi-Elfe', 'Demi-Orc', 'Tiefelin', 'Dragonnet', 'Aasimar',
 ]
 

@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CampaignResource;
+use App\Http\Resources\CharacterResource;
 use App\Models\Campaign;
+use App\Models\Character;
 
 class ShareController extends Controller
 {
@@ -15,5 +17,12 @@ class ShareController extends Controller
             ->firstOrFail();
 
         return new CampaignResource($campaign);
+    }
+
+    public function showCharacter(string $token): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        return new CharacterResource($character);
     }
 }

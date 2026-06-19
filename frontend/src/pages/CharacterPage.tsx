@@ -888,6 +888,13 @@ export function CharacterPage() {
     handleRoll({ sides: parsed.sides, count: parsed.count, modifier: parsed.bonus, label: `Dégâts: ${macro.name}` })
   }
 
+  function rollCritMacro(macro: AttackMacro) {
+    if (!macro.crit_dice) return
+    const parsed = parseDice(macro.crit_dice)
+    if (!parsed) return
+    handleRoll({ sides: parsed.sides, count: parsed.count, modifier: parsed.bonus, label: `Critique: ${macro.name}` })
+  }
+
   // ── Ressources de classe ─────────────────────────────────────────────────────
 
   interface ResourceDraft { name: string; max: string; reset: 'short' | 'long' | 'manual' }
@@ -962,6 +969,7 @@ export function CharacterPage() {
       value:    itemDraft.value.trim(),
       notes:    itemDraft.notes.trim(),
       equipped: false,
+      magical:  false,
     }
     const next = [...character.inventory.items, item]
     const updated = await withSave(() => updateInventory(character.id, next))
@@ -988,6 +996,15 @@ export function CharacterPage() {
     if (!character) return
     const next = character.inventory.items.map((item, i) =>
       i === index ? { ...item, equipped: !item.equipped } : item,
+    )
+    const updated = await withSave(() => updateInventory(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleToggleMagical(index: number) {
+    if (!character) return
+    const next = character.inventory.items.map((item, i) =>
+      i === index ? { ...item, magical: !item.magical } : item,
     )
     const updated = await withSave(() => updateInventory(character.id, next))
     if (updated) setCharacter(updated)
@@ -2139,6 +2156,16 @@ export function CharacterPage() {
                     ))}
                   </select>
                 </div>
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Dés de critique</label>
+                  <input
+                    type="text"
+                    placeholder="2d8+3"
+                    value={macroDraft.crit_dice}
+                    onChange={e => setMacroDraft(d => ({ ...d, crit_dice: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between pt-1">
                 <button
@@ -2189,6 +2216,11 @@ export function CharacterPage() {
                           {DAMAGE_TYPES.map(([type, label]) => <option key={type} value={type}>{label}</option>)}
                         </select>
                       </div>
+                      <div>
+                        <label className="text-stone-500 text-xs mb-1 block">Dés de critique</label>
+                        <input type="text" placeholder="2d8+3" value={editMacroDraft.crit_dice} onChange={e => setEditMacroDraft(d => ({ ...d, crit_dice: e.target.value }))}
+                          className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors" />
+                      </div>
                     </div>
                     <div className="flex justify-between pt-1">
                       <button onClick={() => setEditingMacroIndex(null)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
@@ -2223,6 +2255,15 @@ export function CharacterPage() {
                     >
                       {macro.damage_dice}
                     </button>
+                    {macro.crit_dice && (
+                      <button
+                        onClick={() => { rollCritMacro(macro); setDiceOpen(true) }}
+                        className="bg-yellow-900/60 hover:bg-yellow-800/60 border border-yellow-700/50 text-yellow-300 rounded-lg px-2.5 py-1 text-xs font-medium transition-colors"
+                        title={`Critique: ${macro.crit_dice}`}
+                      >
+                        💥
+                      </button>
+                    )}
                   </div>
                   <button
                     onClick={() => { setEditingMacroIndex(i); setEditMacroDraft(draftFromMacro(macro)) }}
@@ -2602,9 +2643,22 @@ export function CharacterPage() {
                     }`}
                   />
 
+                  {/* Magical toggle */}
+                  <button
+                    onClick={() => handleToggleMagical(i)}
+                    disabled={saving}
+                    title={item.magical ? 'Objet magique' : 'Marquer comme magique'}
+                    className={`text-xs shrink-0 transition-colors disabled:cursor-not-allowed ${
+                      item.magical ? 'text-purple-400' : 'text-stone-700 hover:text-stone-500'
+                    }`}
+                  >
+                    ✦
+                  </button>
+
                   {/* Name */}
                   <span className={`flex-1 min-w-0 text-sm truncate ${item.equipped ? 'text-white font-medium' : 'text-stone-300'}`}>
                     {item.name}
+                    {item.magical && <span className="ml-1 text-purple-400 text-xs">✦</span>}
                   </span>
 
                   {/* Quantity */}

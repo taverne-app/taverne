@@ -11,10 +11,15 @@ class CampaignResource extends JsonResource
     public function toArray(Request $request): array
     {
         return [
-            'id'          => $this->id,
-            'name'        => $this->name,
-            'description' => $this->description,
-            'share_token' => $this->share_token,
+            'id'               => $this->id,
+            'name'             => $this->name,
+            'description'      => $this->description,
+            'dm_notes'         => $this->dm_notes,
+            'saved_encounters' => $this->saved_encounters ?? [],
+            'npcs'             => $this->npcs ?? [],
+            'game_calendar'    => $this->game_calendar ?? [],
+            'party_treasury'   => $this->party_treasury ?? [],
+            'share_token'      => $this->share_token,
             'characters'  => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'  => CombatantResource::collection($this->whenLoaded('combatants')),
             'sessions'    => SessionResource::collection($this->whenLoaded('sessions')),

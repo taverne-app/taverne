@@ -10,6 +10,8 @@ import { CampaignsPage } from './pages/CampaignsPage'
 import { CampaignPage } from './pages/CampaignPage'
 import { SharedCampaignPage } from './pages/SharedCampaignPage'
 import { DashboardPage } from './pages/DashboardPage'
+import { CharacterPrintPage } from './pages/CharacterPrintPage'
+import { SharedCharacterPage } from './pages/SharedCharacterPage'
 
 export default function App() {
   return (
@@ -66,7 +68,16 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/characters/:id/print"
+            element={
+              <ProtectedRoute>
+                <CharacterPrintPage />
+              </ProtectedRoute>
+            }
+          />
           <Route path="/share/:token" element={<SharedCampaignPage />} />
+          <Route path="/share/character/:token" element={<SharedCharacterPage />} />
           <Route path="*" element={<Navigate to="/dashboard" replace />} />
         </Routes>
       </BrowserRouter>
