@@ -28,6 +28,7 @@ class CombatantController extends Controller
 
         $validated = $request->validate([
             'name'            => ['required', 'string', 'max:100'],
+            'faction'         => ['sometimes', 'string', 'in:ennemi,allié,neutre'],
             'max_hp'          => ['required', 'integer', 'min:1', 'max:9999'],
             'armor_class'     => ['sometimes', 'nullable', 'integer', 'min:0', 'max:30'],
             'initiative_roll' => ['sometimes', 'nullable', 'integer', 'min:-10', 'max:30'],
@@ -91,7 +92,7 @@ class CombatantController extends Controller
         abort_if($combatant->campaign_id !== $campaign->id, 403);
 
         $request->validate([
-            'conditions'          => ['required', 'array'],
+            'conditions'          => ['present', 'array'],
             'conditions.*'        => ['string', 'in:blinded,charmed,deafened,exhaustion,frightened,grappled,incapacitated,invisible,paralyzed,petrified,poisoned,prone,restrained,stunned,unconscious'],
             'condition_durations' => ['sometimes', 'nullable', 'array'],
         ]);

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
-import { getCampaign, broadcastCombatTurn, type Campaign } from '../api/campaigns'
+import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
+import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter } from '../api/campaigns'
 import {
   listCombatants,
   createCombatant,
@@ -10,12 +11,15 @@ import {
   updateCombatantConditions,
   deleteCombatant,
   type Combatant,
+  type CombatantFaction,
 } from '../api/combatants'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
-import { createEcho } from '../lib/echo'
-import { MONSTERS, rollMonsterHp, type MonsterTemplate } from '../data/monsters'
+import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, type MonsterTemplate } from '../data/monsters'
 import { canLevelUp } from '../data/xp'
+import { CONDITIONS_FR } from '../data/conditions'
+import { ConditionTag } from '../components/ConditionTag'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -56,13 +60,6 @@ function rollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'd
   return { label: `${character.name} — Dégâts: ${macro.name}`, detail, total }
 }
 
-const CONDITIONS_FR: Record<string, string> = {
-  blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
-  exhaustion: 'Épuisé', frightened: 'Effrayé', grappled: 'Agrippé',
-  incapacitated: 'Hors de combat', invisible: 'Invisible', paralyzed: 'Paralysé',
-  petrified: 'Pétrifié', poisoned: 'Empoisonné', prone: 'À terre',
-  restrained: 'Entravé', stunned: 'Étourdi', unconscious: 'Inconscient',
-}
 
 // ── Encounter builder helpers ─────────────────────────────────────────────────
 
@@ -165,6 +162,105 @@ function InitInput({
   )
 }
 
+// ── Combat summary modal ──────────────────────────────────────────────────────
+
+function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, onClose, onReset }: {
+  roundNumber: number
+  combatants: Combatant[]
+  monsterMap: Record<number, MonsterTemplate>
+  characters: Character[]
+  onClose: () => void
+  onReset: () => void
+}) {
+  const defeated = combatants.filter(c => c.current_hp <= 0)
+  const totalXp = defeated.reduce((sum, c) => {
+    const tpl = monsterMap[c.id]
+    return sum + (tpl ? crToXp(tpl.cr) : 0)
+  }, 0)
+  const shareXp = characters.length > 0 ? Math.floor(totalXp / characters.length) : 0
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70"
+      onClick={e => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-stone-900 border border-stone-700 rounded-xl w-full max-w-md shadow-2xl mx-4">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-700">
+          <h2 className="text-amber-300 font-semibold text-base">⚔ Résumé du combat</h2>
+          <button onClick={onClose} className="text-stone-500 hover:text-stone-300 text-lg leading-none">✕</button>
+        </div>
+        <div className="px-5 py-4 space-y-4">
+          <div className="flex justify-between text-sm">
+            <span className="text-stone-400">Rounds joués</span>
+            <span className="text-stone-200 font-semibold">{roundNumber}</span>
+          </div>
+
+          <div>
+            <p className="text-stone-400 text-sm mb-1.5">Ennemis vaincus ({defeated.length})</p>
+            {defeated.length === 0 ? (
+              <p className="text-stone-600 text-xs italic">Aucun ennemi vaincu.</p>
+            ) : (
+              <ul className="space-y-1">
+                {defeated.map(c => {
+                  const tpl = monsterMap[c.id]
+                  const xp = tpl ? crToXp(tpl.cr) : 0
+                  return (
+                    <li key={c.id} className="flex justify-between text-xs">
+                      <span className="text-stone-300">{c.name}</span>
+                      {xp > 0 && <span className="text-amber-400">{xp} XP</span>}
+                    </li>
+                  )
+                })}
+              </ul>
+            )}
+          </div>
+
+          {totalXp > 0 && (
+            <div className="bg-stone-800 rounded-lg px-3 py-2 flex justify-between text-sm">
+              <span className="text-stone-400">Total XP</span>
+              <span className="text-amber-300 font-semibold">
+                {totalXp} XP{characters.length > 1 ? ` (${shareXp}/joueur)` : ''}
+              </span>
+            </div>
+          )}
+
+          {characters.length > 0 && (
+            <div>
+              <p className="text-stone-400 text-sm mb-1.5">État du groupe</p>
+              <ul className="space-y-1">
+                {characters.map(c => {
+                  const pct = c.combat.max_hp > 0 ? c.combat.current_hp / c.combat.max_hp : 0
+                  const color = pct > 0.5 ? 'text-emerald-400' : pct > 0.25 ? 'text-yellow-400' : 'text-red-400'
+                  return (
+                    <li key={c.id} className="flex justify-between text-xs">
+                      <span className="text-stone-300">{c.name}</span>
+                      <span className={color}>{c.combat.current_hp}/{c.combat.max_hp} PV</span>
+                    </li>
+                  )
+                })}
+              </ul>
+            </div>
+          )}
+        </div>
+        <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-800">
+          <button
+            onClick={onClose}
+            className="text-stone-400 hover:text-stone-200 text-sm px-3 py-1.5 rounded-lg border border-stone-700 transition-colors"
+          >
+            Fermer
+          </button>
+          <button
+            onClick={onReset}
+            className="text-stone-200 hover:text-white text-sm px-3 py-1.5 rounded-lg bg-stone-700 hover:bg-stone-600 border border-stone-600 transition-colors"
+          >
+            Réinitialiser l'initiative
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function CombatPage() {
@@ -182,6 +278,13 @@ export function CombatPage() {
   const [actionState, setActionState] = useState<Record<string, { action: boolean; bonus: boolean; reaction: boolean }>>({})
   const [expandedConditions, setExpandedConditions] = useState<number | null>(null)
   const [conditionDurationDraft, setConditionDurationDraft] = useState<Record<string, string>>({})
+  const [aoeMode, setAoeMode] = useState(false)
+  const [aoeSelected, setAoeSelected] = useState<Set<string>>(new Set())
+  const [aoeDamageInput, setAoeDamageInput] = useState('')
+  const [expandedMonster, setExpandedMonster] = useState<number | null>(null)
+  const [expandedCharacterConditions, setExpandedCharacterConditions] = useState<number | null>(null)
+  const [characterConditionDurationDraft, setCharacterConditionDurationDraft] = useState<Record<string, string>>({})
+  const [charTempHpInputs, setCharTempHpInputs] = useState<Record<number, string>>({})
   const [macroResult, setMacroResult] = useState<{ label: string; detail: string; total: number; isAttack: boolean } | null>(null)
   const macroResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [roundNumber, setRoundNumber] = useState(1)
@@ -190,6 +293,7 @@ export function CombatPage() {
   const [xpInputs, setXpInputs] = useState<Record<number, string>>({})
   const [xpResult, setXpResult] = useState<{ total: number; share: number; levelUps: string[] } | null>(null)
   const [monsterMap, setMonsterMap] = useState<Record<number, MonsterTemplate>>({})
+  const [showCombatSummary, setShowCombatSummary] = useState(false)
 
   // Combat timers
   const [timers, setTimers] = useState<{ id: number; name: string; rounds: number }[]>([])
@@ -199,24 +303,109 @@ export function CombatPage() {
   const [showTimerForm, setShowTimerForm] = useState(false)
   const timerIdRef = useRef(0)
 
+  // Manual initiative reordering
+  const [manualOrder, setManualOrder] = useState<string[] | null>(null)
+
+  // DM dice roller
+  const [dmDiceOpen, setDmDiceOpen] = useState(false)
+  const [dmDiceSides, setDmDiceSides] = useState(20)
+  const [dmDiceCount, setDmDiceCount] = useState('1')
+  const [dmDiceMod, setDmDiceMod] = useState('')
+  const [dmDiceAdv, setDmDiceAdv] = useState<'none' | 'adv' | 'dis'>('none')
+  const [dmDiceResult, setDmDiceResult] = useState<{ label: string; detail: string; total: number } | null>(null)
+  const dmDiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // Encounter builder
   const [showEncounterBuilder, setShowEncounterBuilder] = useState(false)
   const [encounterSearch, setEncounterSearch] = useState('')
   const [encounterEntries, setEncounterEntries] = useState<{ monster: MonsterTemplate; count: number }[]>([])
+  const [saveEncounterName, setSaveEncounterName] = useState('')
+  const [showSavedEncounters, setShowSavedEncounters] = useState(false)
+
+  // Saving throws
+  const [showSavingThrow, setShowSavingThrow] = useState(false)
+  const [savingThrowAbility, setSavingThrowAbility] = useState<'strength'|'dexterity'|'constitution'|'intelligence'|'wisdom'|'charisma'>('dexterity')
+  const [savingThrowDC, setSavingThrowDC] = useState('15')
+  const [savingThrowResults, setSavingThrowResults] = useState<{ name: string; roll: number; mod: number; total: number; success: boolean }[] | null>(null)
+
+  // Combat log
+  interface CombatLogEntry { id: number; time: string; type: 'turn' | 'roll' | 'hp' | 'xp' | 'join'; text: string }
+  const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([])
+  const [showCombatLog, setShowCombatLog] = useState(false)
+  const logIdRef = useRef(0)
+
+  function logEvent(type: CombatLogEntry['type'], text: string) {
+    const entry: CombatLogEntry = {
+      id: ++logIdRef.current,
+      time: new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      type,
+      text,
+    }
+    setCombatLog(prev => [entry, ...prev].slice(0, 150))
+  }
 
   function handleRollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage') {
     const result = rollMacro(character, macro, type)
     if (macroResultTimer.current) clearTimeout(macroResultTimer.current)
     setMacroResult({ ...result, isAttack: type === 'attack' })
     macroResultTimer.current = setTimeout(() => setMacroResult(null), 6000)
+    logEvent('roll', `${character.name} · ${macro.name} ${type === 'attack' ? 'Att.' : 'Dég.'} → ${result.total}  (${result.detail})`)
+  }
+
+  function handleMonsterRoll(combatantId: number, m: MonsterTemplate, type: 'attack' | 'damage') {
+    const cbName = combatants.find(c => c.id === combatantId)?.name ?? m.name
+    if (type === 'attack') {
+      const bonus = crToAttackBonus(m.cr)
+      const roll = Math.floor(Math.random() * 20) + 1
+      const total = roll + bonus
+      const nat = roll === 20 ? ' (critique!)' : roll === 1 ? ' (échec crit.)' : ''
+      const detail = `[${roll}]${bonus >= 0 ? `+${bonus}` : `${bonus}`}${nat}`
+      const label = `${cbName} — Attaque`
+      if (macroResultTimer.current) clearTimeout(macroResultTimer.current)
+      setMacroResult({ label, detail, total, isAttack: true })
+      macroResultTimer.current = setTimeout(() => setMacroResult(null), 6000)
+      logEvent('roll', `${cbName} · Attaque → ${total} (${detail})`)
+    } else {
+      const { count, sides, bonus } = crToDamageDice(m.cr)
+      const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1)
+      const total = rolls.reduce((s, r) => s + r, 0) + bonus
+      const detail = `[${rolls.join('+')}]${bonus !== 0 ? (bonus >= 0 ? `+${bonus}` : `${bonus}`) : ''}`
+      const label = `${cbName} — Dégâts (${count}d${sides}${bonus >= 0 ? `+${bonus}` : `${bonus}`})`
+      if (macroResultTimer.current) clearTimeout(macroResultTimer.current)
+      setMacroResult({ label, detail, total, isAttack: false })
+      macroResultTimer.current = setTimeout(() => setMacroResult(null), 6000)
+      logEvent('roll', `${cbName} · Dégâts → ${total} (${detail})`)
+    }
   }
 
   // Combatant HP input per combatant id
   const [combatantHpInputs, setCombatantHpInputs] = useState<Record<number, string>>({})
 
+  function handleDmRoll() {
+    const sides = dmDiceSides
+    const count = Math.max(1, parseInt(dmDiceCount, 10) || 1)
+    const mod = parseInt(dmDiceMod, 10) || 0
+    let rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1)
+    let chosen = rolls
+    let advLabel = ''
+    if (sides === 20 && count === 1 && dmDiceAdv !== 'none') {
+      const r2 = Math.floor(Math.random() * 20) + 1
+      rolls = [rolls[0], r2]
+      chosen = dmDiceAdv === 'adv' ? [Math.max(...rolls)] : [Math.min(...rolls)]
+      advLabel = dmDiceAdv === 'adv' ? ' (avantage)' : ' (désavantage)'
+    }
+    const total = chosen.reduce((s, r) => s + r, 0) + mod
+    const detail = `[${rolls.join(', ')}]${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}${advLabel}`
+    const label = `MJ — ${count}d${sides}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}`
+    if (dmDiceTimer.current) clearTimeout(dmDiceTimer.current)
+    setDmDiceResult({ label, detail, total })
+    dmDiceTimer.current = setTimeout(() => setDmDiceResult(null), 8000)
+    logEvent('roll', `${label} → ${total} (${detail})`)
+  }
+
   // Add combatant form
   const [addingCombatant, setAddingCombatant] = useState(false)
-  const [combatantDraft, setCombatantDraft] = useState({ name: '', max_hp: '', ac: '', initiative: '' })
+  const [combatantDraft, setCombatantDraft] = useState({ name: '', faction: 'ennemi' as CombatantFaction, max_hp: '', ac: '', initiative: '' })
   const [showBestiary, setShowBestiary] = useState(false)
   const [bestiarySearch, setBestiarySearch] = useState('')
   const [addedMonster, setAddedMonster] = useState<string | null>(null)
@@ -244,7 +433,7 @@ export function CombatPage() {
 
   // WS subscriptions
   useEffect(() => {
-    if (!token || (characters.length === 0 && combatants.length === 0)) return
+    if (!token || (characters.length === 0 && combatants.length === 0) || !REVERB_CONFIGURED) return
 
     const echo = createEcho(token)
     echoRef.current = echo
@@ -293,7 +482,37 @@ export function CombatPage() {
   const withoutRoll = allRows.filter(r => r.initiativeRoll == null)
   const sorted = [...withRoll, ...withoutRoll]
 
-  const activeCombatant = withRoll[activeTurn % Math.max(1, withRoll.length)] ?? null
+  // Manual order: reorder sorted rows; new rows not yet in manualOrder are appended
+  const displayRows = manualOrder
+    ? [
+        ...manualOrder.flatMap(id => { const r = sorted.find(r => rowId(r) === id); return r ? [r] : [] }),
+        ...sorted.filter(r => !manualOrder.includes(rowId(r))),
+      ]
+    : sorted
+  const withRollDisplay = displayRows.filter(r => r.initiativeRoll != null)
+
+  const activeCombatant = withRollDisplay[activeTurn % Math.max(1, withRollDisplay.length)] ?? null
+
+  const { setTitle, notify } = useTabNotify()
+
+  // Update tab title on every turn change; blink if tab is hidden.
+  useEffect(() => {
+    const name = activeCombatant?.data.name ?? null
+    if (!name) { setTitle('Taverne'); return }
+    const msg = `⚔ ${name} — Taverne`
+    if (document.hidden) notify(msg)
+    else setTitle(msg)
+
+    // Notify CharacterPage tabs via BroadcastChannel
+    if (activeCombatant?.kind === 'character') {
+      try {
+        const bc = new BroadcastChannel('taverne-combat-turn')
+        bc.postMessage({ characterId: activeCombatant.data.id, name })
+        bc.close()
+      } catch { /* unsupported */ }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTurn, activeCombatant?.data.id])
 
   function updateCharacter(updated: Character) {
     setCharacters(prev => prev.map(c => c.id === updated.id ? updated : c))
@@ -325,6 +544,7 @@ export function CombatPage() {
         setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
       }),
     ])
+    setManualOrder(null) // reset manual order when initiative is rerolled
   }
 
   async function handleCombatantHp(combatantId: number, type: 'damage' | 'heal') {
@@ -332,9 +552,74 @@ export function CombatPage() {
     const raw = combatantHpInputs[combatantId] ?? ''
     const amount = parseInt(raw, 10)
     if (!amount || amount <= 0) return
+    const cbName = combatants.find(c => c.id === combatantId)?.name ?? '?'
     const updated = await updateCombatantHp(campaignId, combatantId, amount, type)
     setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
     setCombatantHpInputs(prev => ({ ...prev, [combatantId]: '' }))
+    logEvent('hp', `${cbName} : ${type === 'damage' ? `-${amount}` : `+${amount}`} PV`)
+  }
+
+  async function handleSetCharacterTempHp(character: Character) {
+    const raw = charTempHpInputs[character.id] ?? ''
+    const amount = parseInt(raw, 10)
+    if (!amount || amount < 0) return
+    const updated = await updateHp(character.id, amount, 'temporary')
+    updateCharacter(updated)
+    setCharTempHpInputs(prev => ({ ...prev, [character.id]: '' }))
+    logEvent('hp', `${character.name} : +${amount} PV temporaires`)
+  }
+
+  async function handleToggleCharacterCondition(id: number, condition: string, duration?: number) {
+    const char = characters.find(c => c.id === id)
+    if (!char) return
+    const isActive = char.state.conditions.includes(condition)
+    const nextConditions = isActive
+      ? char.state.conditions.filter(c => c !== condition)
+      : [...char.state.conditions, condition]
+    const nextDurations = { ...char.state.condition_durations }
+    if (isActive) {
+      delete nextDurations[condition]
+    } else if (duration) {
+      nextDurations[condition] = duration
+    }
+    const updated = await updateConditions(id, nextConditions, nextDurations)
+    updateCharacter(updated)
+  }
+
+  function toggleAoeSelect(id: string) {
+    setAoeSelected(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  async function handleAoeDamage(type: 'damage' | 'heal') {
+    const amount = parseInt(aoeDamageInput, 10)
+    if (!amount || amount <= 0 || aoeSelected.size === 0) return
+    const names: string[] = []
+    await Promise.all(Array.from(aoeSelected).map(async id => {
+      const [kind, rawId] = id.split('-')
+      const numId = parseInt(rawId, 10)
+      if (kind === 'character') {
+        const char = characters.find(c => c.id === numId)
+        if (char) names.push(char.name)
+        const updated = await updateHp(numId, amount, type)
+        updateCharacter(updated)
+      } else if (kind === 'combatant' && campaignId) {
+        const cb = combatants.find(c => c.id === numId)
+        if (cb) names.push(cb.name)
+        const updated = await updateCombatantHp(campaignId, numId, amount, type)
+        setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+      }
+    }))
+    if (names.length > 0) {
+      logEvent('hp', `Zone ${type === 'damage' ? `−${amount} PV` : `+${amount} PV`} → ${names.join(', ')}`)
+    }
+    setAoeDamageInput('')
+    setAoeSelected(new Set())
+    setAoeMode(false)
   }
 
   async function handleDeleteCombatant(id: number) {
@@ -345,6 +630,11 @@ export function CombatPage() {
 
   async function handleToggleInspiration(character: Character) {
     const updated = await updateInspiration(character.id, !character.combat.inspiration)
+    updateCharacter(updated)
+  }
+
+  async function handleUseSlot(character: Character, level: number, action: 'use' | 'restore') {
+    const updated = await useSpellSlot(character.id, level, action)
     updateCharacter(updated)
   }
 
@@ -372,13 +662,15 @@ export function CombatPage() {
     if (!maxHp || maxHp < 1) return
     const created = await createCombatant(campaignId, {
       name: combatantDraft.name.trim(),
+      faction: combatantDraft.faction,
       max_hp: maxHp,
       armor_class: combatantDraft.ac ? parseInt(combatantDraft.ac, 10) || null : null,
       initiative_roll: combatantDraft.initiative ? parseInt(combatantDraft.initiative, 10) || null : null,
     })
     setCombatants(prev => [...prev, created])
-    setCombatantDraft({ name: '', max_hp: '', ac: '', initiative: '' })
+    setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' })
     setAddingCombatant(false)
+    logEvent('join', `${created.name} entre dans le combat`)
   }
 
   async function handleAddMonster(m: MonsterTemplate) {
@@ -395,6 +687,7 @@ export function CombatPage() {
     setMonsterMap(prev => ({ ...prev, [created.id]: m }))
     setAddedMonster(m.name)
     setTimeout(() => setAddedMonster(null), 2000)
+    logEvent('join', `${m.name} entre dans le combat (${hp} PV, CA ${m.ac})`)
   }
 
   async function handleDeathSave(character: Character, type: 'successes' | 'failures', value: number) {
@@ -413,6 +706,38 @@ export function CombatPage() {
     setEncounterEntries([])
     setShowEncounterBuilder(false)
     setEncounterSearch('')
+  }
+
+  async function handleSaveEncounter() {
+    if (!campaign || !campaignId || !saveEncounterName.trim() || encounterEntries.length === 0) return
+    const newSaved: SavedEncounter = {
+      name: saveEncounterName.trim(),
+      entries: encounterEntries.map(e => ({ monster_name: e.monster.name, count: e.count })),
+    }
+    const existing = campaign.saved_encounters ?? []
+    const updated = await updateCampaign(campaignId, {
+      saved_encounters: [...existing, newSaved],
+    })
+    setCampaign(updated)
+    setSaveEncounterName('')
+  }
+
+  async function handleDeleteSavedEncounter(index: number) {
+    if (!campaign || !campaignId) return
+    const next = (campaign.saved_encounters ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaignId, { saved_encounters: next })
+    setCampaign(updated)
+  }
+
+  function handleLoadSavedEncounter(saved: SavedEncounter) {
+    const entries = saved.entries.flatMap(e => {
+      const monster = MONSTERS.find(m => m.name === e.monster_name)
+      if (!monster) return []
+      return [{ monster, count: e.count }]
+    })
+    setEncounterEntries(entries)
+    setShowSavedEncounters(false)
+    setShowEncounterBuilder(true)
   }
 
   async function handleLogout() {
@@ -439,6 +764,27 @@ export function CombatPage() {
     if (!campaignId || combatants.length === 0) return
     await Promise.all(combatants.map(c => deleteCombatant(campaignId, c.id)))
     setCombatants([])
+  }
+
+  function handleGroupSavingThrow() {
+    if (characters.length === 0) return
+    const dc = parseInt(savingThrowDC, 10) || 15
+    const ABILITY_LABELS: Record<string, string> = {
+      strength: 'FOR', dexterity: 'DEX', constitution: 'CON',
+      intelligence: 'INT', wisdom: 'SAG', charisma: 'CHA',
+    }
+    const results = characters.map(c => {
+      const roll = Math.floor(Math.random() * 20) + 1
+      const st = c.saving_throws[savingThrowAbility]
+      const mod = st?.modifier ?? 0
+      const total = roll + mod
+      return { name: c.name, roll, mod, total, success: total >= dc }
+    })
+    setSavingThrowResults(results)
+    const label = ABILITY_LABELS[savingThrowAbility]
+    results.forEach(r => {
+      logEvent('roll', `${r.name} JS ${label} DD${dc} : ${r.roll}${r.mod >= 0 ? '+' : ''}${r.mod}=${r.total} — ${r.success ? '✓ Réussi' : '✗ Raté'}`)
+    })
   }
 
   function getActions(key: string) {
@@ -482,17 +828,35 @@ export function CombatPage() {
     }
   }
 
+  function moveRow(id: string, direction: 'up' | 'down') {
+    const currentOrder = manualOrder ?? sorted.map(rowId)
+    const idx = currentOrder.indexOf(id)
+    if (idx < 0) return
+    const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+    if (targetIdx < 0 || targetIdx >= currentOrder.length) return
+    const next = [...currentOrder]
+    ;[next[idx], next[targetIdx]] = [next[targetIdx], next[idx]]
+    setManualOrder(next)
+    // Keep activeTurn pointing at the same combatant
+    if (activeCombatant) {
+      const activeId = rowId(activeCombatant)
+      const newWithRollIds = next.filter(nId => sorted.find(r => rowId(r) === nId)?.initiativeRoll != null)
+      const newIdx = newWithRollIds.indexOf(activeId)
+      if (newIdx >= 0 && newIdx !== activeTurn) setActiveTurn(newIdx)
+    }
+  }
+
   function nextTurn() {
-    if (withRoll.length === 0) return
-    const currentRow = withRoll[activeTurn % withRoll.length]
+    if (withRollDisplay.length === 0) return
+    const currentRow = withRollDisplay[activeTurn % withRollDisplay.length]
     if (currentRow) decrementConditions(currentRow)
 
-    const next = (activeTurn + 1) % withRoll.length
+    const next = (activeTurn + 1) % withRollDisplay.length
     const newRound = next === 0 ? roundNumber + 1 : roundNumber
     if (next === 0) setRoundNumber(newRound)
     setActiveTurn(next)
 
-    const nextRow = withRoll[next]
+    const nextRow = withRollDisplay[next]
     if (nextRow) {
       setActionState(prev => ({ ...prev, [rowId(nextRow)]: { action: false, bonus: false, reaction: false } }))
     }
@@ -505,6 +869,10 @@ export function CombatPage() {
         setExpiredAlert(expiredNow)
         setTimeout(() => setExpiredAlert([]), 5000)
       }
+    }
+
+    if (nextRow) {
+      logEvent('turn', `Tour ${newRound} — ${nextRow.data.name}`)
     }
 
     if (campaignId && campaign?.share_token) {
@@ -528,12 +896,13 @@ export function CombatPage() {
       .filter((c, i) => canLevelUp(c.level, c.experience_points) && !canLevelUp(characters[i].level, characters[i].experience_points))
       .map(c => c.name)
     setXpResult({ total, share, levelUps })
+    logEvent('xp', `XP : +${share} XP / personnage (${total} total, ${characters.length} joueur${characters.length > 1 ? 's' : ''})`)
     setTimeout(() => { setXpResult(null); setShowXpPanel(false); setXpInputs({}) }, 8000)
   }
 
   function prevTurn() {
-    if (withRoll.length === 0) return
-    setActiveTurn(t => (t - 1 + withRoll.length) % withRoll.length)
+    if (withRollDisplay.length === 0) return
+    setActiveTurn(t => (t - 1 + withRollDisplay.length) % withRollDisplay.length)
   }
 
   if (loading) {
@@ -553,7 +922,7 @@ export function CombatPage() {
   const activeRowSubtitle = activeCombatant
     ? activeCombatant.kind === 'character'
       ? `${activeCombatant.data.race} · ${activeCombatant.data.character_class} · Niv. ${activeCombatant.data.level} · ${activeCombatant.data.combat.current_hp}/${activeCombatant.data.combat.max_hp} PV`
-      : `Ennemi · ${activeCombatant.data.current_hp}/${activeCombatant.data.max_hp} PV${activeCombatant.data.armor_class ? ` · CA ${activeCombatant.data.armor_class}` : ''}`
+      : `${activeCombatant.data.faction === 'allié' ? 'Allié' : activeCombatant.data.faction === 'neutre' ? 'Neutre' : 'Ennemi'} · ${activeCombatant.data.current_hp}/${activeCombatant.data.max_hp} PV${activeCombatant.data.armor_class ? ` · CA ${activeCombatant.data.armor_class}` : ''}`
     : null
 
   return (
@@ -575,6 +944,16 @@ export function CombatPage() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
+            <button
+              onClick={() => setDmDiceOpen(v => !v)}
+              className={`text-sm font-bold px-3 py-1 rounded-lg border transition-colors ${
+                dmDiceOpen
+                  ? 'bg-rose-600 border-rose-500 text-white'
+                  : 'bg-stone-800 border-stone-700 text-stone-300 hover:border-stone-500'
+              }`}
+            >
+              ⚅ Dés
+            </button>
             {campaign?.share_token && (
               <button
                 onClick={() => {
@@ -603,10 +982,91 @@ export function CombatPage() {
         </div>
       </header>
 
+      {/* DM dice panel — fixed bottom overlay */}
+      {dmDiceOpen && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-stone-900 border-t border-stone-700 shadow-2xl">
+          <div className="max-w-5xl mx-auto px-4 py-4 space-y-3">
+            <div className="flex items-center gap-4 flex-wrap">
+              {/* Dice selector */}
+              <div className="flex gap-1.5 flex-wrap">
+                {[4, 6, 8, 10, 12, 20, 100].map(s => (
+                  <button
+                    key={s}
+                    onClick={() => { setDmDiceSides(s); if (s !== 20) setDmDiceAdv('none') }}
+                    className={`w-9 h-9 rounded-lg border text-xs font-bold transition-colors ${
+                      dmDiceSides === s
+                        ? 'bg-rose-600 border-rose-500 text-white'
+                        : 'bg-stone-800 border-stone-700 text-stone-300 hover:border-stone-500'
+                    }`}
+                  >
+                    d{s}
+                  </button>
+                ))}
+              </div>
+              {/* Count */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-stone-500 text-xs">×</span>
+                <input
+                  type="number" min={1} max={20} value={dmDiceCount}
+                  onChange={e => setDmDiceCount(e.target.value)}
+                  className="w-12 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              {/* Modifier */}
+              <div className="flex items-center gap-1.5">
+                <span className="text-stone-500 text-xs">Mod.</span>
+                <input
+                  type="number" value={dmDiceMod} onChange={e => setDmDiceMod(e.target.value)}
+                  placeholder="0"
+                  className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              {/* Advantage (d20 only) */}
+              {dmDiceSides === 20 && (
+                <div className="flex gap-1">
+                  {(['none', 'adv', 'dis'] as const).map(mode => (
+                    <button key={mode} onClick={() => setDmDiceAdv(mode)}
+                      className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
+                        dmDiceAdv === mode
+                          ? mode === 'adv' ? 'bg-emerald-700 border-emerald-600 text-white'
+                          : mode === 'dis' ? 'bg-red-800 border-red-700 text-white'
+                          : 'bg-stone-600 border-stone-500 text-white'
+                          : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
+                      }`}
+                    >
+                      {mode === 'none' ? 'Normal' : mode === 'adv' ? 'Avantage' : 'Désav.'}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Roll button */}
+              <button
+                onClick={handleDmRoll}
+                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm rounded-lg px-5 py-2 transition-colors"
+              >
+                Lancer
+              </button>
+              {/* Close */}
+              <button onClick={() => setDmDiceOpen(false)} className="ml-auto text-stone-500 hover:text-stone-300 text-lg transition-colors">×</button>
+            </div>
+            {/* Result */}
+            {dmDiceResult && (
+              <div className="flex items-center gap-4 bg-stone-800 rounded-xl px-4 py-2">
+                <span className="text-rose-300 font-black text-4xl tabular-nums">{dmDiceResult.total}</span>
+                <div>
+                  <p className="text-stone-400 text-xs">{dmDiceResult.label}</p>
+                  <p className="text-stone-500 text-xs font-mono">{dmDiceResult.detail}</p>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
 
         {/* Turn controls */}
-        {withRoll.length > 0 && (
+        {withRollDisplay.length > 0 && (
           <div className="bg-stone-900 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
             <div>
               <div className="flex items-center gap-3 mb-0.5">
@@ -628,7 +1088,7 @@ export function CombatPage() {
                 ← Précédent
               </button>
               <span className="text-stone-500 text-sm">
-                {activeTurn + 1}/{withRoll.length}
+                {activeTurn + 1}/{withRollDisplay.length}
               </span>
               <button
                 onClick={nextTurn}
@@ -641,7 +1101,7 @@ export function CombatPage() {
         )}
 
         {/* Combat timers */}
-        {(timers.length > 0 || withRoll.length > 0) && (
+        {(timers.length > 0 || withRollDisplay.length > 0) && (
           <div className="bg-stone-900 border border-stone-800 rounded-xl px-4 py-3">
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-stone-600 text-xs uppercase tracking-widest shrink-0">Effets</span>
@@ -778,6 +1238,38 @@ export function CombatPage() {
                   ⚅ Lancer l'initiative
                 </button>
               )}
+              {(characters.length > 0 || combatants.length > 0) && (
+                <button
+                  onClick={() => {
+                    if (manualOrder) {
+                      setManualOrder(null)
+                    } else {
+                      setManualOrder(sorted.map(rowId))
+                    }
+                  }}
+                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
+                    manualOrder
+                      ? 'bg-sky-700/40 border-sky-500 text-sky-300'
+                      : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'
+                  }`}
+                  title="Réordonner manuellement l'initiative"
+                >
+                  ⇅ Réordonner
+                </button>
+              )}
+              {(characters.length > 0 || combatants.length > 0) && (
+                <button
+                  onClick={() => { setAoeMode(v => !v); setAoeSelected(new Set()); setAoeDamageInput('') }}
+                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
+                    aoeMode
+                      ? 'bg-orange-700/40 border-orange-500 text-orange-300'
+                      : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-orange-600/50 hover:text-orange-400'
+                  }`}
+                  title="Appliquer des dégâts à plusieurs cibles simultanément"
+                >
+                  🔥 Zone
+                </button>
+              )}
               {campaignId && combatants.some(c => c.current_hp <= 0) && characters.length > 0 && (
                 <button
                   onClick={() => {
@@ -799,6 +1291,18 @@ export function CombatPage() {
                   ✦ XP
                 </button>
               )}
+              {characters.length > 0 && (
+                <button
+                  onClick={() => { setShowSavingThrow(v => !v); setSavingThrowResults(null) }}
+                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
+                    showSavingThrow
+                      ? 'bg-sky-700/30 border-sky-600 text-sky-400'
+                      : 'bg-sky-900/20 border-sky-800/50 text-sky-500 hover:border-sky-700 hover:text-sky-400'
+                  }`}
+                >
+                  🎲 JS groupe
+                </button>
+              )}
               {campaignId && combatants.length > 0 && (
                 <button
                   onClick={handleClearCombatants}
@@ -808,6 +1312,12 @@ export function CombatPage() {
                 </button>
               )}
               <button
+                onClick={() => setShowCombatSummary(true)}
+                className="text-amber-500 hover:text-amber-300 text-xs transition-colors"
+              >
+                ⚔ Fin du combat
+              </button>
+              <button
                 onClick={handleReset}
                 className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
               >
@@ -816,7 +1326,7 @@ export function CombatPage() {
             </div>
           </div>
 
-          {sorted.length === 0 ? (
+          {displayRows.length === 0 ? (
             <div className="px-5 py-10 text-center text-stone-500 text-sm">
               Aucun combattant.{' '}
               <Link to="/characters" className="text-amber-400 hover:text-amber-300">
@@ -825,9 +1335,9 @@ export function CombatPage() {
             </div>
           ) : (
             <div className="divide-y divide-stone-800">
-              {sorted.map((row) => {
-                const isActive = withRoll.length > 0 && activeCombatant && rowId(row) === rowId(activeCombatant)
-                const position = withRoll.findIndex(r => rowId(r) === rowId(row))
+              {displayRows.map((row, displayIdx) => {
+                const isActive = withRollDisplay.length > 0 && activeCombatant && rowId(row) === rowId(activeCombatant)
+                const position = withRollDisplay.findIndex(r => rowId(r) === rowId(row))
 
                 if (row.kind === 'character') {
                   const character = row.data
@@ -846,6 +1356,26 @@ export function CombatPage() {
                       }`}
                     >
                       <div className="flex items-center gap-4">
+                        {/* Reorder buttons */}
+                        {manualOrder && (
+                          <div className="flex flex-col gap-0.5 shrink-0">
+                            <button onClick={() => moveRow(rowId(row), 'up')} disabled={displayIdx === 0}
+                              className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▲</button>
+                            <button onClick={() => moveRow(rowId(row), 'down')} disabled={displayIdx === displayRows.length - 1}
+                              className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▼</button>
+                          </div>
+                        )}
+
+                        {/* AoE checkbox */}
+                        {aoeMode && (
+                          <input
+                            type="checkbox"
+                            checked={aoeSelected.has(rowId(row))}
+                            onChange={() => toggleAoeSelect(rowId(row))}
+                            className="w-4 h-4 shrink-0 accent-orange-500 cursor-pointer"
+                          />
+                        )}
+
                         {/* Position */}
                         <div className="w-6 shrink-0 text-center">
                           {position >= 0 ? (
@@ -869,6 +1399,14 @@ export function CombatPage() {
                         {/* Name */}
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
+                            {character.portrait_url && (
+                              <img
+                                src={character.portrait_url}
+                                alt={character.name}
+                                className="w-7 h-7 rounded-full object-cover shrink-0 border border-stone-700"
+                                onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                              />
+                            )}
                             <Link
                               to={`/characters/${character.id}`}
                               className={`font-semibold truncate hover:underline ${
@@ -946,10 +1484,39 @@ export function CombatPage() {
                               ))}
                             </div>
                           )}
+
+                          {/* Emplacements de sort */}
+                          {character.spellcasting.ability && Object.keys(character.spellcasting.slots).length > 0 && (
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                              {Object.entries(character.spellcasting.slots)
+                                .filter(([, slot]) => slot.max > 0)
+                                .sort(([a], [b]) => Number(a) - Number(b))
+                                .map(([lvl, slot]) => {
+                                  const available = slot.max - slot.used
+                                  return (
+                                    <span key={lvl} className="flex items-center gap-1">
+                                      <span className="text-stone-600 text-xs w-3">{lvl}</span>
+                                      {Array.from({ length: slot.max }, (_, i) => (
+                                        <button
+                                          key={i}
+                                          onClick={() => handleUseSlot(character, Number(lvl), i < available ? 'use' : 'restore')}
+                                          title={i < available ? `Dépenser emplacement niv.${lvl}` : `Restaurer emplacement niv.${lvl}`}
+                                          className={`w-3 h-3 rounded-full border transition-colors ${
+                                            i < available
+                                              ? 'bg-violet-500 border-violet-400 hover:bg-violet-400'
+                                              : 'bg-transparent border-stone-600 hover:border-violet-600'
+                                          }`}
+                                        />
+                                      ))}
+                                    </span>
+                                  )
+                                })}
+                            </div>
+                          )}
                         </div>
 
                         {/* HP */}
-                        <div className="w-40 shrink-0 hidden sm:block">
+                        <div className="w-44 shrink-0 hidden sm:block">
                           <div className="flex items-center justify-between mb-1">
                             <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
                               {character.combat.current_hp}
@@ -961,28 +1528,45 @@ export function CombatPage() {
                               </span>
                             )}
                           </div>
-                          <div className="h-2 bg-stone-700 rounded-full overflow-hidden">
+                          <div className="h-2 bg-stone-700 rounded-full overflow-hidden mb-2">
                             <div
                               className={`h-full rounded-full transition-all duration-300 ${hpColor(character.combat.current_hp, character.combat.max_hp)}`}
                               style={{ width: `${hpPct}%` }}
                             />
                           </div>
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              min={0}
+                              value={charTempHpInputs[character.id] ?? ''}
+                              onChange={e => setCharTempHpInputs(prev => ({ ...prev, [character.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') handleSetCharacterTempHp(character) }}
+                              placeholder="PV tmp"
+                              className="w-16 bg-stone-800 border border-stone-700 rounded px-1.5 py-1 text-white text-xs text-center focus:outline-none focus:border-sky-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button
+                              onClick={() => handleSetCharacterTempHp(character)}
+                              className="bg-sky-900/60 hover:bg-sky-800/80 border border-sky-700/50 text-sky-300 text-xs rounded px-1.5 py-1 transition-colors"
+                            >
+                              Tmp
+                            </button>
+                          </div>
                         </div>
 
                         {/* Conditions */}
-                        <div className="hidden lg:flex flex-wrap gap-1 w-36 shrink-0">
-                          {character.state.conditions.length === 0 ? (
-                            <span className="text-stone-700 text-xs">—</span>
-                          ) : (
-                            character.state.conditions.map(c => (
-                              <span
-                                key={c}
-                                className="text-xs bg-purple-900/60 border border-purple-700/50 text-purple-300 rounded px-1.5 py-0.5"
-                              >
-                                {CONDITIONS_FR[c] ?? c}
-                              </span>
-                            ))
-                          )}
+                        <div className="hidden lg:block shrink-0">
+                          <button
+                            onClick={() => setExpandedCharacterConditions(expandedCharacterConditions === character.id ? null : character.id)}
+                            className={`text-xs rounded px-2 py-1 border transition-colors ${
+                              character.state.conditions.length > 0
+                                ? 'bg-purple-900/60 border-purple-700/50 text-purple-300 hover:bg-purple-800/60'
+                                : 'bg-stone-800 border-stone-700 text-stone-600 hover:text-stone-400'
+                            }`}
+                          >
+                            {character.state.conditions.length > 0
+                              ? character.state.conditions.map(c => CONDITIONS_FR[c] ?? c).join(', ')
+                              : '+ Condition'}
+                          </button>
                         </div>
 
                         {/* Inspiration + action economy */}
@@ -1089,6 +1673,49 @@ export function CombatPage() {
                           )}
                         </div>
                       )}
+
+                      {/* Character condition picker (expanded) */}
+                      {expandedCharacterConditions === character.id && (
+                        <div className="mt-3 pt-3 border-t border-stone-800">
+                          <div className="flex flex-wrap gap-1.5">
+                            {Object.entries(CONDITIONS_FR).map(([key]) => {
+                              const active = character.state.conditions.includes(key)
+                              const duration = character.state.condition_durations[key]
+                              return (
+                                <div key={key} className="flex items-center gap-0.5">
+                                  <ConditionTag
+                                    condition={key}
+                                    active={active}
+                                    duration={duration}
+                                    onClick={() => {
+                                      const d = parseInt(characterConditionDurationDraft[key] ?? '', 10)
+                                      handleToggleCharacterCondition(character.id, key, isNaN(d) ? undefined : d)
+                                    }}
+                                    className={`rounded-l px-2 py-1 text-xs font-medium transition-colors ${
+                                      active
+                                        ? 'bg-purple-600 border border-purple-500 text-white'
+                                        : 'bg-stone-800 border border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-300'
+                                    }`}
+                                  />
+                                  {!active && (
+                                    <input
+                                      type="number"
+                                      min={1}
+                                      max={99}
+                                      placeholder="∞"
+                                      value={characterConditionDurationDraft[key] ?? ''}
+                                      onChange={e => setCharacterConditionDurationDraft(d => ({ ...d, [key]: e.target.value }))}
+                                      className="w-10 rounded-r bg-stone-700 border border-l-0 border-stone-600 px-1 py-1 text-stone-300 text-xs text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                                      title="Durée en rounds (optionnel)"
+                                    />
+                                  )}
+                                </div>
+                              )
+                            })}
+                          </div>
+                          <p className="text-stone-700 text-xs mt-2">Entrer une durée en rounds avant d'activer (optionnel)</p>
+                        </div>
+                      )}
                     </div>
                   )
                 }
@@ -1109,6 +1736,26 @@ export function CombatPage() {
                     }`}
                   >
                     <div className="flex items-center gap-4">
+                      {/* Reorder buttons */}
+                      {manualOrder && (
+                        <div className="flex flex-col gap-0.5 shrink-0">
+                          <button onClick={() => moveRow(rowId(row), 'up')} disabled={displayIdx === 0}
+                            className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▲</button>
+                          <button onClick={() => moveRow(rowId(row), 'down')} disabled={displayIdx === displayRows.length - 1}
+                            className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▼</button>
+                        </div>
+                      )}
+
+                      {/* AoE checkbox */}
+                      {aoeMode && (
+                        <input
+                          type="checkbox"
+                          checked={aoeSelected.has(rowId(row))}
+                          onChange={() => toggleAoeSelect(rowId(row))}
+                          className="w-4 h-4 shrink-0 accent-orange-500 cursor-pointer"
+                        />
+                      )}
+
                       {/* Position */}
                       <div className="w-6 shrink-0 text-center">
                         {position >= 0 ? (
@@ -1135,8 +1782,14 @@ export function CombatPage() {
                           <span className={`font-semibold truncate ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}>
                             {cb.name}
                           </span>
-                          <span className="shrink-0 text-xs bg-red-900/40 border border-red-800/50 text-red-400 rounded px-1.5 py-0.5">
-                            Ennemi
+                          <span className={`shrink-0 text-xs rounded px-1.5 py-0.5 ${
+                            cb.faction === 'allié'
+                              ? 'bg-emerald-900/40 border border-emerald-800/50 text-emerald-400'
+                              : cb.faction === 'neutre'
+                                ? 'bg-stone-800 border border-stone-700 text-stone-400'
+                                : 'bg-red-900/40 border border-red-800/50 text-red-400'
+                          }`}>
+                            {cb.faction === 'allié' ? 'Allié' : cb.faction === 'neutre' ? 'Neutre' : 'Ennemi'}
                           </span>
                           {isDying && (
                             <span className="shrink-0 text-xs bg-stone-800 border border-stone-700 text-stone-400 rounded px-1.5 py-0.5">
@@ -1230,6 +1883,21 @@ export function CombatPage() {
                         })}
                       </div>
 
+                      {/* Monster stat block toggle */}
+                      {monsterMap[cb.id] && (
+                        <button
+                          onClick={() => setExpandedMonster(expandedMonster === cb.id ? null : cb.id)}
+                          className={`text-xs rounded px-2 py-1 border transition-colors shrink-0 ${
+                            expandedMonster === cb.id
+                              ? 'bg-stone-700 border-stone-500 text-stone-200'
+                              : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                          }`}
+                          title="Voir le bloc de stats"
+                        >
+                          📊
+                        </button>
+                      )}
+
                       {/* Delete */}
                       <button
                         onClick={() => handleDeleteCombatant(cb.id)}
@@ -1240,16 +1908,55 @@ export function CombatPage() {
                       </button>
                     </div>
 
+                    {/* Monster stat block */}
+                    {expandedMonster === cb.id && monsterMap[cb.id] && (() => {
+                      const m = monsterMap[cb.id]
+                      const hpStr = `${m.hp_dice}d${m.hp_sides}${m.hp_bonus > 0 ? `+${m.hp_bonus}` : m.hp_bonus < 0 ? m.hp_bonus : ''}`
+                      const atkBonus = crToAttackBonus(m.cr)
+                      const dmg = crToDamageDice(m.cr)
+                      const dmgStr = `${dmg.count}d${dmg.sides}${dmg.bonus >= 0 ? `+${dmg.bonus}` : dmg.bonus}`
+                      return (
+                        <div className="mt-3 pt-3 border-t border-stone-800 space-y-2">
+                          <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs">
+                            <span className="text-stone-500">CR <span className="text-stone-200 font-semibold">{m.cr}</span></span>
+                            <span className="text-stone-500">CA <span className="text-stone-200 font-semibold">{m.ac}</span></span>
+                            <span className="text-stone-500">PV <span className="text-stone-200 font-semibold">{hpStr} (moy. {m.hp_avg})</span></span>
+                            <span className="text-stone-500">Init. <span className="text-stone-200 font-semibold">{m.initiative_mod >= 0 ? '+' : ''}{m.initiative_mod}</span></span>
+                            <span className="text-stone-500">XP <span className="text-stone-200 font-semibold">{m.xp}</span></span>
+                          </div>
+                          <div className="flex gap-2">
+                            <button
+                              onClick={() => handleMonsterRoll(cb.id, m, 'attack')}
+                              className="bg-rose-900/50 hover:bg-rose-800/60 border border-rose-700/50 text-rose-300 text-xs rounded-lg px-3 py-1.5 transition-colors font-medium"
+                              title={`1d20 + ${atkBonus}`}
+                            >
+                              ⚔ Attaque {sign(atkBonus)}
+                            </button>
+                            <button
+                              onClick={() => handleMonsterRoll(cb.id, m, 'damage')}
+                              className="bg-orange-900/50 hover:bg-orange-800/60 border border-orange-700/50 text-orange-300 text-xs rounded-lg px-3 py-1.5 transition-colors font-medium"
+                              title={dmgStr}
+                            >
+                              💥 Dégâts {dmgStr}
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })()}
+
                     {/* Condition picker (expanded) */}
                     {expandedConditions === cb.id && (
                       <div className="mt-3 pt-3 border-t border-stone-800">
                         <div className="flex flex-wrap gap-1.5">
-                          {Object.entries(CONDITIONS_FR).map(([key, label]) => {
+                          {Object.entries(CONDITIONS_FR).map(([key]) => {
                             const active = cb.conditions.includes(key)
                             const duration = cb.condition_durations[key]
                             return (
                               <div key={key} className="flex items-center gap-0.5">
-                                <button
+                                <ConditionTag
+                                  condition={key}
+                                  active={active}
+                                  duration={duration}
                                   onClick={() => {
                                     const d = parseInt(conditionDurationDraft[key] ?? '', 10)
                                     handleToggleCombatantCondition(cb.id, key, isNaN(d) ? undefined : d)
@@ -1259,9 +1966,7 @@ export function CombatPage() {
                                       ? 'bg-purple-600 border border-purple-500 text-white'
                                       : 'bg-stone-800 border border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-300'
                                   }`}
-                                >
-                                  {label}{duration ? ` (${duration})` : ''}
-                                </button>
+                                />
                                 {!active && (
                                   <input
                                     type="number"
@@ -1284,6 +1989,47 @@ export function CombatPage() {
                   </div>
                 )
               })}
+            </div>
+          )}
+
+          {/* AoE damage bar */}
+          {aoeMode && (
+            <div className="border-t border-orange-800/50 bg-orange-950/20 px-5 py-3">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="text-orange-400 text-xs font-semibold uppercase tracking-wider">
+                  🔥 Zone — {aoeSelected.size} cible{aoeSelected.size > 1 ? 's' : ''} sélectionnée{aoeSelected.size > 1 ? 's' : ''}
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  value={aoeDamageInput}
+                  onChange={e => setAoeDamageInput(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') handleAoeDamage('damage') }}
+                  placeholder="Montant"
+                  autoFocus
+                  className="w-24 bg-stone-800 border border-orange-700/50 rounded-lg px-3 py-1.5 text-white text-sm text-center focus:outline-none focus:border-orange-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <button
+                  onClick={() => handleAoeDamage('damage')}
+                  disabled={!aoeDamageInput || aoeSelected.size === 0}
+                  className="bg-red-700/60 hover:bg-red-600/80 disabled:opacity-40 border border-red-600/50 text-red-200 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  Dégâts
+                </button>
+                <button
+                  onClick={() => handleAoeDamage('heal')}
+                  disabled={!aoeDamageInput || aoeSelected.size === 0}
+                  className="bg-emerald-700/60 hover:bg-emerald-600/80 disabled:opacity-40 border border-emerald-600/50 text-emerald-200 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  Soins
+                </button>
+                <button
+                  onClick={() => { setAoeMode(false); setAoeSelected(new Set()); setAoeDamageInput('') }}
+                  className="text-stone-500 hover:text-stone-300 text-xs transition-colors ml-auto"
+                >
+                  Annuler
+                </button>
+              </div>
             </div>
           )}
 
@@ -1313,7 +2059,26 @@ export function CombatPage() {
                 </div>
               ) : addingCombatant ? (
                 <div className="space-y-3">
-                  <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Nouvel adversaire</p>
+                  <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Nouveau combattant</p>
+                  <div className="flex gap-1.5">
+                    {(['ennemi', 'allié', 'neutre'] as CombatantFaction[]).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setCombatantDraft(prev => ({ ...prev, faction: f }))}
+                        className={`flex-1 text-xs font-semibold rounded-lg py-1.5 border transition-colors capitalize ${
+                          combatantDraft.faction === f
+                            ? f === 'ennemi'
+                              ? 'bg-red-700/40 border-red-600 text-red-300'
+                              : f === 'allié'
+                                ? 'bg-emerald-700/40 border-emerald-600 text-emerald-300'
+                                : 'bg-stone-700 border-stone-500 text-stone-300'
+                            : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                        }`}
+                      >
+                        {f === 'ennemi' ? 'Ennemi' : f === 'allié' ? 'Allié' : 'Neutre'}
+                      </button>
+                    ))}
+                  </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     <input
                       type="text"
@@ -1354,7 +2119,7 @@ export function CombatPage() {
                       Ajouter
                     </button>
                     <button
-                      onClick={() => { setAddingCombatant(false); setCombatantDraft({ name: '', max_hp: '', ac: '', initiative: '' }) }}
+                      onClick={() => { setAddingCombatant(false); setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' }) }}
                       className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
                     >
                       Annuler
@@ -1426,13 +2191,53 @@ export function CombatPage() {
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-violet-400 text-xs font-semibold uppercase tracking-widest">⚔ Constructeur de rencontre</p>
-                      <button
-                        onClick={() => { setShowEncounterBuilder(false); setEncounterEntries([]); setEncounterSearch('') }}
-                        className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
-                      >
-                        Fermer
-                      </button>
+                      <div className="flex items-center gap-2">
+                        {campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (
+                          <button
+                            onClick={() => setShowSavedEncounters(v => !v)}
+                            className={`text-xs transition-colors ${showSavedEncounters ? 'text-violet-400' : 'text-stone-500 hover:text-violet-400'}`}
+                          >
+                            Sauvegardées ({campaign!.saved_encounters!.length})
+                          </button>
+                        )}
+                        <button
+                          onClick={() => { setShowEncounterBuilder(false); setEncounterEntries([]); setEncounterSearch(''); setShowSavedEncounters(false) }}
+                          className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                        >
+                          Fermer
+                        </button>
+                      </div>
                     </div>
+
+                    {/* Saved encounters list */}
+                    {showSavedEncounters && campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (
+                      <div className="bg-stone-800/60 rounded-lg p-2 space-y-1">
+                        {campaign!.saved_encounters!.map((saved, i) => (
+                          <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-stone-700/50 transition-colors">
+                            <div className="min-w-0">
+                              <p className="text-stone-200 text-xs font-medium truncate">{saved.name}</p>
+                              <p className="text-stone-500 text-xs truncate">
+                                {saved.entries.map(e => `${e.count}× ${e.monster_name}`).join(', ')}
+                              </p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => handleLoadSavedEncounter(saved)}
+                                className="text-violet-400 hover:text-violet-300 text-xs transition-colors"
+                              >
+                                Charger
+                              </button>
+                              <button
+                                onClick={() => handleDeleteSavedEncounter(i)}
+                                className="text-stone-600 hover:text-red-400 text-xs transition-colors"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
                     {/* Monster search */}
                     <input
@@ -1540,6 +2345,25 @@ export function CombatPage() {
                       </div>
                     )}
 
+                    {campaignId && (
+                      <div className="flex items-center gap-2 border-t border-stone-800 pt-3">
+                        <input
+                          type="text"
+                          placeholder="Nom de la rencontre…"
+                          value={saveEncounterName}
+                          onChange={e => setSaveEncounterName(e.target.value)}
+                          className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                        />
+                        <button
+                          onClick={handleSaveEncounter}
+                          disabled={!saveEncounterName.trim() || encounterEntries.length === 0}
+                          className="bg-stone-700 hover:bg-stone-600 disabled:opacity-40 text-stone-200 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors shrink-0"
+                        >
+                          Sauvegarder
+                        </button>
+                      </div>
+                    )}
+
                     {encounterEntries.length === 0 && (
                       <p className="text-stone-600 text-xs text-center py-2">Recherchez des monstres pour composer la rencontre.</p>
                     )}
@@ -1549,6 +2373,66 @@ export function CombatPage() {
             </div>
           )}
         </div>
+
+        {/* Group saving throw panel */}
+        {showSavingThrow && (
+          <div className="bg-stone-900 border border-sky-800/40 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sky-400 text-xs font-semibold uppercase tracking-widest">🎲 Jet de sauvegarde de groupe</h2>
+              <button onClick={() => { setShowSavingThrow(false); setSavingThrowResults(null) }} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
+            </div>
+
+            <div className="flex items-center gap-3 flex-wrap">
+              <select
+                value={savingThrowAbility}
+                onChange={e => { setSavingThrowAbility(e.target.value as typeof savingThrowAbility); setSavingThrowResults(null) }}
+                className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
+              >
+                <option value="strength">Force (FOR)</option>
+                <option value="dexterity">Dextérité (DEX)</option>
+                <option value="constitution">Constitution (CON)</option>
+                <option value="intelligence">Intelligence (INT)</option>
+                <option value="wisdom">Sagesse (SAG)</option>
+                <option value="charisma">Charisme (CHA)</option>
+              </select>
+              <div className="flex items-center gap-2">
+                <span className="text-stone-500 text-sm">DD</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={savingThrowDC}
+                  onChange={e => { setSavingThrowDC(e.target.value); setSavingThrowResults(null) }}
+                  className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-sky-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+              </div>
+              <button
+                onClick={handleGroupSavingThrow}
+                className="bg-sky-700 hover:bg-sky-600 text-white text-sm font-semibold rounded-lg px-4 py-2 transition-colors"
+              >
+                Lancer
+              </button>
+            </div>
+
+            {savingThrowResults && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {savingThrowResults.map((r, i) => (
+                  <div key={i} className={`rounded-lg px-3 py-2 border ${
+                    r.success
+                      ? 'bg-emerald-900/30 border-emerald-700/50'
+                      : 'bg-red-900/30 border-red-700/50'
+                  }`}>
+                    <p className="text-stone-200 text-xs font-semibold truncate">{r.name}</p>
+                    <p className={`text-sm font-bold ${r.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {r.total} {r.success ? '✓' : '✗'}
+                    </p>
+                    <p className="text-stone-600 text-xs">{r.roll} + {r.mod >= 0 ? r.mod : `(${r.mod})`}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* XP distribution panel */}
         {showXpPanel && (() => {
@@ -1633,6 +2517,52 @@ export function CombatPage() {
           Initiative modifiable · PV ennemis avec Dmg / Soin · Sync temps réel
         </p>
 
+        {/* Combat log */}
+        {combatLog.length > 0 && (
+          <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setShowCombatLog(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-3 border-b border-stone-800 hover:bg-stone-800/40 transition-colors"
+            >
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                Journal de combat
+                <span className="ml-2 text-stone-600 font-normal normal-case tracking-normal">({combatLog.length})</span>
+              </h2>
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={e => { e.stopPropagation(); setCombatLog([]) }}
+                  className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                >
+                  Effacer
+                </button>
+                <span className="text-stone-600 text-xs">{showCombatLog ? '▲' : '▼'}</span>
+              </div>
+            </button>
+            {showCombatLog && (
+              <div className="divide-y divide-stone-800/50 max-h-72 overflow-y-auto">
+                {combatLog.map(entry => (
+                  <div key={entry.id} className="flex items-start gap-3 px-5 py-2">
+                    <span className={`shrink-0 text-xs mt-0.5 ${
+                      entry.type === 'turn' ? 'text-amber-500' :
+                      entry.type === 'roll' ? 'text-rose-400' :
+                      entry.type === 'hp'   ? 'text-sky-400' :
+                      entry.type === 'xp'   ? 'text-emerald-400' :
+                                              'text-violet-400'
+                    }`}>
+                      {entry.type === 'turn' ? '⟳' :
+                       entry.type === 'roll' ? '🎲' :
+                       entry.type === 'hp'   ? '❤' :
+                       entry.type === 'xp'   ? '⬆' : '➕'}
+                    </span>
+                    <span className="flex-1 text-stone-300 text-xs">{entry.text}</span>
+                    <span className="shrink-0 text-stone-600 text-xs">{entry.time}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Dice log */}
         {diceLog.length > 0 && (
           <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
@@ -1677,6 +2607,18 @@ export function CombatPage() {
           </div>
         )}
       </main>
+
+      {/* Modal résumé post-combat */}
+      {showCombatSummary && (
+        <CombatSummaryModal
+          roundNumber={roundNumber}
+          combatants={combatants}
+          monsterMap={monsterMap}
+          characters={characters}
+          onClose={() => setShowCombatSummary(false)}
+          onReset={() => { setShowCombatSummary(false); handleReset() }}
+        />
+      )}
     </div>
   )
 }

@@ -92,7 +92,7 @@ class CharacterController extends Controller
         $this->authorizeCharacter($request, $character);
 
         $request->validate([
-            'conditions'          => ['required', 'array'],
+            'conditions'          => ['present', 'array'],
             'conditions.*'        => ['string', 'in:blinded,charmed,deafened,exhaustion,frightened,grappled,incapacitated,invisible,paralyzed,petrified,poisoned,prone,restrained,stunned,unconscious'],
             'condition_durations' => ['sometimes', 'nullable', 'array'],
         ]);
@@ -314,6 +314,26 @@ class CharacterController extends Controller
         $character->update([
             'current_hp' => min($character->max_hp, $character->current_hp + $amount),
         ]);
+    }
+
+    public function share(Request $request, Character $character): CharacterResource
+    {
+        $this->authorizeCharacter($request, $character);
+
+        if (! $character->share_token) {
+            $character->update(['share_token' => bin2hex(random_bytes(16))]);
+        }
+
+        return new CharacterResource($character->fresh());
+    }
+
+    public function revokeShare(Request $request, Character $character): CharacterResource
+    {
+        $this->authorizeCharacter($request, $character);
+
+        $character->update(['share_token' => null]);
+
+        return new CharacterResource($character->fresh());
     }
 
     private function authorizeCharacter(Request $request, Character $character): void

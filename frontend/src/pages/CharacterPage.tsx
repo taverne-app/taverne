@@ -17,13 +17,17 @@ import {
   updateCurrency,
   updateDamageModifiers,
   updateConcentration,
-  updateInspiration,
   updateTempMaxHp,
   updateIdentity,
   updateNotes,
+  updateDmNotes,
+  updatePersonality,
+  updateLanguagesAndTools,
+  updateExhaustion,
   shortRest,
   updateAttackMacros,
   updateResources,
+  shareCharacter,
   type Character,
   type AbilityName,
   type SkillName,
@@ -39,9 +43,13 @@ import {
 } from '../api/characters'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
-import { createEcho } from '../lib/echo'
+import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS } from '../data/spells'
+import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
+import { ConditionTag } from '../components/ConditionTag'
+import { CONDITIONS_FR } from '../data/conditions'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -123,23 +131,7 @@ const SAVE_LABELS: [AbilityName, string][] = [
   ['charisma',     'Charisme'],
 ]
 
-const CONDITIONS: Record<string, string> = {
-  blinded:        'Aveuglé',
-  charmed:        'Charmé',
-  deafened:       'Assourdi',
-  exhaustion:     'Épuisé',
-  frightened:     'Effrayé',
-  grappled:       'Agrippé',
-  incapacitated:  'Hors de combat',
-  invisible:      'Invisible',
-  paralyzed:      'Paralysé',
-  petrified:      'Pétrifié',
-  poisoned:       'Empoisonné',
-  prone:          'À terre',
-  restrained:     'Entravé',
-  stunned:        'Étourdi',
-  unconscious:    'Inconscient',
-}
+const CONDITIONS = CONDITIONS_FR
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -216,6 +208,7 @@ export function CharacterPage() {
   const [character, setCharacter] = useState<Character | null>(null)
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
+  const [shareCopied, setShareCopied] = useState(false)
 
   // Flag set to true while we're the originator of a mutation; suppresses
   // the echo of our own broadcast so we don't overwrite optimistic state.
@@ -234,6 +227,7 @@ export function CharacterPage() {
     if (!character) return
     setIdentityDraft({
       name: character.name,
+      portrait_url: character.portrait_url ?? '',
       race: character.race,
       character_class: character.character_class,
       subclass: character.subclass ?? '',
@@ -279,7 +273,7 @@ export function CharacterPage() {
   }, [id, navigate])
 
   useEffect(() => {
-    if (!id || !token) return
+    if (!id || !token || !REVERB_CONFIGURED) return
     const echo = createEcho(token)
     echo
       .private(`character.${id}`)
@@ -298,6 +292,23 @@ export function CharacterPage() {
     if (character) setTempInput(String(character.combat.temporary_hp))
   }, [character?.id])  // only on first load
 
+  const { notify } = useTabNotify()
+
+  // Blink tab title when it's this character's turn (notified by CombatPage via BroadcastChannel)
+  useEffect(() => {
+    if (!character) return
+    let bc: BroadcastChannel | null = null
+    try {
+      bc = new BroadcastChannel('taverne-combat-turn')
+      bc.onmessage = (e: MessageEvent<{ characterId: number; name: string }>) => {
+        if (e.data.characterId === character.id) {
+          notify(`🔔 Ton tour, ${character.name} !`)
+        }
+      }
+    } catch { /* unsupported */ }
+    return () => bc?.close()
+  }, [character?.id])
+
   async function withSave<T>(fn: () => Promise<T>): Promise<T | undefined> {
     isSelfUpdate.current = true
     setSaving(true)
@@ -315,8 +326,13 @@ export function CharacterPage() {
   async function handleHp(type: 'damage' | 'heal') {
     const amount = parseInt(hpInput, 10)
     if (!amount || amount <= 0 || !character) return
+    const isConcentrating = !!character.state.concentrating_on
     const updated = await withSave(() => updateHp(character.id, amount, type))
-    if (updated) { setCharacter(updated); setHpInput('') }
+    if (updated) {
+      setCharacter(updated)
+      setHpInput('')
+      if (type === 'damage' && isConcentrating) setConcSaveDmg(String(amount))
+    }
   }
 
   async function handleTempHp() {
@@ -409,10 +425,32 @@ export function CharacterPage() {
     const current = Object.entries(character.skills)
       .filter(([, v]) => v.proficient)
       .map(([k]) => k)
-    const next = current.includes(skill)
-      ? current.filter(s => s !== skill)
-      : [...current, skill]
-    const updated = await withSave(() => updateProficiencies(character.id, saveProfs, next))
+    const removing = current.includes(skill)
+    const next = removing ? current.filter(s => s !== skill) : [...current, skill]
+    const currentExpertise = Object.entries(character.skills)
+      .filter(([, v]) => v.expert)
+      .map(([k]) => k)
+    const nextExpertise = removing ? currentExpertise.filter(s => s !== skill) : currentExpertise
+    const updated = await withSave(() => updateProficiencies(character.id, saveProfs, next, nextExpertise))
+    if (updated) setCharacter(updated)
+  }
+
+  async function toggleSkillExpertise(skill: SkillName) {
+    if (!character) return
+    if (!character.skills[skill].proficient) return
+    const saveProfs = Object.entries(character.saving_throws)
+      .filter(([, v]) => v.proficient)
+      .map(([k]) => k)
+    const skillProfs = Object.entries(character.skills)
+      .filter(([, v]) => v.proficient)
+      .map(([k]) => k)
+    const currentExpertise = Object.entries(character.skills)
+      .filter(([, v]) => v.expert)
+      .map(([k]) => k)
+    const nextExpertise = currentExpertise.includes(skill)
+      ? currentExpertise.filter(s => s !== skill)
+      : [...currentExpertise, skill]
+    const updated = await withSave(() => updateProficiencies(character.id, saveProfs, skillProfs, nextExpertise))
     if (updated) setCharacter(updated)
   }
 
@@ -469,6 +507,10 @@ export function CharacterPage() {
   const [spellLevelDraft, setSpellLevelDraft] = useState('1')
   const [spellDamageDraft, setSpellDamageDraft] = useState('')
   const [spellFilter, setSpellFilter] = useState<'all' | 'prepared'>('all')
+  const [showSpellBrowser, setShowSpellBrowser] = useState(false)
+  const [showCompendium, setShowCompendium] = useState(false)
+  const [spellBrowserLevel, setSpellBrowserLevel] = useState<number | 'all'>('all')
+  const [spellBrowserSearch, setSpellBrowserSearch] = useState('')
 
   async function handleAddSpell() {
     if (!character || !spellNameDraft.trim()) return
@@ -488,6 +530,14 @@ export function CharacterPage() {
       setSpellDamageDraft('')
       setAddingSpell(false)
     }
+  }
+
+  async function addSpellFromBrowser(name: string, level: number) {
+    if (!character) return
+    if (character.spellcasting.spells.some(s => s.name === name)) return
+    const next = [...character.spellcasting.spells, { name, level, prepared: true }]
+    const updated = await withSave(() => updateSpells(character.id, next))
+    if (updated) setCharacter(updated)
   }
 
   async function handleRemoveSpell(index: number) {
@@ -553,6 +603,43 @@ export function CharacterPage() {
       updateDamageModifiers(character.id, { ...current, [category]: next }),
     )
     if (updated) setCharacter(updated)
+  }
+
+  // ── Cast spell (use slot + roll damage) ─────────────────────────────────────
+
+  function availableSlotLevel(spellLevel: number): number | null {
+    if (!character || spellLevel === 0) return 0
+    for (let lvl = spellLevel; lvl <= 9; lvl++) {
+      const slot = character.spellcasting.slots[String(lvl)]
+      if (slot && slot.used < slot.max) return lvl
+    }
+    return null
+  }
+
+  async function castSpell(spell: { name: string; level: number; concentration?: boolean; damage_dice?: string }) {
+    if (!character) return
+    if (spell.level > 0) {
+      const slotLevel = availableSlotLevel(spell.level)
+      if (slotLevel === null) return
+      const updated = await withSave(() => useSpellSlot(character.id, slotLevel, 'use'))
+      if (updated) setCharacter(updated)
+    }
+    if (spell.damage_dice) {
+      const p = parseDice(spell.damage_dice)
+      if (p) {
+        handleRoll({
+          sides: p.sides, count: p.count, modifier: p.bonus,
+          label: `Dégâts: ${spell.name}`,
+          advantage: advantage === 'adv',
+          disadvantage: advantage === 'dis',
+        })
+        setDiceOpen(true)
+      }
+    }
+    if (spell.concentration) {
+      const updated = await withSave(() => updateConcentration(character.id, spell.name))
+      if (updated) setCharacter(updated)
+    }
   }
 
   // ── Concentration ────────────────────────────────────────────────────────────
@@ -670,6 +757,77 @@ export function CharacterPage() {
     if (!character || !notesDirty) return
     const updated = await withSave(() => updateNotes(character.id, notesDraft))
     if (updated) { setCharacter(updated); setNotesDirty(false) }
+  }
+
+  // ── Langues & maîtrises d'outils ─────────────────────────────────────────────
+
+  const [languageDraft, setLanguageDraft] = useState('')
+  const [toolDraft, setToolDraft]         = useState('')
+
+  async function addLanguage() {
+    if (!character || !languageDraft.trim()) return
+    const next = [...character.languages, languageDraft.trim()]
+    const updated = await withSave(() => updateLanguagesAndTools(character.id, { languages: next }))
+    if (updated) { setCharacter(updated); setLanguageDraft('') }
+  }
+
+  async function removeLanguage(lang: string) {
+    if (!character) return
+    const next = character.languages.filter(l => l !== lang)
+    const updated = await withSave(() => updateLanguagesAndTools(character.id, { languages: next }))
+    if (updated) setCharacter(updated)
+  }
+
+  async function addTool() {
+    if (!character || !toolDraft.trim()) return
+    const next = [...character.tool_proficiencies, toolDraft.trim()]
+    const updated = await withSave(() => updateLanguagesAndTools(character.id, { tool_proficiencies: next }))
+    if (updated) { setCharacter(updated); setToolDraft('') }
+  }
+
+  async function removeTool(tool: string) {
+    if (!character) return
+    const next = character.tool_proficiencies.filter(t => t !== tool)
+    const updated = await withSave(() => updateLanguagesAndTools(character.id, { tool_proficiencies: next }))
+    if (updated) setCharacter(updated)
+  }
+
+  // ── DM Notes ─────────────────────────────────────────────────────────────────
+
+  const [dmNotesDraft, setDmNotesDraft] = useState('')
+
+  useEffect(() => {
+    if (character) setDmNotesDraft(character.dm_notes ?? '')
+  }, [character?.id])
+
+  async function handleSaveDmNotes() {
+    if (!character) return
+    const updated = await withSave(() => updateDmNotes(character.id, dmNotesDraft))
+    if (updated) setCharacter(updated)
+  }
+
+  // ── Traits de personnalité ────────────────────────────────────────────────────
+
+  const [personalityDraft, setPersonalityDraft] = useState({
+    personality_traits: '',
+    ideals: '',
+    bonds: '',
+    flaws: '',
+  })
+
+  useEffect(() => {
+    if (character) setPersonalityDraft({
+      personality_traits: character.personality_traits ?? '',
+      ideals:             character.ideals ?? '',
+      bonds:              character.bonds ?? '',
+      flaws:              character.flaws ?? '',
+    })
+  }, [character?.id])
+
+  async function handleSavePersonality(field: keyof typeof personalityDraft) {
+    if (!character) return
+    const updated = await withSave(() => updatePersonality(character.id, { [field]: personalityDraft[field] }))
+    if (updated) setCharacter(updated)
   }
 
   // ── Macros d'attaque ─────────────────────────────────────────────────────────
@@ -827,7 +985,7 @@ export function CharacterPage() {
 
   // WS: also capture dice.rolled events
   useEffect(() => {
-    if (!id || !token) return
+    if (!id || !token || !REVERB_CONFIGURED) return
     const echo = createEcho(token)
     echo.private(`character.${id}`).listen('.dice.rolled', (e: DiceRoll) => {
       setRollHistory(h => [e, ...h].slice(0, 30))
@@ -854,7 +1012,14 @@ export function CharacterPage() {
   }
 
   function quickRoll(label: string, sides: number, modifier: number) {
-    handleRoll({ sides, modifier, label, count: 1 })
+    handleRoll({
+      sides,
+      modifier,
+      label,
+      count: 1,
+      advantage: sides === 20 && advantage === 'adv',
+      disadvantage: sides === 20 && advantage === 'dis',
+    })
   }
 
   async function handleLogout() {
@@ -896,6 +1061,19 @@ export function CharacterPage() {
             {saving && (
               <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
             )}
+            {advantage !== 'none' && (
+              <button
+                onClick={() => setAdvantage('none')}
+                title="Annuler l'avantage/désavantage"
+                className={`text-xs font-bold px-2 py-1 rounded-lg border transition-colors ${
+                  advantage === 'adv'
+                    ? 'bg-emerald-700 border-emerald-600 text-white'
+                    : 'bg-red-800 border-red-700 text-white'
+                }`}
+              >
+                {advantage === 'adv' ? 'AVT' : 'DES'}
+              </button>
+            )}
             <button
               onClick={() => setDiceOpen(v => !v)}
               className={`text-sm font-bold px-3 py-1 rounded-lg border transition-colors ${
@@ -906,6 +1084,34 @@ export function CharacterPage() {
             >
               ⚅ Dés
             </button>
+            <button
+              onClick={async () => {
+                let c = character
+                if (!c.share_token) {
+                  c = await shareCharacter(c.id)
+                  setCharacter(c)
+                }
+                const url = `${window.location.origin}/share/character/${c.share_token}`
+                await navigator.clipboard.writeText(url)
+                setShareCopied(true)
+                setTimeout(() => setShareCopied(false), 2500)
+              }}
+              className={`text-sm transition-colors hidden sm:block ${
+                shareCopied ? 'text-emerald-400' : 'text-stone-400 hover:text-stone-200'
+              }`}
+              title={character.share_token ? 'Copier le lien joueur' : 'Générer et copier le lien joueur'}
+            >
+              {shareCopied ? '✓ Lien copié' : '⟳ Partager'}
+            </button>
+            <a
+              href={`/characters/${character.id}/print`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-stone-400 hover:text-stone-200 text-sm transition-colors hidden sm:block"
+              title="Ouvrir la fiche imprimable"
+            >
+              ⎙ Imprimer
+            </a>
             <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
             <button
               onClick={handleLogout}
@@ -1128,6 +1334,16 @@ export function CharacterPage() {
                   </div>
                 ))}
               </div>
+              <div>
+                <label className="text-stone-500 text-xs mb-1 block">URL du portrait (image)</label>
+                <input
+                  type="url"
+                  value={(identityDraft.portrait_url ?? '') as string}
+                  onChange={e => setIdentityDraft(d => ({ ...d, portrait_url: e.target.value || null }))}
+                  placeholder="https://…"
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 {([
                   ['level', 'Niveau', 1, 20],
@@ -1184,6 +1400,15 @@ export function CharacterPage() {
           ) : (
             <>
             <div className="flex items-start justify-between gap-4">
+              <div className="flex items-start gap-4 min-w-0">
+                {character.portrait_url && (
+                  <img
+                    src={character.portrait_url}
+                    alt={character.name}
+                    className="w-16 h-16 rounded-full object-cover shrink-0 border-2 border-stone-700"
+                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                  />
+                )}
               <div>
                 <h1 className="text-2xl font-bold text-white">{character.name}</h1>
                 <p className="text-stone-400 mt-0.5">
@@ -1201,6 +1426,7 @@ export function CharacterPage() {
                     <span className="text-stone-500 text-xs">{character.experience_points} XP</span>
                   )}
                 </div>
+              </div>
               </div>
               <div className="flex items-center gap-2 shrink-0">
                 {canLevelUp(character.level, character.experience_points) && (
@@ -1345,17 +1571,20 @@ export function CharacterPage() {
                           {score ?? '—'}
                         </span>
                       )}
-                      <span
-                        className={`text-sm font-bold w-8 text-right ${
+                      <button
+                        onClick={() => { quickRoll(label, 20, mod); setDiceOpen(true) }}
+                        disabled={editingAbilities}
+                        title={`Jet de ${label} (1d20${sign(mod)})`}
+                        className={`text-sm font-bold w-8 text-right rounded px-1 py-0.5 transition-colors disabled:cursor-default ${
                           mod > 0
-                            ? 'text-emerald-400'
+                            ? 'text-emerald-400 hover:bg-stone-800'
                             : mod < 0
-                              ? 'text-red-400'
-                              : 'text-stone-400'
+                              ? 'text-red-400 hover:bg-stone-800'
+                              : 'text-stone-400 hover:bg-stone-800'
                         }`}
                       >
                         {sign(mod)}
-                      </span>
+                      </button>
                     </div>
                   </div>
                 )
@@ -1652,27 +1881,23 @@ export function CharacterPage() {
                 Conditions
               </h2>
               <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
-                {Object.entries(CONDITIONS).map(([key, label]) => {
+                {Object.entries(CONDITIONS).map(([key]) => {
                   const active = activeConditions.includes(key)
                   const duration = character.state.condition_durations[key]
                   return (
-                    <button
+                    <ConditionTag
                       key={key}
-                      onClick={() => toggleCondition(key)}
+                      condition={key}
+                      active={active}
+                      duration={duration}
                       disabled={saving}
-                      className={`relative rounded-lg px-2 py-2 text-xs font-medium text-center transition-colors disabled:cursor-not-allowed ${
+                      onClick={() => toggleCondition(key)}
+                      className={`relative rounded-lg px-2 py-2 text-xs font-medium text-center transition-colors disabled:cursor-not-allowed w-full ${
                         active
                           ? 'bg-purple-600 border border-purple-500 text-white'
                           : 'bg-stone-800 border border-stone-700 text-stone-400 hover:border-stone-600 hover:text-stone-300'
                       }`}
-                    >
-                      {label}
-                      {active && duration > 0 && (
-                        <span className="absolute -top-1.5 -right-1.5 bg-purple-400 text-purple-950 text-[9px] font-bold rounded-full w-4 h-4 flex items-center justify-center leading-none">
-                          {duration}
-                        </span>
-                      )}
-                    </button>
+                    />
                   )
                 })}
               </div>
@@ -1696,6 +1921,62 @@ export function CharacterPage() {
                     </div>
                   ))}
                 </div>
+              )}
+            </div>
+
+            {/* Épuisement */}
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Épuisement</h2>
+                <span className={`text-xs font-semibold ${
+                  character.state.exhaustion_level === 0 ? 'text-stone-600' :
+                  character.state.exhaustion_level <= 2  ? 'text-amber-400' :
+                  character.state.exhaustion_level <= 4  ? 'text-orange-400' : 'text-red-400'
+                }`}>
+                  {character.state.exhaustion_level === 0 ? 'Aucun' : `Niveau ${character.state.exhaustion_level}`}
+                </span>
+              </div>
+              <div className="flex gap-1.5 mb-3">
+                {[1,2,3,4,5,6].map(lvl => (
+                  <button
+                    key={lvl}
+                    onClick={async () => {
+                      const updated = await withSave(() => updateExhaustion(character.id, character.state.exhaustion_level === lvl ? 0 : lvl))
+                      if (updated) setCharacter(updated)
+                    }}
+                    disabled={saving}
+                    title={[
+                      'Niveau 1 — Désavantage aux jets de caractéristique',
+                      'Niveau 2 — Vitesse divisée par 2',
+                      'Niveau 3 — Désavantage aux jets d\'attaque et de sauvegarde',
+                      'Niveau 4 — Maximum de points de vie divisé par 2',
+                      'Niveau 5 — Vitesse réduite à 0',
+                      'Niveau 6 — Mort',
+                    ][lvl - 1]}
+                    className={`flex-1 h-6 rounded transition-colors disabled:cursor-not-allowed text-xs font-bold ${
+                      lvl <= character.state.exhaustion_level
+                        ? lvl <= 2 ? 'bg-amber-500 border border-amber-400'
+                          : lvl <= 4 ? 'bg-orange-500 border border-orange-400'
+                          : 'bg-red-600 border border-red-500'
+                        : 'bg-stone-800 border border-stone-700 hover:border-stone-500'
+                    }`}
+                  >
+                    {lvl}
+                  </button>
+                ))}
+              </div>
+              {character.state.exhaustion_level > 0 && (
+                <p className="text-stone-500 text-xs leading-relaxed">
+                  {[
+                    'Désavantage aux jets de caractéristique',
+                    'Vitesse divisée par 2',
+                    'Désavantage aux jets d\'attaque et de sauvegarde',
+                    'Maximum de PV divisé par 2',
+                    'Vitesse réduite à 0',
+                    'Mort',
+                  ][character.state.exhaustion_level - 1]}
+                  {character.state.exhaustion_level > 1 && ` (+${character.state.exhaustion_level - 1} effet${character.state.exhaustion_level > 2 ? 's' : ''} précédent${character.state.exhaustion_level > 2 ? 's' : ''})`}
+                </p>
               )}
             </div>
 
@@ -2017,7 +2298,7 @@ export function CharacterPage() {
               const entry = character.skills[skill]
               return (
                 <div key={skill} className="flex items-center justify-between py-1.5 border-b border-stone-800/60 group">
-                  <div className="flex items-center gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0">
                     <button
                       onClick={() => toggleSkillProficiency(skill)}
                       disabled={saving}
@@ -2026,6 +2307,18 @@ export function CharacterPage() {
                         entry.proficient
                           ? 'bg-amber-400 border-amber-400'
                           : 'bg-transparent border-stone-600 hover:border-stone-400'
+                      }`}
+                    />
+                    <button
+                      onClick={() => toggleSkillExpertise(skill)}
+                      disabled={saving || !entry.proficient}
+                      title={entry.expert ? 'Retirer l\'expertise' : 'Ajouter l\'expertise (double maîtrise)'}
+                      className={`w-3 h-3 shrink-0 transition-colors disabled:cursor-default rotate-45 border ${
+                        entry.expert
+                          ? 'bg-amber-400 border-amber-400'
+                          : entry.proficient
+                            ? 'bg-transparent border-amber-600 hover:border-amber-400'
+                            : 'bg-transparent border-stone-700 opacity-30'
                       }`}
                     />
                     <span className="text-stone-300 text-xs truncate">{label}</span>
@@ -2046,6 +2339,98 @@ export function CharacterPage() {
                 </div>
               )
             })}
+          </div>
+        </div>
+
+        {/* Langues & outils */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">
+            Langues & Maîtrises d'outils
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+            {/* Langues */}
+            <div>
+              <p className="text-stone-500 text-xs font-medium mb-2">Langues</p>
+              <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+                {character.languages.map(lang => (
+                  <span
+                    key={lang}
+                    className="inline-flex items-center gap-1 bg-stone-800 border border-stone-700 text-stone-300 text-xs rounded-full px-2.5 py-1"
+                  >
+                    {lang}
+                    <button
+                      onClick={() => removeLanguage(lang)}
+                      disabled={saving}
+                      className="text-stone-600 hover:text-red-400 transition-colors ml-0.5 leading-none disabled:cursor-not-allowed"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {character.languages.length === 0 && (
+                  <span className="text-stone-700 text-xs italic">Aucune langue enregistrée</span>
+                )}
+              </div>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={languageDraft}
+                  onChange={e => setLanguageDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addLanguage() }}
+                  placeholder="Commun, Elfique…"
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <button
+                  onClick={addLanguage}
+                  disabled={saving || !languageDraft.trim()}
+                  className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40 px-2"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+
+            {/* Outils */}
+            <div>
+              <p className="text-stone-500 text-xs font-medium mb-2">Maîtrises d'outils</p>
+              <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+                {character.tool_proficiencies.map(tool => (
+                  <span
+                    key={tool}
+                    className="inline-flex items-center gap-1 bg-stone-800 border border-stone-700 text-stone-300 text-xs rounded-full px-2.5 py-1"
+                  >
+                    {tool}
+                    <button
+                      onClick={() => removeTool(tool)}
+                      disabled={saving}
+                      className="text-stone-600 hover:text-red-400 transition-colors ml-0.5 leading-none disabled:cursor-not-allowed"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+                {character.tool_proficiencies.length === 0 && (
+                  <span className="text-stone-700 text-xs italic">Aucune maîtrise d'outil</span>
+                )}
+              </div>
+              <div className="flex gap-1.5">
+                <input
+                  type="text"
+                  value={toolDraft}
+                  onChange={e => setToolDraft(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') addTool() }}
+                  placeholder="Outils de voleur, Luth…"
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <button
+                  onClick={addTool}
+                  disabled={saving || !toolDraft.trim()}
+                  className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40 px-2"
+                >
+                  +
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2418,13 +2803,100 @@ export function CharacterPage() {
                 )
               })()}
             </div>
-            <button
-              onClick={() => setAddingSpell(v => !v)}
-              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
-            >
-              {addingSpell ? 'Annuler' : '+ Ajouter'}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setShowCompendium(true)}
+                className="text-xs rounded-lg px-2 py-0.5 border bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
+              >
+                📚 Compendium
+              </button>
+              <button
+                onClick={() => { setShowSpellBrowser(v => !v); setSpellBrowserSearch('') }}
+                className={`text-xs rounded-lg px-2 py-0.5 border transition-colors ${
+                  showSpellBrowser
+                    ? 'bg-violet-700/40 border-violet-600/50 text-violet-300'
+                    : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                }`}
+              >
+                📖 Répertoire
+              </button>
+              <button
+                onClick={() => setAddingSpell(v => !v)}
+                className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+              >
+                {addingSpell ? 'Annuler' : '+ Ajouter'}
+              </button>
+            </div>
           </div>
+
+          {/* Spell browser */}
+          {showSpellBrowser && (() => {
+            const known = new Set(character.spellcasting.spells.map(s => s.name))
+            const filtered = SRD_SPELLS.filter(([name, level]) =>
+              (spellBrowserLevel === 'all' || level === spellBrowserLevel) &&
+              (spellBrowserSearch === '' || name.toLowerCase().includes(spellBrowserSearch.toLowerCase()))
+            )
+            return (
+              <div className="mb-4 pb-4 border-b border-stone-800">
+                <div className="flex items-center gap-2 mb-3 flex-wrap">
+                  <input
+                    type="text"
+                    placeholder="Rechercher un sort…"
+                    value={spellBrowserSearch}
+                    onChange={e => setSpellBrowserSearch(e.target.value)}
+                    className="flex-1 min-w-[150px] bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-xs focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                  <div className="flex gap-1 flex-wrap">
+                    {(['all', 0, 1, 2, 3, 4, 5, 6, 7, 8, 9] as (number | 'all')[]).map(lvl => (
+                      <button
+                        key={String(lvl)}
+                        onClick={() => setSpellBrowserLevel(lvl)}
+                        className={`text-xs rounded px-2 py-0.5 border transition-colors ${
+                          spellBrowserLevel === lvl
+                            ? 'bg-violet-700/60 border-violet-600 text-violet-200'
+                            : 'border-stone-700 text-stone-500 hover:text-stone-300 hover:border-stone-600'
+                        }`}
+                      >
+                        {lvl === 'all' ? 'Tous' : lvl === 0 ? 'Tour' : lvl}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="max-h-52 overflow-y-auto space-y-0.5 pr-1">
+                  {filtered.length === 0 ? (
+                    <p className="text-stone-600 text-xs py-2">Aucun sort trouvé.</p>
+                  ) : filtered.map(([name, level]) => {
+                    const isKnown = known.has(name)
+                    return (
+                      <div
+                        key={name}
+                        className={`flex items-center justify-between rounded px-2 py-1.5 transition-colors ${
+                          isKnown ? 'opacity-40' : 'hover:bg-stone-800'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-xs min-w-[54px] shrink-0 text-stone-500">
+                            {level === 0 ? 'Tour' : `Niv. ${level}`}
+                          </span>
+                          <span className={`text-sm truncate ${isKnown ? 'text-stone-600' : 'text-stone-200'}`}>{name}</span>
+                          {isKnown && <span className="text-stone-600 text-xs shrink-0">✓</span>}
+                        </div>
+                        {!isKnown && (
+                          <button
+                            onClick={() => addSpellFromBrowser(name, level)}
+                            disabled={saving}
+                            className="shrink-0 text-violet-400 hover:text-violet-300 text-sm font-bold ml-2 transition-colors disabled:opacity-40"
+                          >
+                            +
+                          </button>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Add spell form */}
           {addingSpell && (
@@ -2507,77 +2979,99 @@ export function CharacterPage() {
                       {SPELL_LEVEL_LABELS[lvl]}
                     </p>
                     <div className="flex flex-wrap gap-2">
-                      {spells.map(spell => (
-                        {(() => {
-                          const isConcentrating = character.state.concentrating_on === spell.name
-                          return (
-                            <div
-                              key={spell._idx}
-                              className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition-colors ${
+                      {spells.map(spell => {
+                        const isConcentrating = character.state.concentrating_on === spell.name
+                        return (
+                          <div
+                            key={spell._idx}
+                            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition-colors ${
+                              isConcentrating
+                                ? 'bg-violet-700/50 border-violet-500 text-violet-100'
+                                : spell.prepared
+                                  ? 'bg-violet-900/40 border-violet-700/60 text-violet-200'
+                                  : 'bg-stone-800 border-stone-700 text-stone-400'
+                            }`}
+                          >
+                            <button
+                              onClick={() => handleTogglePrepared(spell._idx)}
+                              disabled={saving}
+                              title={spell.prepared ? 'Marquer comme non préparé' : 'Marquer comme préparé'}
+                              className={`w-2.5 h-2.5 rounded-full border transition-colors disabled:cursor-not-allowed shrink-0 ${
+                                spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
+                              }`}
+                            />
+                            <span>{spell.name}</span>
+                            {(() => {
+                              const slotAvail = availableSlotLevel(spell.level)
+                              const canCast = spell.level === 0 || slotAvail !== null
+                              return (
+                                <button
+                                  onClick={() => castSpell(spell)}
+                                  disabled={saving || !canCast}
+                                  title={
+                                    spell.level === 0
+                                      ? 'Lancer (tour cantrip)'
+                                      : canCast
+                                        ? `Lancer — utilise emplacement niv.${slotAvail}`
+                                        : 'Aucun emplacement disponible'
+                                  }
+                                  className={`ml-0.5 text-xs font-semibold px-1.5 py-0.5 rounded transition-colors shrink-0 ${
+                                    canCast
+                                      ? 'bg-violet-700/50 text-violet-200 hover:bg-violet-600/70 disabled:cursor-not-allowed'
+                                      : 'text-stone-600 cursor-not-allowed'
+                                  }`}
+                                >
+                                  Lancer
+                                </button>
+                              )
+                            })()}
+                            {character.spellcasting.ability && (
+                              <button
+                                onClick={() => {
+                                  handleRoll({ sides: 20, modifier: character.spellcasting.attack_bonus, label: `Attaque sort: ${spell.name}`, count: 1 })
+                                  setDiceOpen(true)
+                                }}
+                                title={`Jet d'attaque: 1d20${sign(character.spellcasting.attack_bonus)}`}
+                                className="text-xs text-violet-500 hover:text-violet-300 transition-colors shrink-0"
+                              >
+                                ⚔
+                              </button>
+                            )}
+                            {spell.damage_dice && (
+                              <button
+                                onClick={() => {
+                                  const p = parseDice(spell.damage_dice!)
+                                  if (p) { handleRoll({ sides: p.sides, count: p.count, modifier: p.bonus, label: `Dégâts: ${spell.name}` }); setDiceOpen(true) }
+                                }}
+                                title={`Dégâts: ${spell.damage_dice}`}
+                                className="text-xs text-orange-500 hover:text-orange-300 transition-colors shrink-0"
+                              >
+                                {spell.damage_dice}
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleConcentrate(spell.name)}
+                              disabled={saving}
+                              title={isConcentrating ? 'Relâcher la concentration' : 'Se concentrer sur ce sort'}
+                              className={`ml-0.5 text-xs transition-colors disabled:cursor-not-allowed ${
                                 isConcentrating
-                                  ? 'bg-violet-700/50 border-violet-500 text-violet-100'
-                                  : spell.prepared
-                                    ? 'bg-violet-900/40 border-violet-700/60 text-violet-200'
-                                    : 'bg-stone-800 border-stone-700 text-stone-400'
+                                  ? 'text-violet-300 hover:text-violet-100'
+                                  : 'text-stone-600 hover:text-violet-400'
                               }`}
                             >
-                              <button
-                                onClick={() => handleTogglePrepared(spell._idx)}
-                                disabled={saving}
-                                title={spell.prepared ? 'Marquer comme non préparé' : 'Marquer comme préparé'}
-                                className={`w-2.5 h-2.5 rounded-full border transition-colors disabled:cursor-not-allowed shrink-0 ${
-                                  spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
-                                }`}
-                              />
-                              <span>{spell.name}</span>
-                              {character.spellcasting.ability && (
-                                <button
-                                  onClick={() => {
-                                    handleRoll({ sides: 20, modifier: character.spellcasting.attack_bonus, label: `Attaque sort: ${spell.name}`, count: 1 })
-                                    setDiceOpen(true)
-                                  }}
-                                  title={`Jet d'attaque: 1d20${sign(character.spellcasting.attack_bonus)}`}
-                                  className="ml-0.5 text-xs text-violet-500 hover:text-violet-300 transition-colors shrink-0"
-                                >
-                                  ⚔
-                                </button>
-                              )}
-                              {spell.damage_dice && (
-                                <button
-                                  onClick={() => {
-                                    const p = parseDice(spell.damage_dice!)
-                                    if (p) { handleRoll({ sides: p.sides, count: p.count, modifier: p.bonus, label: `Dégâts: ${spell.name}` }); setDiceOpen(true) }
-                                  }}
-                                  title={`Dégâts: ${spell.damage_dice}`}
-                                  className="text-xs text-orange-500 hover:text-orange-300 transition-colors shrink-0"
-                                >
-                                  {spell.damage_dice}
-                                </button>
-                              )}
-                              <button
-                                onClick={() => handleConcentrate(spell.name)}
-                                disabled={saving}
-                                title={isConcentrating ? 'Relâcher la concentration' : 'Se concentrer sur ce sort'}
-                                className={`ml-0.5 text-xs transition-colors disabled:cursor-not-allowed ${
-                                  isConcentrating
-                                    ? 'text-violet-300 hover:text-violet-100'
-                                    : 'text-stone-600 hover:text-violet-400'
-                                }`}
-                              >
-                                ⊙
-                              </button>
-                              <button
-                                onClick={() => handleRemoveSpell(spell._idx)}
-                                disabled={saving}
-                                className="text-stone-600 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-xs leading-none"
-                                title="Supprimer ce sort"
-                              >
-                                ×
-                              </button>
-                            </div>
-                          )
-                        })()}
-                      ))}
+                              ⊙
+                            </button>
+                            <button
+                              onClick={() => handleRemoveSpell(spell._idx)}
+                              disabled={saving}
+                              className="text-stone-600 hover:text-red-400 transition-colors disabled:cursor-not-allowed text-xs leading-none"
+                              title="Supprimer ce sort"
+                            >
+                              ×
+                            </button>
+                          </div>
+                        )
+                      })}
                     </div>
                   </div>
                 )
@@ -2739,6 +3233,33 @@ export function CharacterPage() {
           )}
         </div>
 
+        {/* Traits de personnalité */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">
+            Traits de personnalité
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {([
+              ['personality_traits', 'Traits de personnalité', 'Comment ce personnage se comporte-t-il ?'],
+              ['ideals',             'Idéaux',                 'En quoi croit-il profondément ?'],
+              ['bonds',              'Liens',                  'Qui ou quoi lui tient à cœur ?'],
+              ['flaws',              'Défauts',                'Quelle est sa faiblesse ou son vice ?'],
+            ] as [keyof typeof personalityDraft, string, string][]).map(([field, label, placeholder]) => (
+              <div key={field}>
+                <p className="text-stone-500 text-xs font-medium mb-1">{label}</p>
+                <textarea
+                  value={personalityDraft[field]}
+                  onChange={e => setPersonalityDraft(d => ({ ...d, [field]: e.target.value }))}
+                  onBlur={() => handleSavePersonality(field)}
+                  placeholder={placeholder}
+                  rows={3}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-none"
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+
         {/* Notes */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
@@ -2762,7 +3283,26 @@ export function CharacterPage() {
             className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
           />
         </div>
+
+        {/* Notes MJ */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <h2 className="text-stone-300 text-sm font-semibold">Notes MJ</h2>
+              <p className="text-stone-500 text-xs mt-0.5">Privées — non diffusées en temps réel</p>
+            </div>
+          </div>
+          <textarea
+            value={dmNotesDraft}
+            onChange={e => setDmNotesDraft(e.target.value)}
+            onBlur={handleSaveDmNotes}
+            placeholder="Secrets, arcs narratifs, liens avec la campagne…"
+            rows={4}
+            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+          />
+        </div>
       </main>
+      {showCompendium && <SpellCompendiumModal onClose={() => setShowCompendium(false)} />}
     </div>
   )
 }
