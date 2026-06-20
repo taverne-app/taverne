@@ -14,6 +14,7 @@ import {
   type Combatant,
   type CombatantFaction,
 } from '../api/combatants'
+import { createSession } from '../api/sessions'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
@@ -166,20 +167,61 @@ function InitInput({
 
 // ── Combat summary modal ──────────────────────────────────────────────────────
 
-function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, onClose, onReset }: {
+function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, campaignId, onClose, onReset }: {
   roundNumber: number
   combatants: Combatant[]
   monsterMap: Record<number, MonsterTemplate>
   characters: Character[]
+  campaignId: number | null
   onClose: () => void
   onReset: () => void
 }) {
+  const [exporting, setExporting] = useState(false)
+  const [exported, setExported] = useState(false)
+
   const defeated = combatants.filter(c => c.current_hp <= 0)
   const totalXp = defeated.reduce((sum, c) => {
     const tpl = monsterMap[c.id]
     return sum + (tpl ? crToXp(tpl.cr) : 0)
   }, 0)
   const shareXp = characters.length > 0 ? Math.floor(totalXp / characters.length) : 0
+
+  async function handleExportToSession() {
+    if (!campaignId) return
+    setExporting(true)
+    const today = new Date().toISOString().split('T')[0]
+    const lines: string[] = [
+      `Rounds : ${roundNumber}`,
+      '',
+    ]
+    if (defeated.length > 0) {
+      lines.push(`Ennemis vaincus (${defeated.length}) :`)
+      defeated.forEach(c => {
+        const xp = monsterMap[c.id] ? crToXp(monsterMap[c.id].cr) : 0
+        lines.push(`- ${c.name}${xp > 0 ? ` — ${xp} XP` : ''}`)
+      })
+      if (totalXp > 0) {
+        lines.push(`Total : ${totalXp} XP${characters.length > 1 ? ` (${shareXp}/joueur)` : ''}`)
+      }
+      lines.push('')
+    }
+    if (characters.length > 0) {
+      lines.push('État du groupe :')
+      characters.forEach(c => {
+        lines.push(`- ${c.name} : ${c.combat.current_hp}/${c.combat.max_hp} PV`)
+      })
+    }
+    try {
+      await createSession(campaignId, {
+        title: `Combat — ${today}`,
+        session_date: today,
+        notes: lines.join('\n'),
+      })
+      setExported(true)
+    } finally {
+      setExporting(false)
+    }
+  }
 
   return (
     <div
@@ -244,19 +286,28 @@ function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, o
             </div>
           )}
         </div>
-        <div className="flex justify-end gap-2 px-5 py-3 border-t border-stone-800">
+        <div className="flex justify-between gap-2 px-5 py-3 border-t border-stone-800">
           <button
-            onClick={onClose}
-            className="text-stone-400 hover:text-stone-200 text-sm px-3 py-1.5 rounded-lg border border-stone-700 transition-colors"
+            onClick={handleExportToSession}
+            disabled={exporting || exported || !campaignId}
+            className="text-amber-400 hover:text-amber-300 disabled:opacity-50 text-sm px-3 py-1.5 rounded-lg border border-amber-800/50 hover:border-amber-700/50 transition-colors flex items-center gap-1.5"
           >
-            Fermer
+            {exported ? '✓ Note créée' : exporting ? '…' : '📋 Exporter en note'}
           </button>
-          <button
-            onClick={onReset}
-            className="text-stone-200 hover:text-white text-sm px-3 py-1.5 rounded-lg bg-stone-700 hover:bg-stone-600 border border-stone-600 transition-colors"
-          >
-            Réinitialiser l'initiative
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={onClose}
+              className="text-stone-400 hover:text-stone-200 text-sm px-3 py-1.5 rounded-lg border border-stone-700 transition-colors"
+            >
+              Fermer
+            </button>
+            <button
+              onClick={onReset}
+              className="text-stone-200 hover:text-white text-sm px-3 py-1.5 rounded-lg bg-stone-700 hover:bg-stone-600 border border-stone-600 transition-colors"
+            >
+              Réinitialiser
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2687,6 +2738,7 @@ export function CombatPage() {
           combatants={combatants}
           monsterMap={monsterMap}
           characters={characters}
+          campaignId={campaignId}
           onClose={() => setShowCombatSummary(false)}
           onReset={() => { setShowCombatSummary(false); handleReset() }}
         />

@@ -971,6 +971,7 @@ export function CharacterPage() {
   const emptyItemDraft = (): ItemDraft => ({ name: '', quantity: '1', weight: '0', value: '', notes: '' })
   const [addingItem, setAddingItem] = useState(false)
   const [itemDraft, setItemDraft]   = useState<ItemDraft>(emptyItemDraft)
+  const [inventorySearch, setInventorySearch] = useState('')
 
   async function handleAddItem() {
     if (!character || !itemDraft.name.trim()) return
@@ -2612,12 +2613,23 @@ export function CharacterPage() {
                 )
               })()}
             </div>
-            <button
-              onClick={() => { setAddingItem(v => !v); setItemDraft(emptyItemDraft()) }}
-              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
-            >
-              {addingItem ? 'Annuler' : '+ Ajouter'}
-            </button>
+            <div className="flex items-center gap-2">
+              {character.inventory.items.length > 3 && (
+                <input
+                  type="text"
+                  placeholder="Rechercher…"
+                  value={inventorySearch}
+                  onChange={e => setInventorySearch(e.target.value)}
+                  className="w-32 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors placeholder:text-stone-600"
+                />
+              )}
+              <button
+                onClick={() => { setAddingItem(v => !v); setItemDraft(emptyItemDraft()) }}
+                className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+              >
+                {addingItem ? 'Annuler' : '+ Ajouter'}
+              </button>
+            </div>
           </div>
 
           {/* Add item form */}
@@ -2677,7 +2689,10 @@ export function CharacterPage() {
             <p className="text-stone-500 text-sm">Inventaire vide.</p>
           ) : (
             <div className="divide-y divide-stone-800/60">
-              {character.inventory.items.map((item, i) => (
+              {character.inventory.items
+                .map((item, i) => ({ item, i }))
+                .filter(({ item }) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                .map(({ item, i }) => (
                 <div key={i} className="flex items-center gap-3 py-2.5">
                   {/* Equipped toggle */}
                   <button
