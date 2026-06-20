@@ -15,9 +15,9 @@ Route::prefix('auth')->group(function () {
     Route::post('login',    [AuthController::class, 'login']);
 });
 
-// Vues partagées (public)
-Route::get('/share/{token}',           [ShareController::class, 'show']);
+// Vues partagées (public) — ordre important : la route spécifique avant la générique
 Route::get('/share/character/{token}', [ShareController::class, 'showCharacter']);
+Route::get('/share/{token}',           [ShareController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());

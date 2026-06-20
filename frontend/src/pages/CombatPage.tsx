@@ -414,6 +414,7 @@ export function CombatPage() {
   // Add combatant form
   const [addingCombatant, setAddingCombatant] = useState(false)
   const [combatantDraft, setCombatantDraft] = useState({ name: '', faction: 'ennemi' as CombatantFaction, max_hp: '', ac: '', initiative: '' })
+  const [monsterSuggestions, setMonsterSuggestions] = useState<MonsterTemplate[]>([])
   const [showBestiary, setShowBestiary] = useState(false)
   const [bestiarySearch, setBestiarySearch] = useState('')
   const [addedMonster, setAddedMonster] = useState<string | null>(null)
@@ -515,14 +516,24 @@ export function CombatPage() {
     if (document.hidden) notify(msg)
     else setTitle(msg)
 
-    // Notify CharacterPage tabs via BroadcastChannel
-    if (activeCombatant?.kind === 'character') {
-      try {
-        const bc = new BroadcastChannel('taverne-combat-turn')
-        bc.postMessage({ characterId: activeCombatant.data.id, name })
-        bc.close()
-      } catch { /* unsupported */ }
-    }
+    // Notify CharacterPage tabs via BroadcastChannel (turn + full order)
+    try {
+      const bc = new BroadcastChannel('taverne-combat-turn')
+      bc.postMessage({
+        characterId: activeCombatant?.kind === 'character' ? activeCombatant.data.id : undefined,
+        name,
+        combatOrder: withRollDisplay.map((row, i) => ({
+          id: rowId(row),
+          name: row.data.name,
+          currentHp: row.kind === 'character' ? row.data.combat.current_hp : row.data.current_hp,
+          maxHp: row.kind === 'character' ? row.data.combat.max_hp : row.data.max_hp,
+          isActive: i === activeTurn,
+          faction: row.kind === 'character' ? 'allié' : row.data.faction,
+        })),
+        round: roundNumber,
+      })
+      bc.close()
+    } catch { /* unsupported */ }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTurn, activeCombatant?.data.id])
 
@@ -2107,13 +2118,44 @@ export function CombatPage() {
                     ))}
                   </div>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                    <input
-                      type="text"
-                      value={combatantDraft.name}
-                      onChange={e => setCombatantDraft(prev => ({ ...prev, name: e.target.value }))}
-                      placeholder="Nom *"
-                      className="col-span-2 sm:col-span-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
-                    />
+                    <div className="col-span-2 sm:col-span-1 relative">
+                      <input
+                        type="text"
+                        value={combatantDraft.name}
+                        onChange={e => {
+                          const val = e.target.value
+                          setCombatantDraft(prev => ({ ...prev, name: val }))
+                          if (val.length >= 2) {
+                            setMonsterSuggestions(MONSTERS.filter(m =>
+                              m.name.toLowerCase().includes(val.toLowerCase())
+                            ).slice(0, 6))
+                          } else {
+                            setMonsterSuggestions([])
+                          }
+                        }}
+                        onBlur={() => setTimeout(() => setMonsterSuggestions([]), 150)}
+                        placeholder="Nom *"
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                      />
+                      {monsterSuggestions.length > 0 && (
+                        <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-stone-800 border border-stone-700 rounded-lg shadow-xl overflow-hidden">
+                          {monsterSuggestions.map(m => (
+                            <button
+                              key={m.name}
+                              type="button"
+                              onMouseDown={() => {
+                                setCombatantDraft(prev => ({ ...prev, name: m.name, max_hp: String(m.hp_avg), ac: String(m.ac) }))
+                                setMonsterSuggestions([])
+                              }}
+                              className="w-full flex items-center justify-between px-3 py-2 hover:bg-stone-700 text-left transition-colors"
+                            >
+                              <span className="text-white text-sm">{m.name}</span>
+                              <span className="text-stone-500 text-xs">CA {m.ac} · {m.hp_avg} PV · FP {m.cr}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                     <input
                       type="number"
                       value={combatantDraft.max_hp}
@@ -2146,7 +2188,7 @@ export function CombatPage() {
                       Ajouter
                     </button>
                     <button
-                      onClick={() => { setAddingCombatant(false); setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' }) }}
+                      onClick={() => { setAddingCombatant(false); setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' }); setMonsterSuggestions([]) }}
                       className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
                     >
                       Annuler

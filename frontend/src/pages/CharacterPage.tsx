@@ -294,15 +294,21 @@ export function CharacterPage() {
 
   const { notify } = useTabNotify()
 
-  // Blink tab title when it's this character's turn (notified by CombatPage via BroadcastChannel)
+  interface CombatEntry { id: string; name: string; currentHp: number; maxHp: number; isActive: boolean; faction: string }
+  const [combatState, setCombatState] = useState<{ order: CombatEntry[]; round: number } | null>(null)
+
+  // Blink tab title + receive combat order via BroadcastChannel
   useEffect(() => {
     if (!character) return
     let bc: BroadcastChannel | null = null
     try {
       bc = new BroadcastChannel('taverne-combat-turn')
-      bc.onmessage = (e: MessageEvent<{ characterId: number; name: string }>) => {
+      bc.onmessage = (e: MessageEvent<{ characterId?: number; name: string; combatOrder?: CombatEntry[]; round?: number }>) => {
         if (e.data.characterId === character.id) {
           notify(`🔔 Ton tour, ${character.name} !`)
+        }
+        if (e.data.combatOrder) {
+          setCombatState({ order: e.data.combatOrder, round: e.data.round ?? 1 })
         }
       }
     } catch { /* unsupported */ }
@@ -507,6 +513,7 @@ export function CharacterPage() {
   const [spellLevelDraft, setSpellLevelDraft] = useState('1')
   const [spellDamageDraft, setSpellDamageDraft] = useState('')
   const [spellFilter, setSpellFilter] = useState<'all' | 'prepared'>('all')
+  const [castFeedback, setCastFeedback] = useState<{ name: string; slotLevel: number } | null>(null)
   const [showSpellBrowser, setShowSpellBrowser] = useState(false)
   const [showCompendium, setShowCompendium] = useState(false)
   const [spellBrowserLevel, setSpellBrowserLevel] = useState<number | 'all'>('all')
@@ -618,12 +625,17 @@ export function CharacterPage() {
 
   async function castSpell(spell: { name: string; level: number; concentration?: boolean; damage_dice?: string }) {
     if (!character) return
+    let usedSlot = 0
     if (spell.level > 0) {
       const slotLevel = availableSlotLevel(spell.level)
       if (slotLevel === null) return
       const updated = await withSave(() => useSpellSlot(character.id, slotLevel, 'use'))
-      if (updated) setCharacter(updated)
+      if (!updated) return
+      setCharacter(updated)
+      usedSlot = slotLevel
     }
+    setCastFeedback({ name: spell.name, slotLevel: usedSlot })
+    setTimeout(() => setCastFeedback(null), 3000)
     if (spell.damage_dice) {
       const p = parseDice(spell.damage_dice)
       if (p) {
@@ -1346,6 +1358,42 @@ export function CharacterPage() {
       )}
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6" style={{ paddingBottom: diceOpen ? '220px' : undefined }}>
+
+        {/* Combat initiative live */}
+        {combatState && (
+          <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                Combat — Round {combatState.round}
+              </span>
+              <button onClick={() => setCombatState(null)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors">✕</button>
+            </div>
+            <div className="space-y-1.5">
+              {combatState.order.map(entry => {
+                const hpPct = entry.maxHp > 0 ? (entry.currentHp / entry.maxHp) * 100 : 0
+                const barColor = hpPct > 50 ? 'bg-emerald-500' : hpPct > 25 ? 'bg-amber-500' : 'bg-red-500'
+                const factionColor = entry.faction === 'allié' ? 'text-emerald-400' : entry.faction === 'ennemi' ? 'text-red-400' : 'text-stone-400'
+                return (
+                  <div key={entry.id} className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${entry.isActive ? 'bg-amber-900/30 border border-amber-700/40' : 'bg-stone-800/40'}`}>
+                    {entry.isActive && <span className="text-amber-400 text-xs">▶</span>}
+                    {!entry.isActive && <span className="w-3" />}
+                    <span className={`text-sm font-medium flex-1 truncate ${entry.isActive ? 'text-white' : 'text-stone-300'}`}>
+                      {entry.name}
+                    </span>
+                    <span className={`text-xs ${factionColor}`}>
+                      {entry.faction === 'allié' ? 'Allié' : entry.faction === 'ennemi' ? 'Ennemi' : 'Neutre'}
+                    </span>
+                    <div className="w-16 h-1.5 bg-stone-700 rounded-full overflow-hidden shrink-0">
+                      <div className={`h-full rounded-full ${barColor}`} style={{ width: `${Math.max(0, Math.min(100, hpPct))}%` }} />
+                    </div>
+                    <span className="text-xs text-stone-500 w-12 text-right shrink-0">{entry.currentHp}/{entry.maxHp}</span>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         {/* Identity */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           {editingIdentity ? (
@@ -3421,6 +3469,19 @@ export function CharacterPage() {
         </div>
       </main>
       {showCompendium && <SpellCompendiumModal onClose={() => setShowCompendium(false)} />}
+
+      {/* Toast: sort lancé */}
+      {castFeedback && (
+        <div className="fixed top-4 right-4 z-50 flex items-center gap-3 bg-violet-900/95 border border-violet-600/60 text-violet-100 rounded-xl px-4 py-3 shadow-xl animate-fade-in pointer-events-none">
+          <span className="text-lg">✨</span>
+          <div>
+            <p className="text-sm font-semibold">{castFeedback.name}</p>
+            <p className="text-xs text-violet-300">
+              {castFeedback.slotLevel === 0 ? 'Cantrip lancé' : `Emplacement de niveau ${castFeedback.slotLevel} utilisé`}
+            </p>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
