@@ -53,7 +53,7 @@ class CombatantController extends Controller
 
         $amount = $request->integer('amount');
 
-        if ($request->string('type') === 'damage') {
+        if ($request->input('type') === 'damage') {
             $combatant->update([
                 'current_hp' => max(0, $combatant->current_hp - $amount),
             ]);
