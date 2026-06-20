@@ -14,7 +14,7 @@ class CharacterResource extends JsonResource
             'name'         => $this->name,
             'portrait_url' => $this->portrait_url,
             'race'         => $this->race,
-            'class'      => $this->character_class,
+            'character_class' => $this->character_class,
             'subclass'   => $this->subclass,
             'level'      => $this->level,
             'background' => $this->background,

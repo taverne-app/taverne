@@ -1141,7 +1141,16 @@ export function CharacterPage() {
                   setCharacter(c)
                 }
                 const url = `${window.location.origin}/share/character/${c.share_token}`
-                await navigator.clipboard.writeText(url)
+                try {
+                  await navigator.clipboard.writeText(url)
+                } catch {
+                  const el = document.createElement('textarea')
+                  el.value = url
+                  document.body.appendChild(el)
+                  el.select()
+                  document.execCommand('copy')
+                  document.body.removeChild(el)
+                }
                 setShareCopied(true)
                 setTimeout(() => setShareCopied(false), 2500)
               }}
