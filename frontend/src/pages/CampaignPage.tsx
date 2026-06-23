@@ -23,6 +23,7 @@ import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { canLevelUp } from '../data/xp'
+import { MarkdownText } from '../components/MarkdownText'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1165,11 +1166,11 @@ export function CampaignPage() {
                 />
               </div>
               <textarea
-                placeholder="Notes de la session…"
+                placeholder={"Notes de la session…\n\nSyntaxe : ## Titre  **gras**  *italique*  - liste  ---"}
                 value={sessionDraft.notes}
                 onChange={e => setSessionDraft(d => ({ ...d, notes: e.target.value }))}
-                rows={4}
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+                rows={5}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono"
               />
               <div className="flex justify-end">
                 <button
@@ -1216,7 +1217,8 @@ export function CampaignPage() {
                         value={editSessionDraft.notes}
                         onChange={e => setEditSessionDraft(d => ({ ...d, notes: e.target.value }))}
                         rows={5}
-                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors resize-y"
+                        placeholder={"## Titre  **gras**  *italique*  - liste"}
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-700 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono"
                       />
                       <div className="flex items-center justify-between">
                         <button onClick={() => setEditingSession(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
@@ -1265,10 +1267,8 @@ export function CampaignPage() {
                         </button>
                       </button>
                       {expandedSession === s.id && s.notes && (
-                        <div className="px-5 pb-5">
-                          <p className="text-stone-400 text-sm whitespace-pre-wrap leading-relaxed border-t border-stone-800 pt-4">
-                            {s.notes}
-                          </p>
+                        <div className="px-5 pb-5 border-t border-stone-800 pt-4">
+                          <MarkdownText>{s.notes}</MarkdownText>
                         </div>
                       )}
                     </div>

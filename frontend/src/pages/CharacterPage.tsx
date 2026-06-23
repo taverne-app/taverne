@@ -3190,7 +3190,17 @@ export function CharacterPage() {
                                 spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
                               }`}
                             />
-                            <span>{spell.name}</span>
+                            <span className="relative group/spell">
+                              <span className="cursor-default">{spell.name}</span>
+                              <div className="absolute bottom-full left-0 mb-1.5 z-20 hidden group-hover/spell:block pointer-events-none">
+                                <div className="bg-stone-800 border border-stone-600 rounded-lg px-3 py-2 shadow-xl text-xs space-y-1 min-w-max max-w-[220px]">
+                                  <p className="font-semibold text-white">{spell.name}</p>
+                                  <p className="text-stone-400">{spell.level === 0 ? 'Tour de magie' : `Sort de niveau ${spell.level}`}</p>
+                                  {spell.concentration && <p className="text-violet-400">◈ Concentration</p>}
+                                  {spell.damage_dice && <p className="text-orange-400">Dégâts : {spell.damage_dice}</p>}
+                                </div>
+                              </div>
+                            </span>
                             {(() => {
                               const slotAvail = availableSlotLevel(spell.level)
                               const canCast = spell.level === 0 || slotAvail !== null
