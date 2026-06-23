@@ -28,6 +28,7 @@ export interface Spell {
   prepared: boolean
   concentration?: boolean
   damage_dice?: string
+  notes?: string
 }
 
 export interface Feature {
@@ -42,6 +43,8 @@ export interface AttackMacro {
   damage_dice: string
   damage_type?: string
   crit_dice?: string
+  range?: string
+  notes?: string
 }
 
 export interface ClassResource {

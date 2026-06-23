@@ -513,6 +513,9 @@ export function CharacterPage() {
   const [spellNameDraft, setSpellNameDraft] = useState('')
   const [spellLevelDraft, setSpellLevelDraft] = useState('1')
   const [spellDamageDraft, setSpellDamageDraft] = useState('')
+  const [spellNotesDraft, setSpellNotesDraft] = useState('')
+  const [editingSpellNotesIdx, setEditingSpellNotesIdx] = useState<number | null>(null)
+  const [spellNotesEdit, setSpellNotesEdit] = useState('')
   const [spellFilter, setSpellFilter] = useState<'all' | 'prepared'>('all')
   const [castFeedback, setCastFeedback] = useState<{ name: string; slotLevel: number } | null>(null)
   const [showSpellBrowser, setShowSpellBrowser] = useState(false)
@@ -528,6 +531,7 @@ export function CharacterPage() {
       level: isNaN(lvl) ? 0 : lvl,
       prepared: true,
       ...(spellDamageDraft.trim() ? { damage_dice: spellDamageDraft.trim() } : {}),
+      ...(spellNotesDraft.trim() ? { notes: spellNotesDraft.trim() } : {}),
     }
     const next = [...character.spellcasting.spells, newSpell]
     const updated = await withSave(() => updateSpells(character.id, next))
@@ -536,8 +540,18 @@ export function CharacterPage() {
       setSpellNameDraft('')
       setSpellLevelDraft('1')
       setSpellDamageDraft('')
+      setSpellNotesDraft('')
       setAddingSpell(false)
     }
+  }
+
+  async function handleSaveSpellNotes(idx: number) {
+    if (!character) return
+    const next = character.spellcasting.spells.map((s, i) =>
+      i === idx ? { ...s, notes: spellNotesEdit.trim() || undefined } : s
+    )
+    const updated = await withSave(() => updateSpells(character.id, next))
+    if (updated) { setCharacter(updated); setEditingSpellNotesIdx(null) }
   }
 
   async function addSpellFromBrowser(name: string, level: number) {
@@ -847,14 +861,16 @@ export function CharacterPage() {
 
   // ── Macros d'attaque ─────────────────────────────────────────────────────────
 
-  interface MacroDraft { name: string; attack_bonus: string; damage_dice: string; damage_type: string; crit_dice: string }
-  const emptyMacroDraft = (): MacroDraft => ({ name: '', attack_bonus: '', damage_dice: '', damage_type: '', crit_dice: '' })
+  interface MacroDraft { name: string; attack_bonus: string; damage_dice: string; damage_type: string; crit_dice: string; range: string; notes: string }
+  const emptyMacroDraft = (): MacroDraft => ({ name: '', attack_bonus: '', damage_dice: '', damage_type: '', crit_dice: '', range: '', notes: '' })
   const draftFromMacro = (m: AttackMacro): MacroDraft => ({
     name: m.name,
     attack_bonus: m.attack_bonus !== null ? String(m.attack_bonus) : '',
     damage_dice: m.damage_dice,
     damage_type: m.damage_type ?? '',
     crit_dice: m.crit_dice ?? '',
+    range: m.range ?? '',
+    notes: m.notes ?? '',
   })
   const [addingMacro, setAddingMacro] = useState(false)
   const [macroDraft, setMacroDraft] = useState<MacroDraft>(emptyMacroDraft)
@@ -868,6 +884,8 @@ export function CharacterPage() {
       damage_dice: d.damage_dice.trim(),
       damage_type: d.damage_type.trim() || undefined,
       crit_dice: d.crit_dice.trim() || undefined,
+      range: d.range.trim() || undefined,
+      notes: d.notes.trim() || undefined,
     }
   }
 
@@ -2227,6 +2245,26 @@ export function CharacterPage() {
                     className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors"
                   />
                 </div>
+                <div>
+                  <label className="text-stone-500 text-xs mb-1 block">Portée</label>
+                  <input
+                    type="text"
+                    placeholder="1,5 m"
+                    value={macroDraft.range}
+                    onChange={e => setMacroDraft(d => ({ ...d, range: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="text-stone-500 text-xs mb-1 block">Notes</label>
+                  <input
+                    type="text"
+                    placeholder="Ex : finesse, lancer à deux mains…"
+                    value={macroDraft.notes}
+                    onChange={e => setMacroDraft(d => ({ ...d, notes: e.target.value }))}
+                    className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors"
+                  />
+                </div>
               </div>
               <div className="flex items-center justify-between pt-1">
                 <button
@@ -2282,6 +2320,16 @@ export function CharacterPage() {
                         <input type="text" placeholder="2d8+3" value={editMacroDraft.crit_dice} onChange={e => setEditMacroDraft(d => ({ ...d, crit_dice: e.target.value }))}
                           className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors" />
                       </div>
+                      <div>
+                        <label className="text-stone-500 text-xs mb-1 block">Portée</label>
+                        <input type="text" placeholder="1,5 m" value={editMacroDraft.range} onChange={e => setEditMacroDraft(d => ({ ...d, range: e.target.value }))}
+                          className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors" />
+                      </div>
+                      <div className="col-span-2">
+                        <label className="text-stone-500 text-xs mb-1 block">Notes</label>
+                        <input type="text" placeholder="Ex : finesse, lancer à deux mains…" value={editMacroDraft.notes} onChange={e => setEditMacroDraft(d => ({ ...d, notes: e.target.value }))}
+                          className="w-full bg-stone-900 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500 transition-colors" />
+                      </div>
                     </div>
                     <div className="flex justify-between pt-1">
                       <button onClick={() => setEditingMacroIndex(null)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
@@ -2294,11 +2342,19 @@ export function CharacterPage() {
                 ) : (
                 <div key={i} className="flex items-center gap-3 bg-stone-800/50 border border-stone-800 rounded-lg px-3 py-2.5">
                   <div className="flex-1 min-w-0">
-                    <span className="text-white text-sm font-medium">{macro.name}</span>
-                    {macro.damage_type && (
-                      <span className="ml-2 text-stone-500 text-xs">
-                        {DAMAGE_TYPES.find(([t]) => t === macro.damage_type)?.[1] ?? macro.damage_type}
-                      </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-white text-sm font-medium">{macro.name}</span>
+                      {macro.damage_type && (
+                        <span className="text-stone-500 text-xs">
+                          {DAMAGE_TYPES.find(([t]) => t === macro.damage_type)?.[1] ?? macro.damage_type}
+                        </span>
+                      )}
+                      {macro.range && (
+                        <span className="text-stone-600 text-xs bg-stone-800 rounded px-1.5 py-0.5">{macro.range}</span>
+                      )}
+                    </div>
+                    {macro.notes && (
+                      <p className="text-stone-500 text-xs mt-0.5 truncate" title={macro.notes}>{macro.notes}</p>
                     )}
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0">
@@ -3151,6 +3207,14 @@ export function CharacterPage() {
                   placeholder="ex: 2d6+3 (optionnel)"
                   value={spellDamageDraft}
                   onChange={e => setSpellDamageDraft(e.target.value)}
+                  className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+                <span className="text-stone-500 text-xs shrink-0">Notes</span>
+                <input
+                  type="text"
+                  placeholder="Portée, composantes… (optionnel)"
+                  value={spellNotesDraft}
+                  onChange={e => setSpellNotesDraft(e.target.value)}
                   className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
                 />
               </div>
@@ -3175,8 +3239,8 @@ export function CharacterPage() {
                       {spells.map(spell => {
                         const isConcentrating = character.state.concentrating_on === spell.name
                         return (
+                          <div key={spell._idx} className="flex flex-col gap-1">
                           <div
-                            key={spell._idx}
                             className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-sm transition-colors ${
                               isConcentrating
                                 ? 'bg-violet-700/50 border-violet-500 text-violet-100'
@@ -3201,9 +3265,20 @@ export function CharacterPage() {
                                   <p className="text-stone-400">{spell.level === 0 ? 'Tour de magie' : `Sort de niveau ${spell.level}`}</p>
                                   {spell.concentration && <p className="text-violet-400">◈ Concentration</p>}
                                   {spell.damage_dice && <p className="text-orange-400">Dégâts : {spell.damage_dice}</p>}
+                                  {spell.notes && <p className="text-stone-300 italic">{spell.notes}</p>}
                                 </div>
                               </div>
                             </span>
+                            <button
+                              onClick={() => {
+                                if (editingSpellNotesIdx === spell._idx) { setEditingSpellNotesIdx(null) }
+                                else { setEditingSpellNotesIdx(spell._idx); setSpellNotesEdit(spell.notes ?? '') }
+                              }}
+                              title={spell.notes ? 'Modifier les notes' : 'Ajouter des notes'}
+                              className={`text-xs transition-colors shrink-0 ${spell.notes ? 'text-stone-400 hover:text-stone-200' : 'text-stone-700 hover:text-stone-500'}`}
+                            >
+                              ✎
+                            </button>
                             {(() => {
                               const slotAvail = availableSlotLevel(spell.level)
                               const canCast = spell.level === 0 || slotAvail !== null
@@ -3272,6 +3347,27 @@ export function CharacterPage() {
                             >
                               ×
                             </button>
+                          </div>
+                          {editingSpellNotesIdx === spell._idx && (
+                            <div className="flex gap-1.5 w-full">
+                              <input
+                                type="text"
+                                autoFocus
+                                value={spellNotesEdit}
+                                onChange={e => setSpellNotesEdit(e.target.value)}
+                                onKeyDown={e => {
+                                  if (e.key === 'Enter') handleSaveSpellNotes(spell._idx)
+                                  if (e.key === 'Escape') setEditingSpellNotesIdx(null)
+                                }}
+                                placeholder="Portée, composantes, description…"
+                                className="flex-1 bg-stone-800 border border-violet-700/50 rounded px-2 py-1 text-white text-xs placeholder-stone-600 focus:outline-none"
+                              />
+                              <button onClick={() => handleSaveSpellNotes(spell._idx)} disabled={saving}
+                                className="text-violet-400 hover:text-violet-200 text-xs px-2 transition-colors disabled:opacity-40">✓</button>
+                              <button onClick={() => setEditingSpellNotesIdx(null)}
+                                className="text-stone-500 hover:text-stone-300 text-xs px-1 transition-colors">✕</button>
+                            </div>
+                          )}
                           </div>
                         )
                       })}
