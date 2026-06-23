@@ -603,22 +603,27 @@ export function CombatPage() {
     setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
   }
 
-  async function handleRollAllInitiative() {
+  async function handleRollAllInitiative(onlyMissing = false) {
     const d20 = () => Math.floor(Math.random() * 20) + 1
     await Promise.all([
-      ...characters.map(async c => {
-        const roll = d20() + c.combat.initiative
-        const updated = await setInitiativeRoll(c.id, roll)
-        updateCharacter(updated)
-      }),
-      ...combatants.map(async cb => {
-        if (!campaignId) return
-        const roll = d20()
-        const updated = await updateCombatantInitiative(campaignId, cb.id, roll)
-        setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
-      }),
+      ...characters
+        .filter(c => !onlyMissing || c.combat.initiative_roll == null)
+        .map(async c => {
+          const roll = d20() + c.combat.initiative
+          const updated = await setInitiativeRoll(c.id, roll)
+          updateCharacter(updated)
+        }),
+      ...combatants
+        .filter(cb => !onlyMissing || cb.initiative_roll == null)
+        .map(async cb => {
+          if (!campaignId) return
+          const mod = monsterMap[cb.id]?.initiative_mod ?? 0
+          const roll = d20() + mod
+          const updated = await updateCombatantInitiative(campaignId, cb.id, roll)
+          setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
+        }),
     ])
-    setManualOrder(null) // reset manual order when initiative is rerolled
+    setManualOrder(null)
   }
 
   async function handleCombatantHp(combatantId: number, type: 'damage' | 'heal') {
@@ -1315,13 +1320,24 @@ export function CombatPage() {
             </h2>
             <div className="flex items-center gap-3">
               {(characters.length > 0 || combatants.length > 0) && (
-                <button
-                  onClick={handleRollAllInitiative}
-                  className="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/40 text-amber-400 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
-                  title="Lance 1d20 + modificateur pour tous les participants"
-                >
-                  ⚅ Lancer l'initiative
-                </button>
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => handleRollAllInitiative(false)}
+                    className="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/40 text-amber-400 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
+                    title="Lance 1d20 + modificateur pour tous les participants"
+                  >
+                    ⚅ Lancer l'initiative
+                  </button>
+                  {(characters.some(c => c.combat.initiative_roll == null) || combatants.some(cb => cb.initiative_roll == null)) && (
+                    <button
+                      onClick={() => handleRollAllInitiative(true)}
+                      className="bg-stone-700/40 hover:bg-stone-700/70 border border-stone-600/40 text-stone-400 text-xs font-medium rounded-lg px-2.5 py-1.5 transition-colors"
+                      title="Lance uniquement pour les participants sans initiative"
+                    >
+                      + Manquants
+                    </button>
+                  )}
+                </div>
               )}
               {(characters.length > 0 || combatants.length > 0) && (
                 <button

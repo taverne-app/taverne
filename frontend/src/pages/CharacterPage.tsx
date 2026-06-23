@@ -47,6 +47,7 @@ import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS } from '../data/spells'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
+import { MarkdownText } from '../components/MarkdownText'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { ConditionTag } from '../components/ConditionTag'
 import { CONDITIONS_FR } from '../data/conditions'
@@ -760,6 +761,8 @@ export function CharacterPage() {
 
   const [notesDraft, setNotesDraft] = useState('')
   const [notesDirty, setNotesDirty] = useState(false)
+  const [notesPreview, setNotesPreview] = useState(false)
+  const [dmNotesPreview, setDmNotesPreview] = useState(false)
 
   useEffect(() => {
     if (character) setNotesDraft(character.notes ?? '')
@@ -3464,24 +3467,35 @@ export function CharacterPage() {
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Notes</h2>
-            {notesDirty && (
-              <button
-                onClick={handleSaveNotes}
-                disabled={saving}
-                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
-              >
-                Enregistrer
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {notesDirty && !notesPreview && (
+                <button onClick={handleSaveNotes} disabled={saving}
+                  className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40">
+                  Enregistrer
+                </button>
+              )}
+              {notesDraft.trim() && (
+                <button onClick={() => { if (!notesPreview) handleSaveNotes(); setNotesPreview(v => !v) }}
+                  className="text-stone-500 hover:text-stone-300 text-xs transition-colors">
+                  {notesPreview ? '✎ Éditer' : '👁 Aperçu'}
+                </button>
+              )}
+            </div>
           </div>
-          <textarea
-            value={notesDraft}
-            onChange={e => { setNotesDraft(e.target.value); setNotesDirty(true) }}
-            onBlur={handleSaveNotes}
-            placeholder="Notes libres sur ce personnage…"
-            rows={5}
-            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
-          />
+          {notesPreview ? (
+            <div className="min-h-[80px]">
+              <MarkdownText>{notesDraft}</MarkdownText>
+            </div>
+          ) : (
+            <textarea
+              value={notesDraft}
+              onChange={e => { setNotesDraft(e.target.value); setNotesDirty(true) }}
+              onBlur={handleSaveNotes}
+              placeholder={"Notes libres sur ce personnage…\n\n## Titre  **gras**  *italique*  - liste"}
+              rows={5}
+              className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono"
+            />
+          )}
         </div>
 
         {/* Notes MJ */}
@@ -3491,15 +3505,27 @@ export function CharacterPage() {
               <h2 className="text-stone-300 text-sm font-semibold">Notes MJ</h2>
               <p className="text-stone-500 text-xs mt-0.5">Privées — non diffusées en temps réel</p>
             </div>
+            {dmNotesDraft.trim() && (
+              <button onClick={() => setDmNotesPreview(v => !v)}
+                className="text-stone-500 hover:text-stone-300 text-xs transition-colors">
+                {dmNotesPreview ? '✎ Éditer' : '👁 Aperçu'}
+              </button>
+            )}
           </div>
-          <textarea
-            value={dmNotesDraft}
-            onChange={e => setDmNotesDraft(e.target.value)}
-            onBlur={handleSaveDmNotes}
-            placeholder="Secrets, arcs narratifs, liens avec la campagne…"
-            rows={4}
-            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
-          />
+          {dmNotesPreview ? (
+            <div className="min-h-[60px]">
+              <MarkdownText>{dmNotesDraft}</MarkdownText>
+            </div>
+          ) : (
+            <textarea
+              value={dmNotesDraft}
+              onChange={e => setDmNotesDraft(e.target.value)}
+              onBlur={handleSaveDmNotes}
+              placeholder={"Secrets, arcs narratifs, liens avec la campagne…\n\n## Titre  **gras**  - liste"}
+              rows={4}
+              className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono"
+            />
+          )}
         </div>
       </main>
       {showCompendium && <SpellCompendiumModal onClose={() => setShowCompendium(false)} />}
