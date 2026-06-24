@@ -194,7 +194,45 @@ function InitInput({
 
 // ── Combat summary modal ──────────────────────────────────────────────────────
 
-function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, campaignId, onClose, onReset }: {
+type LootResult = { description: string; items: string[] }
+
+function generateLoot(crList: number[]): LootResult {
+  const totalCr = crList.reduce((s, c) => s + c, 0)
+  const d = (n: number) => Math.floor(Math.random() * n) + 1
+  if (totalCr <= 4) {
+    const cp = d(6) * d(6) * 10
+    const sp = d(3) * d(6) * 10
+    const gp = d(4) <= 2 ? d(4) * 10 : 0
+    const gems = d(6) <= 2 ? d(3) : 0
+    const parts = [cp > 0 && `${cp} pc`, sp > 0 && `${sp} pa`, gp > 0 && `${gp} po`].filter(Boolean) as string[]
+    const items = gems > 0 ? [`${gems} gemme${gems > 1 ? 's' : ''} semi-précieuse${gems > 1 ? 's' : ''} (10 po ch.)`] : []
+    return { description: parts.join(', ') || '—', items }
+  }
+  if (totalCr <= 10) {
+    const gp = d(6) * d(6) * 100
+    const gems = d(4) <= 2 ? d(4) : 0
+    const art = d(6) <= 2 ? d(2) : 0
+    const items: string[] = []
+    if (gems > 0) items.push(`${gems} gemme${gems > 1 ? 's' : ''} (50 po ch.)`)
+    if (art > 0) items.push(`${art} objet${art > 1 ? 's' : ''} d'art (25 po ch.)`)
+    return { description: `${gp} po`, items }
+  }
+  if (totalCr <= 16) {
+    const gp = d(4) * d(6) * 1000
+    const pp = d(6) * d(6) * 10
+    const gems = d(4) + 1
+    const items: string[] = [`${gems} gemme${gems > 1 ? 's' : ''} précieuse${gems > 1 ? 's' : ''} (500 po ch.)`]
+    return { description: `${gp} po + ${pp} pp`, items }
+  }
+  const pp = d(6) * d(6) * 1000
+  const gems = d(6) + 2
+  return {
+    description: `${pp} pp`,
+    items: [`${gems} gemmes/objets précieux (1 000 po ch.)`, 'Objet magique potentiel (lancer sur table DMG)'],
+  }
+}
+
+function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, campaignId, onClose, onReset, onDistributeXp }: {
   roundNumber: number
   combatants: Combatant[]
   monsterMap: Record<number, MonsterTemplate>
@@ -202,9 +240,13 @@ function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, c
   campaignId: number | null
   onClose: () => void
   onReset: () => void
+  onDistributeXp?: (total: number) => Promise<{ share: number; levelUps: string[] } | void>
 }) {
   const [exporting, setExporting] = useState(false)
   const [exported, setExported] = useState(false)
+  const [xpDistributed, setXpDistributed] = useState<{ share: number; levelUps: string[] } | null>(null)
+  const [distributing, setDistributing] = useState(false)
+  const [loot, setLoot] = useState<LootResult | null>(null)
 
   const defeated = combatants.filter(c => c.current_hp <= 0)
   const totalXp = defeated.reduce((sum, c) => {
@@ -287,13 +329,69 @@ function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, c
           </div>
 
           {totalXp > 0 && (
-            <div className="bg-stone-800 rounded-lg px-3 py-2 flex justify-between text-sm">
-              <span className="text-stone-400">Total XP</span>
-              <span className="text-amber-300 font-semibold">
-                {totalXp} XP{characters.length > 1 ? ` (${shareXp}/joueur)` : ''}
-              </span>
+            <div className="space-y-2">
+              <div className="bg-stone-800 rounded-lg px-3 py-2 flex justify-between text-sm">
+                <span className="text-stone-400">Total XP</span>
+                <span className="text-amber-300 font-semibold">
+                  {totalXp} XP{characters.length > 1 ? ` (${shareXp}/joueur)` : ''}
+                </span>
+              </div>
+              {onDistributeXp && characters.length > 0 && (
+                xpDistributed ? (
+                  <div className="bg-emerald-900/20 border border-emerald-700/40 rounded-lg px-3 py-2 text-center space-y-1">
+                    <p className="text-emerald-400 font-semibold text-sm">✦ +{xpDistributed.share} XP distribués</p>
+                    {xpDistributed.levelUps.length > 0 && (
+                      <p className="text-amber-400 text-xs">⬆ Montée de niveau : {xpDistributed.levelUps.join(', ')}</p>
+                    )}
+                  </div>
+                ) : (
+                  <button
+                    onClick={async () => {
+                      setDistributing(true)
+                      const res = await onDistributeXp(totalXp)
+                      if (res) setXpDistributed(res)
+                      setDistributing(false)
+                    }}
+                    disabled={distributing}
+                    className="w-full bg-emerald-700 hover:bg-emerald-600 disabled:opacity-50 text-white font-semibold text-sm rounded-lg px-4 py-2 transition-colors"
+                  >
+                    {distributing ? '…' : `✦ Distribuer ${shareXp} XP / joueur`}
+                  </button>
+                )
+              )}
             </div>
           )}
+
+          {/* Treasure generator */}
+          <div>
+            <div className="flex items-center justify-between mb-1.5">
+              <p className="text-stone-400 text-sm">Butin</p>
+              <button
+                onClick={() => {
+                  const crList = defeated.map(c => {
+                    const tpl = monsterMap[c.id]
+                    if (!tpl) return 0
+                    const n = parseFloat(tpl.cr)
+                    return isNaN(n) ? 0 : n
+                  })
+                  setLoot(generateLoot(crList))
+                }}
+                className="text-xs text-stone-500 hover:text-amber-400 transition-colors"
+              >
+                {loot ? '↺ Régénérer' : '⚄ Générer butin'}
+              </button>
+            </div>
+            {loot ? (
+              <div className="bg-stone-800 rounded-lg px-3 py-2 space-y-1">
+                <p className="text-amber-300 text-sm font-medium">{loot.description}</p>
+                {loot.items.map((item, i) => (
+                  <p key={i} className="text-stone-400 text-xs">· {item}</p>
+                ))}
+              </div>
+            ) : (
+              <p className="text-stone-600 text-xs italic">Cliquez "Générer butin" pour tirer un trésor selon les CR vaincus.</p>
+            )}
+          </div>
 
           {characters.length > 0 && (
             <div>
@@ -1045,10 +1143,45 @@ export function CombatPage() {
     setTimeout(() => { setXpResult(null); setShowXpPanel(false); setXpInputs({}) }, 8000)
   }
 
+  async function handleDistributeXpAmount(total: number): Promise<{ share: number; levelUps: string[] }> {
+    const share = Math.floor(total / characters.length)
+    const updated = await Promise.all(
+      characters.map(c => updateIdentity(c.id, { experience_points: c.experience_points + share })),
+    )
+    updated.forEach(updateCharacter)
+    const levelUps = updated
+      .filter((c, i) => canLevelUp(c.level, c.experience_points) && !canLevelUp(characters[i].level, characters[i].experience_points))
+      .map(c => c.name)
+    logEvent('xp', `XP : +${share} XP / personnage (${total} total)`)
+    return { share, levelUps }
+  }
+
   function prevTurn() {
     if (withRollDisplay.length === 0) return
     setActiveTurn(t => (t - 1 + withRollDisplay.length) % withRollDisplay.length)
   }
+
+  // Stable ref so the keyboard listener never goes stale
+  const kbRef = useRef({ handleNextTurn, prevTurn })
+  kbRef.current.handleNextTurn = handleNextTurn
+  kbRef.current.prevTurn = prevTurn
+
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const el = e.target as HTMLElement
+      if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return
+      if (e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); kbRef.current.handleNextTurn() }
+      if (e.key === 'ArrowLeft') { e.preventDefault(); kbRef.current.prevTurn() }
+      if (e.key === 'Escape') {
+        setShowBestiary(false); setShowEncounterBuilder(false)
+        setShowXpPanel(false); setShowRestPanel(false)
+        setAoeMode(false); setShowSavingThrow(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleGroupRest(type: 'short' | 'long') {
     if (characters.length === 0) return
@@ -1134,7 +1267,10 @@ export function CombatPage() {
             {campaign?.share_token && (
               <button
                 onClick={() => {
-                  navigator.clipboard.writeText(`${window.location.origin}/share/${campaign.share_token}`)
+                  const url = `${window.location.origin}/share/${campaign.share_token}/live`
+                  if (navigator.clipboard) {
+                    navigator.clipboard.writeText(url).catch(() => {})
+                  }
                   setLinkCopied(true)
                   setTimeout(() => setLinkCopied(false), 2000)
                 }}
@@ -1143,7 +1279,7 @@ export function CombatPage() {
                     ? 'bg-emerald-700/30 border-emerald-600 text-emerald-400'
                     : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
                 }`}
-                title="Copier le lien joueurs"
+                title="Copier le lien combat live (lecture seule pour les joueurs)"
               >
                 {linkCopied ? '✓ Copié' : '⟳ Vue joueurs'}
               </button>
@@ -3016,6 +3152,7 @@ export function CombatPage() {
           campaignId={campaignId}
           onClose={() => setShowCombatSummary(false)}
           onReset={() => { setShowCombatSummary(false); handleReset() }}
+          onDistributeXp={characters.length > 0 ? handleDistributeXpAmount : undefined}
         />
       )}
     </div>
