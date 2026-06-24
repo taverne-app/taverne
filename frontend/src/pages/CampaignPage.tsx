@@ -811,6 +811,68 @@ export function CampaignPage() {
           )}
         </div>
 
+        {/* Statistiques de campagne */}
+        {(characters.length > 0 || sessions.length > 0) && (() => {
+          const totalHp = characters.reduce((s, c) => s + c.combat.current_hp, 0)
+          const totalMaxHp = characters.reduce((s, c) => s + c.combat.max_hp, 0)
+          const avgLevel = characters.length > 0
+            ? (characters.reduce((s, c) => s + c.level, 0) / characters.length).toFixed(1)
+            : null
+          const totalXp = characters.reduce((s, c) => s + c.experience_points, 0)
+          const dying = characters.filter(c => c.combat.current_hp <= 0).length
+          const hpPct = totalMaxHp > 0 ? Math.round((totalHp / totalMaxHp) * 100) : null
+
+          const dates = sessions
+            .filter(s => s.session_date)
+            .map(s => new Date(s.session_date! + 'T00:00:00').getTime())
+          const firstDate = dates.length > 0 ? Math.min(...dates) : null
+          const lastDate  = dates.length > 0 ? Math.max(...dates) : null
+          const durationDays = firstDate && lastDate
+            ? Math.ceil((lastDate - firstDate) / (1000 * 60 * 60 * 24))
+            : null
+
+          return (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">Statistiques</h2>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                <div className="bg-stone-800 rounded-lg p-3 text-center">
+                  <p className="text-stone-500 text-xs mb-1">Sessions</p>
+                  <p className="text-white font-bold text-xl">{sessions.length}</p>
+                </div>
+                {avgLevel && (
+                  <div className="bg-stone-800 rounded-lg p-3 text-center">
+                    <p className="text-stone-500 text-xs mb-1">Niveau moyen</p>
+                    <p className="text-white font-bold text-xl">{avgLevel}</p>
+                  </div>
+                )}
+                {hpPct != null && (
+                  <div className="bg-stone-800 rounded-lg p-3 text-center">
+                    <p className="text-stone-500 text-xs mb-1">PV groupe</p>
+                    <p className={`font-bold text-xl ${dying > 0 ? 'text-red-400' : hpPct > 50 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                      {hpPct}%
+                    </p>
+                    <p className="text-stone-600 text-xs">{totalHp}/{totalMaxHp}</p>
+                  </div>
+                )}
+                {characters.length > 0 && (
+                  <div className="bg-stone-800 rounded-lg p-3 text-center">
+                    <p className="text-stone-500 text-xs mb-1">XP total</p>
+                    <p className="text-white font-bold text-xl">{totalXp.toLocaleString('fr-FR')}</p>
+                  </div>
+                )}
+              </div>
+              {durationDays != null && (
+                <p className="text-stone-600 text-xs mt-2 text-center">
+                  {durationDays === 0
+                    ? `${sessions.length} session${sessions.length > 1 ? 's' : ''} enregistrée${sessions.length > 1 ? 's' : ''}`
+                    : `${durationDays} jour${durationDays > 1 ? 's' : ''} de campagne · ${sessions.length} session${sessions.length > 1 ? 's' : ''}`
+                  }
+                </p>
+              )}
+            </div>
+          )
+        })()}
+
         {/* Notes privées MJ */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, shortRest, longRest, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
+import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
 import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter } from '../api/campaigns'
 import {
   listCombatants,
@@ -63,6 +63,25 @@ function rollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'd
   return { label: `${character.name} — Dégâts: ${macro.name}`, detail, total }
 }
 
+function rollSpell(character: Character, spell: Spell, type: 'attack' | 'damage'): { label: string; total: number; detail: string } {
+  if (type === 'attack') {
+    const bonus = character.spellcasting.attack_bonus
+    const roll = Math.floor(Math.random() * 20) + 1
+    const total = roll + bonus
+    const nat = roll === 20 ? ' (critique!)' : roll === 1 ? ' (échec crit.)' : ''
+    return {
+      label: `${character.name} — Sort: ${spell.name}`,
+      detail: `[${roll}]${bonus !== 0 ? ` ${bonus >= 0 ? '+' : ''}${bonus}` : ''}${nat}`,
+      total,
+    }
+  }
+  const parsed = parseDice(spell.damage_dice ?? '')
+  if (!parsed) return { label: `${character.name} — Dégâts: ${spell.name}`, detail: '?', total: 0 }
+  const rolls = Array.from({ length: parsed.count }, () => Math.floor(Math.random() * parsed.sides) + 1)
+  const total = rolls.reduce((s, r) => s + r, 0) + parsed.bonus
+  const detail = `[${rolls.join('+')}]${parsed.bonus !== 0 ? ` ${parsed.bonus >= 0 ? '+' : ''}${parsed.bonus}` : ''}`
+  return { label: `${character.name} — Dégâts: ${spell.name}`, detail, total }
+}
 
 // ── Encounter builder helpers ─────────────────────────────────────────────────
 
@@ -415,6 +434,14 @@ export function CombatPage() {
     setMacroResult({ ...result, isAttack: type === 'attack' })
     macroResultTimer.current = setTimeout(() => setMacroResult(null), 6000)
     logEvent('roll', `${character.name} · ${macro.name} ${type === 'attack' ? 'Att.' : 'Dég.'} → ${result.total}  (${result.detail})`)
+  }
+
+  function handleRollSpell(character: Character, spell: Spell, type: 'attack' | 'damage') {
+    const result = rollSpell(character, spell, type)
+    if (macroResultTimer.current) clearTimeout(macroResultTimer.current)
+    setMacroResult({ ...result, isAttack: type === 'attack' })
+    macroResultTimer.current = setTimeout(() => setMacroResult(null), 6000)
+    logEvent('roll', `${character.name} · ✦ ${spell.name} ${type === 'attack' ? 'Att.' : 'Dég.'} → ${result.total} (${result.detail})`)
   }
 
   function handleMonsterRoll(combatantId: number, m: MonsterTemplate, type: 'attack' | 'damage') {
@@ -1634,6 +1661,34 @@ export function CombatPage() {
                               ))}
                             </div>
                           )}
+
+                          {/* Sorts avec dés de dégâts */}
+                          {character.spellcasting.ability && (() => {
+                            const damageSpells = character.spellcasting.spells.filter(s => s.damage_dice && (s.prepared || s.level === 0))
+                            if (damageSpells.length === 0) return null
+                            return (
+                              <div className="flex flex-wrap gap-1 mt-1">
+                                {damageSpells.map((spell, si) => (
+                                  <span key={si} className="inline-flex items-center gap-0.5">
+                                    <button
+                                      onClick={() => handleRollSpell(character, spell, 'attack')}
+                                      title={`Attaque: 1d20${character.spellcasting.attack_bonus >= 0 ? '+' : ''}${character.spellcasting.attack_bonus} · DD ${character.spellcasting.save_dc}`}
+                                      className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors"
+                                    >
+                                      ✦ {spell.name}
+                                    </button>
+                                    <button
+                                      onClick={() => handleRollSpell(character, spell, 'damage')}
+                                      title={`Dégâts: ${spell.damage_dice}`}
+                                      className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors"
+                                    >
+                                      {spell.damage_dice}
+                                    </button>
+                                  </span>
+                                ))}
+                              </div>
+                            )
+                          })()}
 
                           {/* Emplacements de sort */}
                           {character.spellcasting.ability && Object.keys(character.spellcasting.slots).length > 0 && (
