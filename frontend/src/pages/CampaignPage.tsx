@@ -96,6 +96,7 @@ export function CampaignPage() {
   const [editingSession, setEditingSession]   = useState<number | null>(null)
   const [editSessionDraft, setEditSessionDraft] = useState({ title: '', session_date: '', notes: '' })
   const [expandedSession, setExpandedSession] = useState<number | null>(null)
+  const [sessionView, setSessionView] = useState<'list' | 'timeline'>('list')
 
   // Trésor partagé
   const emptyTreasureDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
@@ -1197,9 +1198,23 @@ export function CampaignPage() {
         {/* Sessions */}
         <div>
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
-              Journal de sessions ({sessions.length})
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+                Journal de sessions ({sessions.length})
+              </h2>
+              {sessions.length > 1 && (
+                <div className="flex rounded overflow-hidden border border-stone-700">
+                  <button
+                    onClick={() => setSessionView('list')}
+                    className={`text-xs px-2 py-0.5 transition-colors ${sessionView === 'list' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}
+                  >Liste</button>
+                  <button
+                    onClick={() => setSessionView('timeline')}
+                    className={`text-xs px-2 py-0.5 transition-colors ${sessionView === 'timeline' ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}
+                  >Frise</button>
+                </div>
+              )}
+            </div>
             <button
               onClick={() => { setAddingSession(v => !v); setSessionDraft({ title: '', session_date: '', notes: '' }) }}
               className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
@@ -1254,6 +1269,71 @@ export function CampaignPage() {
                   Créer la première
                 </button>
               </p>
+            </div>
+          ) : sessionView === 'timeline' ? (
+            <div className="space-y-0">
+              {sessions.map((s, i) => (
+                <div key={s.id} className="flex gap-3">
+                  <div className="flex flex-col items-center shrink-0 w-5">
+                    <div className={`w-3 h-3 rounded-full mt-3 border-2 border-stone-950 shrink-0 transition-colors ${expandedSession === s.id ? 'bg-amber-500' : 'bg-stone-600'}`} />
+                    {i < sessions.length - 1 && <div className="flex-1 w-0.5 bg-stone-800 my-1 min-h-3" />}
+                  </div>
+                  <div className="flex-1 pb-2">
+                    {editingSession === s.id ? (
+                      <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 space-y-3">
+                        <div className="flex gap-3">
+                          <input type="text" value={editSessionDraft.title}
+                            onChange={e => setEditSessionDraft(d => ({ ...d, title: e.target.value }))}
+                            className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors" />
+                          <input type="date" value={editSessionDraft.session_date}
+                            onChange={e => setEditSessionDraft(d => ({ ...d, session_date: e.target.value }))}
+                            className="w-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors" />
+                        </div>
+                        <textarea value={editSessionDraft.notes}
+                          onChange={e => setEditSessionDraft(d => ({ ...d, notes: e.target.value }))}
+                          rows={5} placeholder={"## Titre  **gras**  *italique*  - liste"}
+                          className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-700 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono" />
+                        <div className="flex items-center justify-between">
+                          <button onClick={() => setEditingSession(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                          <div className="flex gap-4">
+                            <button onClick={() => handleDeleteSession(s.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Supprimer</button>
+                            <button onClick={() => handleUpdateSession(s.id)} disabled={saving || !editSessionDraft.title.trim()}
+                              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                        <button
+                          onClick={() => setExpandedSession(expandedSession === s.id ? null : s.id)}
+                          className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-800/50 transition-colors text-left group"
+                        >
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-stone-600 text-xs font-mono shrink-0">#{i + 1}</span>
+                              <span className="text-white text-sm font-medium truncate">{s.title}</span>
+                            </div>
+                            {s.session_date && (
+                              <p className="text-stone-500 text-xs mt-0.5">
+                                {new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                              </p>
+                            )}
+                          </div>
+                          <button
+                            onClick={e => { e.stopPropagation(); setEditSessionDraft({ title: s.title, session_date: s.session_date ?? '', notes: s.notes ?? '' }); setEditingSession(s.id); setExpandedSession(null) }}
+                            className="shrink-0 text-stone-600 hover:text-stone-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
+                          >Modifier</button>
+                        </button>
+                        {expandedSession === s.id && s.notes && (
+                          <div className="px-4 pb-4 border-t border-stone-800 pt-3">
+                            <MarkdownText>{s.notes}</MarkdownText>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="space-y-2">

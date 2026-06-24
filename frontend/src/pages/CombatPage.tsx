@@ -134,6 +134,14 @@ function difficultyColor(label: string): string {
   return 'text-stone-400'
 }
 
+const CR_VALUES = ['0', '1/8', '1/4', '1/2', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '30']
+const CR_NUM: Record<string, number> = {
+  '0': 0, '1/8': 0.125, '1/4': 0.25, '1/2': 0.5,
+  '1': 1, '2': 2, '3': 3, '4': 4, '5': 5, '6': 6, '7': 7, '8': 8, '9': 9, '10': 10,
+  '11': 11, '12': 12, '13': 13, '14': 14, '15': 15, '16': 16, '17': 17, '18': 18, '19': 19, '20': 20,
+  '21': 21, '22': 22, '23': 23, '24': 24, '25': 25, '30': 30,
+}
+
 // ── Unified row type ──────────────────────────────────────────────────────────
 
 type CombatRow =
@@ -501,7 +509,12 @@ export function CombatPage() {
   const [monsterSuggestions, setMonsterSuggestions] = useState<MonsterTemplate[]>([])
   const [showBestiary, setShowBestiary] = useState(false)
   const [bestiarySearch, setBestiarySearch] = useState('')
+  const [bestiaryMinCr, setBestiaryMinCr] = useState('0')
+  const [bestiaryMaxCr, setBestiaryMaxCr] = useState('30')
+  const [encounterMinCr, setEncounterMinCr] = useState('0')
+  const [encounterMaxCr, setEncounterMaxCr] = useState('30')
   const [addedMonster, setAddedMonster] = useState<string | null>(null)
+  const [charHpInputs, setCharHpInputs] = useState<Record<number, string>>({})
 
   const echoRef = useRef<ReturnType<typeof createEcho> | null>(null)
 
@@ -679,6 +692,16 @@ export function CombatPage() {
     updateCharacter(updated)
     setCharTempHpInputs(prev => ({ ...prev, [character.id]: '' }))
     logEvent('hp', `${character.name} : +${amount} PV temporaires`)
+  }
+
+  async function handleCharacterHp(character: Character, type: 'damage' | 'heal') {
+    const raw = charHpInputs[character.id] ?? ''
+    const amount = parseInt(raw, 10)
+    if (!amount || amount <= 0) return
+    const updated = await updateHp(character.id, amount, type)
+    updateCharacter(updated)
+    setCharHpInputs(prev => ({ ...prev, [character.id]: '' }))
+    logEvent('hp', `${character.name} : ${type === 'damage' ? `-${amount}` : `+${amount}`} PV`)
   }
 
   async function handleToggleCharacterCondition(id: number, condition: string, duration?: number) {
@@ -1718,6 +1741,27 @@ export function CombatPage() {
                                 })}
                             </div>
                           )}
+
+                          {/* Mobile HP controls */}
+                          <div className="sm:hidden flex items-center gap-2 mt-1.5 flex-wrap">
+                            <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>{character.combat.current_hp}</span>
+                            <span className="text-stone-500 text-xs">/ {character.combat.max_hp}</span>
+                            <div className="ml-auto flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={charHpInputs[character.id] ?? ''}
+                                min={1}
+                                onChange={e => setCharHpInputs(prev => ({ ...prev, [character.id]: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') handleCharacterHp(character, 'damage') }}
+                                placeholder="PV"
+                                className="w-12 bg-stone-800 border border-stone-700 rounded px-1 py-0.5 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                              />
+                              <button onClick={() => handleCharacterHp(character, 'damage')}
+                                className="bg-red-900/60 hover:bg-red-800/80 border border-red-700/50 text-red-300 text-xs rounded px-1.5 py-0.5 transition-colors">Dmg</button>
+                              <button onClick={() => handleCharacterHp(character, 'heal')}
+                                className="bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-700/50 text-emerald-300 text-xs rounded px-1.5 py-0.5 transition-colors">Soin</button>
+                            </div>
+                          </div>
                         </div>
 
                         {/* HP */}
@@ -2009,6 +2053,27 @@ export function CombatPage() {
                         {cb.armor_class != null && (
                           <p className="text-stone-500 text-xs mt-0.5">CA {cb.armor_class}</p>
                         )}
+
+                        {/* Mobile HP controls */}
+                        <div className="sm:hidden flex items-center gap-2 mt-1.5 flex-wrap">
+                          <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>{cb.current_hp}</span>
+                          <span className="text-stone-500 text-xs">/ {cb.max_hp}</span>
+                          <div className="ml-auto flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={hpInput}
+                              min={1}
+                              onChange={e => setCombatantHpInputs(prev => ({ ...prev, [cb.id]: e.target.value }))}
+                              onKeyDown={e => { if (e.key === 'Enter') handleCombatantHp(cb.id, 'damage') }}
+                              placeholder="PV"
+                              className="w-12 bg-stone-800 border border-stone-700 rounded px-1 py-0.5 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                            />
+                            <button onClick={() => handleCombatantHp(cb.id, 'damage')}
+                              className="bg-red-900/60 hover:bg-red-800/80 border border-red-700/50 text-red-300 text-xs rounded px-1.5 py-0.5 transition-colors">Dmg</button>
+                            <button onClick={() => handleCombatantHp(cb.id, 'heal')}
+                              className="bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-700/50 text-emerald-300 text-xs rounded px-1.5 py-0.5 transition-colors">Soin</button>
+                          </div>
+                        </div>
                       </div>
 
                       {/* HP + controls */}
@@ -2370,7 +2435,7 @@ export function CombatPage() {
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
                     <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Bestiaire SRD</p>
-                    <button onClick={() => { setShowBestiary(false); setBestiarySearch('') }} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">
+                    <button onClick={() => { setShowBestiary(false); setBestiarySearch(''); setBestiaryMinCr('0'); setBestiaryMaxCr('30') }} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">
                       Fermer
                     </button>
                   </div>
@@ -2382,13 +2447,34 @@ export function CombatPage() {
                     autoFocus
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-red-500 transition-colors"
                   />
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-stone-500 text-xs shrink-0">CR</span>
+                    <select value={bestiaryMinCr} onChange={e => setBestiaryMinCr(e.target.value)}
+                      className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-red-500 transition-colors">
+                      {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                    <span className="text-stone-600 text-xs">—</span>
+                    <select value={bestiaryMaxCr} onChange={e => setBestiaryMaxCr(e.target.value)}
+                      className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-red-500 transition-colors">
+                      {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                    </select>
+                    {(bestiaryMinCr !== '0' || bestiaryMaxCr !== '30') && (
+                      <button onClick={() => { setBestiaryMinCr('0'); setBestiaryMaxCr('30') }}
+                        className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Réinit.</button>
+                    )}
+                  </div>
                   {addedMonster && (
                     <p className="text-emerald-400 text-xs font-medium">✓ {addedMonster} ajouté au combat</p>
                   )}
+                  {(() => {
+                    const filtered = MONSTERS.filter(m =>
+                      m.name.toLowerCase().includes(bestiarySearch.toLowerCase()) &&
+                      (CR_NUM[m.cr] ?? 0) >= (CR_NUM[bestiaryMinCr] ?? 0) &&
+                      (CR_NUM[m.cr] ?? 0) <= (CR_NUM[bestiaryMaxCr] ?? 30)
+                    )
+                    return (
                   <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
-                    {MONSTERS.filter(m =>
-                      m.name.toLowerCase().includes(bestiarySearch.toLowerCase())
-                    ).map(m => (
+                    {filtered.map(m => (
                       <button
                         key={m.name}
                         onClick={() => handleAddMonster(m)}
@@ -2405,10 +2491,12 @@ export function CombatPage() {
                         </div>
                       </button>
                     ))}
-                    {MONSTERS.filter(m => m.name.toLowerCase().includes(bestiarySearch.toLowerCase())).length === 0 && (
+                    {filtered.length === 0 && (
                       <p className="text-stone-600 text-sm text-center py-4">Aucun monstre trouvé.</p>
                     )}
                   </div>
+                    )
+                  })()}
                 </div>
               ) : showEncounterBuilder ? (() => {
                 const totalRawXp = encounterEntries.reduce((s, e) => s + e.monster.xp * e.count, 0)
@@ -2425,7 +2513,9 @@ export function CombatPage() {
                 )
                 const difficulty = encounterEntries.length > 0 ? encounterDifficultyLabel(adjustedXp, partyThresholds) : null
                 const filteredMonsters = MONSTERS.filter(m =>
-                  m.name.toLowerCase().includes(encounterSearch.toLowerCase()),
+                  m.name.toLowerCase().includes(encounterSearch.toLowerCase()) &&
+                  (CR_NUM[m.cr] ?? 0) >= (CR_NUM[encounterMinCr] ?? 0) &&
+                  (CR_NUM[m.cr] ?? 0) <= (CR_NUM[encounterMaxCr] ?? 30)
                 )
                 return (
                   <div className="space-y-3">
@@ -2488,6 +2578,22 @@ export function CombatPage() {
                       autoFocus
                       className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
                     />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-stone-500 text-xs shrink-0">CR</span>
+                      <select value={encounterMinCr} onChange={e => setEncounterMinCr(e.target.value)}
+                        className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-violet-500 transition-colors">
+                        {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <span className="text-stone-600 text-xs">—</span>
+                      <select value={encounterMaxCr} onChange={e => setEncounterMaxCr(e.target.value)}
+                        className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-violet-500 transition-colors">
+                        {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      {(encounterMinCr !== '0' || encounterMaxCr !== '30') && (
+                        <button onClick={() => { setEncounterMinCr('0'); setEncounterMaxCr('30') }}
+                          className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Réinit.</button>
+                      )}
+                    </div>
 
                     {encounterSearch && (
                       <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1">
