@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
+import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, shortRest, longRest, type Character, type DiceRoll, type AttackMacro } from '../api/characters'
 import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter } from '../api/campaigns'
 import {
   listCombatants,
@@ -353,6 +353,12 @@ export function CombatPage() {
   const [xpResult, setXpResult] = useState<{ total: number; share: number; levelUps: string[] } | null>(null)
   const [monsterMap, setMonsterMap] = useState<Record<number, MonsterTemplate>>({})
   const [showCombatSummary, setShowCombatSummary] = useState(false)
+
+  // Group rest
+  const [showRestPanel, setShowRestPanel] = useState(false)
+  const [restInProgress, setRestInProgress] = useState(false)
+  const [restNotif, setRestNotif] = useState<{ type: 'short' | 'long'; results: { name: string; healed: number }[] } | null>(null)
+  const restNotifTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Combat timers
   const [timers, setTimers] = useState<{ id: number; name: string; rounds: number }[]>([])
@@ -994,6 +1000,37 @@ export function CombatPage() {
     setActiveTurn(t => (t - 1 + withRollDisplay.length) % withRollDisplay.length)
   }
 
+  async function handleGroupRest(type: 'short' | 'long') {
+    if (characters.length === 0) return
+    setRestInProgress(true)
+    try {
+      if (type === 'long') {
+        const updated = await Promise.all(characters.map(c => longRest(c.id)))
+        updated.forEach(updateCharacter)
+        const results = updated.map(c => ({ name: c.name, healed: c.combat.max_hp - (characters.find(x => x.id === c.id)?.combat.current_hp ?? c.combat.max_hp) }))
+        if (restNotifTimer.current) clearTimeout(restNotifTimer.current)
+        setRestNotif({ type: 'long', results })
+        restNotifTimer.current = setTimeout(() => setRestNotif(null), 7000)
+        logEvent('hp', `Long repos — tout le groupe récupère ses PV et emplacements de sort`)
+      } else {
+        const results: { name: string; healed: number }[] = []
+        await Promise.all(characters.map(async c => {
+          if (c.combat.hit_dice_remaining <= 0) { results.push({ name: c.name, healed: 0 }); return }
+          const res = await shortRest(c.id, 1)
+          updateCharacter(res.character)
+          results.push({ name: c.name, healed: res.total_healed })
+        }))
+        if (restNotifTimer.current) clearTimeout(restNotifTimer.current)
+        setRestNotif({ type: 'short', results })
+        restNotifTimer.current = setTimeout(() => setRestNotif(null), 7000)
+        logEvent('hp', `Court repos — ${results.map(r => `${r.name} +${r.healed} PV`).join(', ')}`)
+      }
+      setShowRestPanel(false)
+    } finally {
+      setRestInProgress(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-stone-950 flex items-center justify-center">
@@ -1418,6 +1455,18 @@ export function CombatPage() {
               >
                 ⚔ Fin du combat
               </button>
+              {characters.length > 0 && (
+                <button
+                  onClick={() => setShowRestPanel(v => !v)}
+                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
+                    showRestPanel
+                      ? 'bg-sky-700/30 border-sky-600 text-sky-400'
+                      : 'text-stone-500 hover:text-stone-300 border-transparent'
+                  }`}
+                >
+                  ⛺ Repos
+                </button>
+              )}
               <button
                 onClick={handleReset}
                 className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
@@ -2647,6 +2696,55 @@ export function CombatPage() {
             </div>
           )
         })()}
+
+        {/* Group rest panel */}
+        {showRestPanel && characters.length > 0 && (
+          <div className="bg-stone-900 border border-sky-800/40 rounded-xl p-5 space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sky-400 text-xs font-semibold uppercase tracking-widest">⛺ Repos du groupe</h2>
+              <button onClick={() => setShowRestPanel(false)} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
+            </div>
+            <p className="text-stone-500 text-xs">
+              {characters.map(c => `${c.name} (${c.combat.current_hp}/${c.combat.max_hp} PV${c.combat.hit_dice_remaining > 0 ? `, ${c.combat.hit_dice_remaining} DV` : ''})`).join(' · ')}
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => handleGroupRest('short')}
+                disabled={restInProgress}
+                className="flex-1 bg-sky-900/40 hover:bg-sky-800/60 disabled:opacity-50 border border-sky-700/50 text-sky-300 text-sm font-medium rounded-lg px-4 py-2.5 transition-colors"
+              >
+                Court repos (1 DV/perso)
+              </button>
+              <button
+                onClick={() => handleGroupRest('long')}
+                disabled={restInProgress}
+                className="flex-1 bg-violet-900/40 hover:bg-violet-800/60 disabled:opacity-50 border border-violet-700/50 text-violet-300 text-sm font-medium rounded-lg px-4 py-2.5 transition-colors"
+              >
+                Long repos (PV + emplacements)
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Rest notification */}
+        {restNotif && (
+          <div className={`border rounded-xl px-5 py-3 space-y-1 ${
+            restNotif.type === 'long'
+              ? 'bg-violet-950/40 border-violet-700/50'
+              : 'bg-sky-950/40 border-sky-700/50'
+          }`}>
+            <p className={`text-xs font-semibold uppercase tracking-wide ${restNotif.type === 'long' ? 'text-violet-400' : 'text-sky-400'}`}>
+              {restNotif.type === 'long' ? '✦ Long repos terminé' : '⛺ Court repos terminé'}
+            </p>
+            <div className="flex flex-wrap gap-3">
+              {restNotif.results.map((r, i) => (
+                <span key={i} className="text-stone-300 text-xs">
+                  {r.name}{restNotif.type === 'short' && <span className={`ml-1 font-semibold ${r.healed > 0 ? 'text-emerald-400' : 'text-stone-500'}`}>{r.healed > 0 ? `+${r.healed} PV` : 'aucun DV'}</span>}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Legend */}
         <p className="text-stone-600 text-xs text-center">

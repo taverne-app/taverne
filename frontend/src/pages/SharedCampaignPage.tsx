@@ -5,6 +5,7 @@ import type { Campaign, CampaignSession } from '../api/campaigns'
 import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
 import { createPublicEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { MarkdownText } from '../components/MarkdownText'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -346,9 +347,7 @@ export function SharedCampaignPage() {
                       </span>
                     )}
                   </div>
-                  {s.notes && (
-                    <p className="text-stone-400 text-sm whitespace-pre-wrap leading-relaxed">{s.notes}</p>
-                  )}
+                  {s.notes && <MarkdownText className="text-stone-400">{s.notes}</MarkdownText>}
                 </div>
               ))}
             </div>

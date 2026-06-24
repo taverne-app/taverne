@@ -210,6 +210,8 @@ export function CharacterPage() {
   const [loading, setLoading]     = useState(true)
   const [saving, setSaving]       = useState(false)
   const [shareCopied, setShareCopied] = useState(false)
+  const [importStatus, setImportStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle')
+  const importRef = useRef<HTMLInputElement>(null)
 
   // Flag set to true while we're the originator of a mutation; suppresses
   // the echo of our own broadcast so we don't overwrite optimistic state.
@@ -327,6 +329,78 @@ export function CharacterPage() {
       setSaving(false)
       // Give the broadcast a tick to arrive before we clear the flag
       setTimeout(() => { isSelfUpdate.current = false }, 500)
+    }
+  }
+
+  function handleExport() {
+    if (!character) return
+    const blob = new Blob([JSON.stringify(character, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${character.name.replace(/\s+/g, '_')}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImportFile(file: File) {
+    if (!character) return
+    setImportStatus('loading')
+    try {
+      const text = await file.text()
+      const data: Character = JSON.parse(text)
+      isSelfUpdate.current = true
+      await Promise.all([
+        updateIdentity(character.id, {
+          name: data.name,
+          portrait_url: data.portrait_url,
+          race: data.race,
+          character_class: data.character_class,
+          subclass: data.subclass,
+          level: data.level,
+          background: data.background,
+          alignment: data.alignment,
+          experience_points: data.experience_points,
+          speed: data.combat.speed,
+          max_hp: data.combat.max_hp,
+          armor_class: data.combat.armor_class,
+          hit_dice_type: data.combat.hit_dice_type,
+        }),
+        updateAbilities(character.id, data.abilities as Record<AbilityName, number>),
+        updateProficiencies(
+          character.id,
+          Object.entries(data.saving_throws).filter(([, v]) => v.proficient).map(([k]) => k),
+          Object.entries(data.skills).filter(([, v]) => v.proficient).map(([k]) => k),
+          Object.entries(data.skills).filter(([, v]) => v.expert).map(([k]) => k),
+        ),
+        updateInventory(character.id, data.inventory.items),
+        updateSpells(character.id, data.spellcasting.spells, data.spellcasting.ability),
+        updateSpellSlots(character.id, data.spellcasting.slots),
+        updateAttackMacros(character.id, data.attack_macros),
+        updateFeatures(character.id, data.features),
+        updateResources(character.id, data.resources),
+        updateCurrency(character.id, data.currency),
+        updateDamageModifiers(character.id, data.damage_modifiers),
+        updateNotes(character.id, data.notes ?? ''),
+        updatePersonality(character.id, {
+          personality_traits: data.personality_traits,
+          ideals: data.ideals,
+          bonds: data.bonds,
+          flaws: data.flaws,
+        }),
+        updateLanguagesAndTools(character.id, {
+          languages: data.languages,
+          tool_proficiencies: data.tool_proficiencies,
+        }),
+        updateExhaustion(character.id, data.state.exhaustion_level),
+      ])
+      const refreshed = await getCharacter(character.id)
+      setCharacter(refreshed)
+      setImportStatus('done')
+      setTimeout(() => { setImportStatus('idle'); isSelfUpdate.current = false }, 3000)
+    } catch {
+      setImportStatus('error')
+      setTimeout(() => { setImportStatus('idle'); isSelfUpdate.current = false }, 3000)
     }
   }
 
@@ -1182,6 +1256,36 @@ export function CharacterPage() {
             >
               {shareCopied ? '✓ Lien copié' : '⟳ Partager'}
             </button>
+            <button
+              onClick={handleExport}
+              className="text-stone-400 hover:text-stone-200 text-sm transition-colors hidden sm:block"
+              title="Télécharger la fiche en JSON"
+            >
+              ↓ Exporter
+            </button>
+            <button
+              onClick={() => importRef.current?.click()}
+              disabled={importStatus === 'loading'}
+              className={`text-sm transition-colors hidden sm:block ${
+                importStatus === 'done'  ? 'text-emerald-400' :
+                importStatus === 'error' ? 'text-red-400' :
+                importStatus === 'loading' ? 'text-stone-500' :
+                'text-stone-400 hover:text-stone-200'
+              }`}
+              title="Importer une fiche JSON (écrase les données actuelles)"
+            >
+              {importStatus === 'done' ? '✓ Importé' : importStatus === 'error' ? '✗ Erreur' : importStatus === 'loading' ? '…' : '↑ Importer'}
+            </button>
+            <input
+              ref={importRef}
+              type="file"
+              accept=".json,application/json"
+              className="hidden"
+              onChange={e => {
+                const file = e.target.files?.[0]
+                if (file) { handleImportFile(file); e.target.value = '' }
+              }}
+            />
             <a
               href={`/characters/${character.id}/print`}
               target="_blank"
