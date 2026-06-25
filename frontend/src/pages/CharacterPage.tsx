@@ -47,6 +47,7 @@ import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
+import { SPELL_DETAILS } from '../data/spell_details'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
@@ -235,6 +236,8 @@ export function CharacterPage() {
       race: character.race,
       character_class: character.character_class,
       subclass: character.subclass ?? '',
+      secondary_class: character.secondary_class ?? '',
+      secondary_level: character.secondary_level ?? undefined,
       level: character.level,
       background: character.background ?? '',
       alignment: character.alignment ?? '',
@@ -254,6 +257,8 @@ export function CharacterPage() {
       subclass: identityDraft.subclass?.trim() || null,
       background: identityDraft.background?.trim() || null,
       alignment: identityDraft.alignment?.trim() || null,
+      secondary_class: identityDraft.secondary_class?.trim() || null,
+      secondary_level: identityDraft.secondary_class?.trim() ? (identityDraft.secondary_level ?? null) : null,
     }
     const updated = await withSave(() => updateIdentity(character.id, payload))
     if (updated) { setCharacter(updated); setEditingIdentity(false) }
@@ -1645,6 +1650,35 @@ export function CharacterPage() {
                   )}
                 </div>
               </div>
+              {/* Multiclasse */}
+              <div className="border-t border-stone-800 pt-3">
+                <label className="text-stone-500 text-xs mb-2 block">Multiclasse (optionnel)</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-stone-600 text-xs mb-1 block">Classe secondaire</label>
+                    <input
+                      type="text"
+                      placeholder="ex. Guerrier, Mage…"
+                      value={identityDraft.secondary_class ?? ''}
+                      onChange={e => setIdentityDraft(d => ({ ...d, secondary_class: e.target.value }))}
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-stone-600 text-xs mb-1 block">Niveaux dans cette classe</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={19}
+                      placeholder="ex. 3"
+                      value={identityDraft.secondary_level ?? ''}
+                      onChange={e => setIdentityDraft(d => ({ ...d, secondary_level: parseInt(e.target.value, 10) || undefined }))}
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex items-center justify-between pt-1">
                 <button onClick={() => setEditingIdentity(false)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
                 <button onClick={saveIdentity} disabled={saving} className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
@@ -1667,6 +1701,9 @@ export function CharacterPage() {
                 <p className="text-stone-400 mt-0.5">
                   {character.race} · {character.character_class}
                   {character.subclass && <span className="text-stone-500"> ({character.subclass})</span>}
+                  {character.secondary_class && (
+                    <span className="text-stone-500"> / {character.secondary_class}{character.secondary_level ? ` Niv.${character.secondary_level}` : ''}</span>
+                  )}
                 </p>
                 <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2">
                   {character.background && (
@@ -3429,18 +3466,31 @@ export function CharacterPage() {
                                 spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
                               }`}
                             />
-                            <span className="relative group/spell">
-                              <span className="cursor-default">{spell.name}</span>
-                              <div className="absolute bottom-full left-0 mb-1.5 z-20 hidden group-hover/spell:block pointer-events-none">
-                                <div className="bg-stone-800 border border-stone-600 rounded-lg px-3 py-2 shadow-xl text-xs space-y-1 min-w-max max-w-[220px]">
-                                  <p className="font-semibold text-white">{spell.name}</p>
-                                  <p className="text-stone-400">{spell.level === 0 ? 'Tour de magie' : `Sort de niveau ${spell.level}`}</p>
-                                  {spell.concentration && <p className="text-violet-400">◈ Concentration</p>}
-                                  {spell.damage_dice && <p className="text-orange-400">Dégâts : {spell.damage_dice}</p>}
-                                  {spell.notes && <p className="text-stone-300 italic">{spell.notes}</p>}
-                                </div>
-                              </div>
-                            </span>
+                            {(() => {
+                              const detail = SPELL_DETAILS[spell.name]
+                              return (
+                                <span className="relative group/spell">
+                                  <span className="cursor-default">{spell.name}</span>
+                                  <div className="absolute bottom-full left-0 mb-1.5 z-20 hidden group-hover/spell:block pointer-events-none">
+                                    <div className="bg-stone-800 border border-stone-600 rounded-lg px-3 py-2 shadow-xl text-xs space-y-1 min-w-[200px] max-w-[300px]">
+                                      <p className="font-semibold text-white">{spell.name}</p>
+                                      <p className="text-stone-400">{spell.level === 0 ? 'Tour de magie' : `Niveau ${spell.level}`}{detail ? ` · ${detail.school}` : ''}</p>
+                                      {detail && (
+                                        <>
+                                          <p className="text-stone-500">⏱ {detail.castingTime} · ↔ {detail.range}</p>
+                                          <p className="text-stone-500">⌛ {detail.duration}</p>
+                                          {detail.concentration && <p className="text-violet-400">◈ Concentration</p>}
+                                          <p className="text-stone-300 leading-relaxed pt-0.5 border-t border-stone-700">{detail.description}</p>
+                                        </>
+                                      )}
+                                      {!detail && spell.concentration && <p className="text-violet-400">◈ Concentration</p>}
+                                      {!detail && spell.damage_dice && <p className="text-orange-400">Dégâts : {spell.damage_dice}</p>}
+                                      {spell.notes && <p className="text-stone-300 italic pt-0.5 border-t border-stone-700">{spell.notes}</p>}
+                                    </div>
+                                  </div>
+                                </span>
+                              )
+                            })()}
                             <button
                               onClick={() => {
                                 if (editingSpellNotesIdx === spell._idx) { setEditingSpellNotesIdx(null) }

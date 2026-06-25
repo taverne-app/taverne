@@ -10,6 +10,7 @@ import {
   type GameCalendar,
   type TreasureItem,
   type Location,
+  type SessionPrep,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, longRest, updateInventory, type Character } from '../api/characters'
@@ -82,7 +83,7 @@ export function CampaignPage() {
   const [savingNotes, setSavingNotes] = useState(false)
 
   // PNJs
-  const [npcDraft, setNpcDraft] = useState<Omit<Npc, 'notes'> & { notes: string }>({ name: '', role: '', status: 'inconnu', notes: '' })
+  const [npcDraft, setNpcDraft] = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', notes: '' })
   const [addingNpc, setAddingNpc] = useState(false)
   const [expandedNpc, setExpandedNpc] = useState<number | null>(null)
 
@@ -111,6 +112,13 @@ export function CampaignPage() {
   const [locationDraft, setLocationDraft]     = useState<Location>(emptyLocationDraft())
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null)
 
+  // Préparation de session
+  const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [] })
+  const [sessionPrepDraft, setSessionPrepDraft] = useState<SessionPrep>(emptySessionPrep())
+  const [editingSessionPrep, setEditingSessionPrep] = useState(false)
+  const [hasSessionPrep, setHasSessionPrep] = useState(false)
+  const [savingSessionPrep, setSavingSessionPrep] = useState(false)
+
   // Load campaign
   useEffect(() => {
     if (!id) return
@@ -121,6 +129,10 @@ export function CampaignPage() {
         setCharacters(c.characters)
         setDmNotesDraft(c.dm_notes ?? '')
         setCalendarDraft(c.game_calendar ?? {})
+        if (c.session_prep) {
+          setSessionPrepDraft(c.session_prep)
+          setHasSessionPrep(true)
+        }
       })
       .catch(() => navigate('/campaigns'))
       .finally(() => setLoading(false))
@@ -285,7 +297,7 @@ export function CampaignPage() {
     const next: Npc[] = [...(campaign.npcs ?? []), { ...npcDraft, name: npcDraft.name.trim() }]
     const updated = await updateCampaign(campaign.id, { npcs: next })
     setCampaign(updated)
-    setNpcDraft({ name: '', role: '', status: 'inconnu', notes: '' })
+    setNpcDraft({ name: '', role: '', status: 'inconnu', location: '', notes: '' })
     setAddingNpc(false)
   }
 
@@ -333,6 +345,26 @@ export function CampaignPage() {
     const next = (campaign.locations ?? []).map((l, i) => i === index ? { ...l, reputation } : l)
     const updated = await updateCampaign(campaign.id, { locations: next })
     setCampaign(updated)
+  }
+
+  async function handleSaveSessionPrep() {
+    if (!campaign) return
+    setSavingSessionPrep(true)
+    try {
+      const updated = await updateCampaign(campaign.id, { session_prep: sessionPrepDraft })
+      setCampaign(updated)
+      setHasSessionPrep(true)
+      setEditingSessionPrep(false)
+    } finally { setSavingSessionPrep(false) }
+  }
+
+  async function handleClearSessionPrep() {
+    if (!campaign) return
+    const updated = await updateCampaign(campaign.id, { session_prep: null })
+    setCampaign(updated)
+    setSessionPrepDraft(emptySessionPrep())
+    setHasSessionPrep(false)
+    setEditingSessionPrep(false)
   }
 
   async function handleGroupLongRest() {
@@ -995,7 +1027,7 @@ export function CampaignPage() {
               PNJ rencontrés ({(campaign.npcs ?? []).length})
             </h2>
             <button
-              onClick={() => { setAddingNpc(v => !v); setNpcDraft({ name: '', role: '', status: 'inconnu', notes: '' }) }}
+              onClick={() => { setAddingNpc(v => !v); setNpcDraft({ name: '', role: '', status: 'inconnu', location: '', notes: '' }) }}
               className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors"
             >
               {addingNpc ? 'Annuler' : '+ Ajouter un PNJ'}
@@ -1021,7 +1053,7 @@ export function CampaignPage() {
                   className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
                 />
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 flex-wrap">
                 <select
                   value={npcDraft.status}
                   onChange={e => setNpcDraft(d => ({ ...d, status: e.target.value as Npc['status'] }))}
@@ -1032,9 +1064,21 @@ export function CampaignPage() {
                   <option value="neutre">🟡 Neutre</option>
                   <option value="ennemi">🔴 Ennemi</option>
                 </select>
+                {(campaign?.locations ?? []).length > 0 && (
+                  <select
+                    value={npcDraft.location ?? ''}
+                    onChange={e => setNpcDraft(d => ({ ...d, location: e.target.value }))}
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500 transition-colors"
+                  >
+                    <option value="">📍 Lieu</option>
+                    {(campaign?.locations ?? []).map((l, i) => (
+                      <option key={i} value={l.name}>{l.name}</option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="text"
-                  placeholder="Notes (lieu, secret, lien…)"
+                  placeholder="Notes (secret, lien…)"
                   value={npcDraft.notes}
                   onChange={e => setNpcDraft(d => ({ ...d, notes: e.target.value }))}
                   className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
@@ -1063,7 +1107,10 @@ export function CampaignPage() {
                       <span className="text-base shrink-0">{statusIcon}</span>
                       <div className="flex-1 min-w-0">
                         <p className="text-stone-200 text-sm font-medium truncate">{npc.name}</p>
-                        {npc.role && <p className="text-stone-500 text-xs truncate">{npc.role}</p>}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {npc.role && <p className="text-stone-500 text-xs truncate">{npc.role}</p>}
+                          {npc.location && <span className="text-xs text-sky-400/70">📍 {npc.location}</span>}
+                        </div>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
                         <select
@@ -1328,6 +1375,7 @@ export function CampaignPage() {
                 const rep = loc.reputation ?? 'neutre'
                 const repColor = rep === 'héros' ? 'text-amber-400' : rep === 'respecté' ? 'text-emerald-400' : rep === 'suspect' ? 'text-orange-400' : rep === 'recherché' ? 'text-red-400' : 'text-stone-500'
                 const repBg   = rep === 'héros' ? 'bg-amber-900/30 border-amber-700/40' : rep === 'respecté' ? 'bg-emerald-900/30 border-emerald-700/40' : rep === 'suspect' ? 'bg-orange-900/30 border-orange-700/40' : rep === 'recherché' ? 'bg-red-900/30 border-red-700/40' : 'bg-stone-800/60 border-stone-700/40'
+                const locNpcs = (campaign.npcs ?? []).filter(n => n.location === loc.name)
                 return (
                   <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
                     <div className="flex items-start gap-3">
@@ -1346,7 +1394,7 @@ export function CampaignPage() {
                             <option value="exploré">✓ Exploré</option>
                           </select>
                         </div>
-                        <div className="flex items-center gap-2 mt-1.5">
+                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           <select
                             value={rep}
                             onChange={e => handleUpdateLocationReputation(i, e.target.value as Location['reputation'])}
@@ -1359,6 +1407,9 @@ export function CampaignPage() {
                             <option value="suspect">◇ Suspect</option>
                             <option value="recherché">✕ Recherché</option>
                           </select>
+                          {locNpcs.length > 0 && locNpcs.map((n, ni) => (
+                            <span key={ni} className="text-xs text-violet-400/70 bg-violet-900/20 border border-violet-800/30 rounded px-1.5 py-0.5">{n.name}</span>
+                          ))}
                           {loc.notes && (
                             <button
                               onClick={() => setExpandedLocation(expandedLocation === i ? null : i)}
@@ -1386,6 +1437,161 @@ export function CampaignPage() {
                 )
               })}
             </div>
+          )}
+        </div>
+
+        {/* Prochaine session */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-stone-300 text-sm font-semibold">Prochaine session</h2>
+              <p className="text-stone-500 text-xs mt-0.5">Planifiez la prochaine séance</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {savingSessionPrep && <div className="w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />}
+              {hasSessionPrep && !editingSessionPrep && (
+                <button onClick={() => setEditingSessionPrep(true)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Modifier</button>
+              )}
+              {hasSessionPrep && (
+                <button onClick={handleClearSessionPrep} className="text-red-500 hover:text-red-400 text-xs transition-colors">Effacer</button>
+              )}
+              {!hasSessionPrep && !editingSessionPrep && (
+                <button onClick={() => setEditingSessionPrep(true)} className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors">+ Planifier</button>
+              )}
+            </div>
+          </div>
+
+          {(editingSessionPrep || hasSessionPrep) ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Titre</label>
+                  <input
+                    type="text"
+                    placeholder="ex. L'attaque du manoir…"
+                    value={sessionPrepDraft.title}
+                    onChange={e => setSessionPrepDraft(d => ({ ...d, title: e.target.value }))}
+                    disabled={!editingSessionPrep}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Date prévue</label>
+                  <input
+                    type="date"
+                    value={sessionPrepDraft.date}
+                    onChange={e => setSessionPrepDraft(d => ({ ...d, date: e.target.value }))}
+                    disabled={!editingSessionPrep}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* NPCs à mettre en avant */}
+              {(campaign.npcs ?? []).length > 0 && (
+                <div>
+                  <label className="text-stone-500 text-xs block mb-2">PNJ impliqués</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(campaign.npcs ?? []).map((npc, i) => {
+                      const selected = sessionPrepDraft.npc_names.includes(npc.name)
+                      return (
+                        <button
+                          key={i}
+                          disabled={!editingSessionPrep}
+                          onClick={() => setSessionPrepDraft(d => ({
+                            ...d,
+                            npc_names: selected ? d.npc_names.filter(n => n !== npc.name) : [...d.npc_names, npc.name],
+                          }))}
+                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors ${selected ? 'bg-violet-900/40 border-violet-600/50 text-violet-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-violet-700/50 hover:text-stone-300'} disabled:cursor-default`}
+                        >
+                          {npc.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Lieux à visiter */}
+              {(campaign.locations ?? []).length > 0 && (
+                <div>
+                  <label className="text-stone-500 text-xs block mb-2">Lieux à visiter</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(campaign.locations ?? []).map((loc, i) => {
+                      const selected = sessionPrepDraft.location_names.includes(loc.name)
+                      return (
+                        <button
+                          key={i}
+                          disabled={!editingSessionPrep}
+                          onClick={() => setSessionPrepDraft(d => ({
+                            ...d,
+                            location_names: selected ? d.location_names.filter(n => n !== loc.name) : [...d.location_names, loc.name],
+                          }))}
+                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors ${selected ? 'bg-amber-900/40 border-amber-600/50 text-amber-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-amber-700/50 hover:text-stone-300'} disabled:cursor-default`}
+                        >
+                          {loc.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Rencontres planifiées */}
+              {(campaign.saved_encounters ?? []).length > 0 && (
+                <div>
+                  <label className="text-stone-500 text-xs block mb-2">Rencontres planifiées</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(campaign.saved_encounters ?? []).map((enc, i) => {
+                      const selected = sessionPrepDraft.encounter_names.includes(enc.name)
+                      return (
+                        <button
+                          key={i}
+                          disabled={!editingSessionPrep}
+                          onClick={() => setSessionPrepDraft(d => ({
+                            ...d,
+                            encounter_names: selected ? d.encounter_names.filter(n => n !== enc.name) : [...d.encounter_names, enc.name],
+                          }))}
+                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors ${selected ? 'bg-red-900/40 border-red-600/50 text-red-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-red-700/50 hover:text-stone-300'} disabled:cursor-default`}
+                        >
+                          {enc.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Notes de préparation */}
+              <div>
+                <label className="text-stone-500 text-xs block mb-1">Notes de préparation</label>
+                <textarea
+                  placeholder={"Objectifs de la session, secrets à révéler, rebondissements…"}
+                  value={sessionPrepDraft.notes}
+                  onChange={e => setSessionPrepDraft(d => ({ ...d, notes: e.target.value }))}
+                  disabled={!editingSessionPrep}
+                  rows={4}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors resize-y disabled:opacity-60"
+                />
+              </div>
+
+              {editingSessionPrep && (
+                <div className="flex items-center justify-end gap-3">
+                  {hasSessionPrep && (
+                    <button onClick={() => setEditingSessionPrep(false)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
+                  )}
+                  <button
+                    onClick={handleSaveSessionPrep}
+                    disabled={savingSessionPrep}
+                    className="text-sky-400 hover:text-sky-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                  >
+                    Enregistrer
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-stone-600 text-sm text-center py-4">Aucune session planifiée. Cliquez sur "+ Planifier" pour préparer la prochaine séance.</p>
           )}
         </div>
 

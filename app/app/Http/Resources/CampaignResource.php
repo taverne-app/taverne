@@ -20,6 +20,7 @@ class CampaignResource extends JsonResource
             'game_calendar'    => $this->game_calendar ?? [],
             'party_treasury'   => $this->party_treasury ?? [],
             'locations'        => $this->locations ?? [],
+            'session_prep'     => $this->session_prep ?? null,
             'share_token'      => $this->share_token,
             'characters'  => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'  => CombatantResource::collection($this->whenLoaded('combatants')),

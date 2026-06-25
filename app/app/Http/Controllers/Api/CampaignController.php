@@ -56,6 +56,7 @@ class CampaignController extends Controller
             'game_calendar'    => ['sometimes', 'nullable', 'array'],
             'party_treasury'   => ['sometimes', 'nullable', 'array'],
             'locations'        => ['sometimes', 'nullable', 'array'],
+            'session_prep'     => ['sometimes', 'nullable', 'array'],
         ]);
 
         $campaign->update($validated);

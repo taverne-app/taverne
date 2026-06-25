@@ -37,6 +37,8 @@ class Character extends Model
         'race',
         'character_class',
         'subclass',
+        'secondary_class',
+        'secondary_level',
         'level',
         'background',
         'alignment',

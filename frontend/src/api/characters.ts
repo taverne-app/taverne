@@ -70,6 +70,8 @@ export interface Character {
   race: string
   character_class: string
   subclass: string | null
+  secondary_class: string | null
+  secondary_level: number | null
   level: number
   background: string | null
   alignment: string | null
@@ -151,6 +153,8 @@ export interface IdentityPayload {
   race?: string
   character_class?: string
   subclass?: string | null
+  secondary_class?: string | null
+  secondary_level?: number | null
   level?: number
   background?: string | null
   alignment?: string | null

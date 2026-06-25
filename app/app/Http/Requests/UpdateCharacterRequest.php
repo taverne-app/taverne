@@ -19,6 +19,8 @@ class UpdateCharacterRequest extends FormRequest
             'race'             => ['sometimes', 'string', 'max:100'],
             'character_class'  => ['sometimes', 'string', 'max:100'],
             'subclass'         => ['sometimes', 'nullable', 'string', 'max:100'],
+            'secondary_class'  => ['sometimes', 'nullable', 'string', 'max:100'],
+            'secondary_level'  => ['sometimes', 'nullable', 'integer', 'min:1', 'max:20'],
             'level'            => ['sometimes', 'integer', 'min:1', 'max:20'],
             'background'       => ['sometimes', 'nullable', 'string', 'max:100'],
             'alignment'        => ['sometimes', 'nullable', 'string', 'max:50'],
