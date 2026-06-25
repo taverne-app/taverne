@@ -7,7 +7,7 @@ export type { CampaignSession }
 
 export interface SavedEncounter {
   name: string
-  entries: { monster_name: string; count: number }[]
+  entries: { monster_name: string; count: number; cr?: string }[]
 }
 
 export interface Npc {

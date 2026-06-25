@@ -26,6 +26,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { canLevelUp } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
+import { computeEncounterDifficulty, difficultyColor, difficultyBg } from '../data/encounter_difficulty'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1544,6 +1545,8 @@ export function CampaignPage() {
                   <div className="flex flex-wrap gap-2">
                     {(campaign.saved_encounters ?? []).map((enc, i) => {
                       const selected = sessionPrepDraft.encounter_names.includes(enc.name)
+                      const partyLevels = characters.map(c => c.level)
+                      const diff = computeEncounterDifficulty(enc.entries, partyLevels)
                       return (
                         <button
                           key={i}
@@ -1552,9 +1555,10 @@ export function CampaignPage() {
                             ...d,
                             encounter_names: selected ? d.encounter_names.filter(n => n !== enc.name) : [...d.encounter_names, enc.name],
                           }))}
-                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors ${selected ? 'bg-red-900/40 border-red-600/50 text-red-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-red-700/50 hover:text-stone-300'} disabled:cursor-default`}
+                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors flex items-center gap-1.5 ${selected ? 'bg-red-900/40 border-red-600/50 text-red-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-red-700/50 hover:text-stone-300'} disabled:cursor-default`}
                         >
                           {enc.name}
+                          {diff && <span className={`font-semibold text-xs ${selected ? '' : difficultyColor(diff)}`}>{diff}</span>}
                         </button>
                       )
                     })}

@@ -23,6 +23,7 @@ import { canLevelUp } from '../data/xp'
 import { CONDITIONS_FR } from '../data/conditions'
 import { ConditionTag } from '../components/ConditionTag'
 import { RulesCompendium } from '../components/RulesCompendium'
+import { XP_THRESHOLDS, encounterMultiplier, encounterDifficultyLabel, difficultyColor, computeEncounterDifficulty } from '../data/encounter_difficulty'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -86,53 +87,6 @@ function rollSpell(character: Character, spell: Spell, type: 'attack' | 'damage'
 // ── Encounter builder helpers ─────────────────────────────────────────────────
 
 // [easy, medium, hard, deadly] XP thresholds per character level
-const XP_THRESHOLDS: Record<number, [number, number, number, number]> = {
-   1: [25,  50,   75,   100],
-   2: [50,  100,  150,  200],
-   3: [75,  150,  225,  400],
-   4: [125, 250,  375,  500],
-   5: [250, 500,  750,  1100],
-   6: [300, 600,  900,  1400],
-   7: [350, 750,  1100, 1700],
-   8: [450, 900,  1400, 2100],
-   9: [550, 1100, 1600, 2400],
-  10: [600, 1200, 1900, 2800],
-  11: [800, 1600, 2400, 3600],
-  12: [1000,2000, 3000, 4500],
-  13: [1100,2200, 3400, 5100],
-  14: [1250,2500, 3800, 5700],
-  15: [1400,2800, 4300, 6400],
-  16: [1600,3200, 4800, 7200],
-  17: [2000,3900, 5900, 8800],
-  18: [2100,4200, 6300, 9500],
-  19: [2400,4900, 7300, 10900],
-  20: [2800,5700, 8500, 12700],
-}
-
-function encounterMultiplier(count: number): number {
-  if (count <= 1) return 1
-  if (count === 2) return 1.5
-  if (count <= 6) return 2
-  if (count <= 10) return 2.5
-  if (count <= 14) return 3
-  return 4
-}
-
-function encounterDifficultyLabel(adjustedXp: number, thresholds: [number, number, number, number]): string {
-  if (adjustedXp >= thresholds[3]) return 'Mortelle'
-  if (adjustedXp >= thresholds[2]) return 'Difficile'
-  if (adjustedXp >= thresholds[1]) return 'Moyen'
-  if (adjustedXp >= thresholds[0]) return 'Facile'
-  return 'Triviale'
-}
-
-function difficultyColor(label: string): string {
-  if (label === 'Mortelle')  return 'text-red-400'
-  if (label === 'Difficile') return 'text-orange-400'
-  if (label === 'Moyen')     return 'text-amber-400'
-  if (label === 'Facile')    return 'text-emerald-400'
-  return 'text-stone-400'
-}
 
 const CR_VALUES = ['0', '1/8', '1/4', '1/2', '1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21', '22', '23', '24', '25', '30']
 const CR_NUM: Record<string, number> = {
@@ -485,13 +439,18 @@ export function CombatPage() {
   const [restNotif, setRestNotif] = useState<{ type: 'short' | 'long'; results: { name: string; healed: number }[] } | null>(null)
   const restNotifTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Combat timers
+  // Combat timers (global)
   const [timers, setTimers] = useState<{ id: number; name: string; rounds: number }[]>([])
   const [timerName, setTimerName] = useState('')
   const [timerRounds, setTimerRounds] = useState('1')
   const [expiredAlert, setExpiredAlert] = useState<string[]>([])
   const [showTimerForm, setShowTimerForm] = useState(false)
   const timerIdRef = useRef(0)
+
+  // Per-combatant effects
+  const [combatantEffects, setCombatantEffects] = useState<Record<string, { id: number; name: string; rounds: number }[]>>({})
+  const [effectInput, setEffectInput] = useState<{ key: string; name: string; rounds: string } | null>(null)
+  const effectIdRef = useRef(0)
 
   // Manual initiative reordering
   const [manualOrder, setManualOrder] = useState<string[] | null>(null)
@@ -962,7 +921,7 @@ export function CombatPage() {
     if (!campaign || !campaignId || !saveEncounterName.trim() || encounterEntries.length === 0) return
     const newSaved: SavedEncounter = {
       name: saveEncounterName.trim(),
-      entries: encounterEntries.map(e => ({ monster_name: e.monster.name, count: e.count })),
+      entries: encounterEntries.map(e => ({ monster_name: e.monster.name, count: e.count, cr: e.monster.cr })),
     }
     const existing = campaign.saved_encounters ?? []
     const updated = await updateCampaign(campaignId, {
@@ -1099,7 +1058,19 @@ export function CombatPage() {
   function nextTurn() {
     if (withRollDisplay.length === 0) return
     const currentRow = withRollDisplay[activeTurn % withRollDisplay.length]
-    if (currentRow) decrementConditions(currentRow)
+    if (currentRow) {
+      decrementConditions(currentRow)
+      // Decrement per-combatant effects
+      const key = rowId(currentRow)
+      setCombatantEffects(prev => {
+        const effects = prev[key]
+        if (!effects || effects.length === 0) return prev
+        const expired = effects.filter(e => e.rounds <= 1).map(e => e.name)
+        const next = effects.map(e => ({ ...e, rounds: e.rounds - 1 })).filter(e => e.rounds > 0)
+        if (expired.length > 0) setExpiredAlert(a => [...a, ...expired])
+        return { ...prev, [key]: next }
+      })
+    }
 
     const next = (activeTurn + 1) % withRollDisplay.length
     const newRound = next === 0 ? roundNumber + 1 : roundNumber
@@ -1813,6 +1784,41 @@ export function CombatPage() {
                               </button>
                             </div>
                           )}
+                          {/* Per-combatant effect badges (character) */}
+                          {(() => {
+                            const key = rowId(row)
+                            const effects = combatantEffects[key] ?? []
+                            if (effects.length === 0 && effectInput?.key !== key) return null
+                            return (
+                              <div className="flex flex-wrap gap-1 mt-1 items-center">
+                                {effects.map(e => (
+                                  <button key={e.id}
+                                    onClick={() => setCombatantEffects(prev => ({ ...prev, [key]: (prev[key] ?? []).filter(x => x.id !== e.id) }))}
+                                    title="Cliquer pour supprimer"
+                                    className={`text-xs px-2 py-0.5 rounded border transition-colors ${e.rounds <= 1 ? 'bg-red-900/40 border-red-700/50 text-red-300' : 'bg-sky-900/30 border-sky-700/40 text-sky-300'}`}
+                                  >
+                                    {e.name} <span className="font-bold">{e.rounds}R</span> ×
+                                  </button>
+                                ))}
+                                {effectInput?.key === key && (
+                                  <div className="flex items-center gap-1">
+                                    <input autoFocus type="text" placeholder="Effet" value={effectInput.name}
+                                      onChange={ev => setEffectInput(prev => prev ? { ...prev, name: ev.target.value } : prev)}
+                                      onKeyDown={ev => {
+                                        if (ev.key === 'Enter') { const r = parseInt(effectInput.rounds, 10); if (effectInput.name.trim() && r > 0) { setCombatantEffects(prev => ({ ...prev, [key]: [...(prev[key] ?? []), { id: ++effectIdRef.current, name: effectInput.name.trim(), rounds: r }] })); setEffectInput(null) } }
+                                        if (ev.key === 'Escape') setEffectInput(null)
+                                      }}
+                                      className="w-28 bg-stone-800 border border-sky-700/50 rounded px-2 py-0.5 text-white text-xs focus:outline-none" />
+                                    <input type="number" min={1} max={99} value={effectInput.rounds}
+                                      onChange={ev => setEffectInput(prev => prev ? { ...prev, rounds: ev.target.value } : prev)}
+                                      className="w-10 bg-stone-800 border border-stone-700 rounded px-1 py-0.5 text-white text-xs text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                                    <button onClick={() => { const r = parseInt(effectInput.rounds, 10); if (effectInput.name.trim() && r > 0) { setCombatantEffects(prev => ({ ...prev, [key]: [...(prev[key] ?? []), { id: ++effectIdRef.current, name: effectInput.name.trim(), rounds: r }] })) } setEffectInput(null) }} className="text-sky-400 text-xs px-1.5 rounded bg-stone-700 hover:bg-stone-600">✓</button>
+                                    <button onClick={() => setEffectInput(null)} className="text-stone-500 text-xs">✕</button>
+                                  </div>
+                                )}
+                              </div>
+                            )
+                          })()}
                           {character.attack_macros.length > 0 && (
                             <div className="flex flex-wrap gap-1 mt-1">
                               {character.attack_macros.map((macro, mi) => (
@@ -1953,8 +1959,8 @@ export function CombatPage() {
                           </div>
                         </div>
 
-                        {/* Conditions */}
-                        <div className="hidden lg:block shrink-0">
+                        {/* Conditions + Effets */}
+                        <div className="hidden lg:flex items-center gap-1.5 shrink-0">
                           <button
                             onClick={() => setExpandedCharacterConditions(expandedCharacterConditions === character.id ? null : character.id)}
                             className={`text-xs rounded px-2 py-1 border transition-colors ${
@@ -1966,6 +1972,13 @@ export function CombatPage() {
                             {character.state.conditions.length > 0
                               ? character.state.conditions.map(c => CONDITIONS_FR[c] ?? c).join(', ')
                               : '+ Condition'}
+                          </button>
+                          <button
+                            onClick={() => setEffectInput({ key: rowId(row), name: '', rounds: '1' })}
+                            title="Ajouter un effet temporaire (rounds)"
+                            className="text-xs rounded px-2 py-1 border bg-stone-800 border-stone-700 text-stone-600 hover:text-sky-400 hover:border-sky-700/50 transition-colors"
+                          >
+                            ⏱ Effet
                           </button>
                         </div>
 
@@ -2266,8 +2279,8 @@ export function CombatPage() {
                         </div>
                       </div>
 
-                      {/* Conditions (éditable) */}
-                      <div className="hidden lg:block shrink-0">
+                      {/* Conditions + Effets (éditable) */}
+                      <div className="hidden lg:flex items-center gap-1.5 shrink-0">
                         <button
                           onClick={() => setExpandedConditions(expandedConditions === cb.id ? null : cb.id)}
                           className={`text-xs rounded px-2 py-1 border transition-colors ${
@@ -2279,6 +2292,13 @@ export function CombatPage() {
                           {cb.conditions.length > 0
                             ? cb.conditions.map(c => CONDITIONS_FR[c] ?? c).join(', ')
                             : '+ Condition'}
+                        </button>
+                        <button
+                          onClick={() => setEffectInput({ key: rowId(row), name: '', rounds: '1' })}
+                          title="Ajouter un effet temporaire (rounds)"
+                          className="text-xs rounded px-2 py-1 border bg-stone-800 border-stone-700 text-stone-600 hover:text-sky-400 hover:border-sky-700/50 transition-colors"
+                        >
+                          ⏱ Effet
                         </button>
                       </div>
 
@@ -2411,6 +2431,42 @@ export function CombatPage() {
                         <p className="text-stone-700 text-xs mt-2">Entrer une durée en rounds avant d'activer (optionnel)</p>
                       </div>
                     )}
+
+                    {/* Per-combatant effects (combatant row) */}
+                    {(() => {
+                      const key = rowId(row)
+                      const effects = combatantEffects[key] ?? []
+                      if (effects.length === 0 && effectInput?.key !== key) return null
+                      return (
+                        <div className="mt-2 pt-2 border-t border-stone-800/60 flex flex-wrap gap-1.5 items-center">
+                          {effects.map(e => (
+                            <button key={e.id}
+                              onClick={() => setCombatantEffects(prev => ({ ...prev, [key]: (prev[key] ?? []).filter(x => x.id !== e.id) }))}
+                              title="Cliquer pour supprimer"
+                              className={`text-xs px-2 py-0.5 rounded border transition-colors ${e.rounds <= 1 ? 'bg-red-900/40 border-red-700/50 text-red-300' : 'bg-sky-900/30 border-sky-700/40 text-sky-300'}`}
+                            >
+                              {e.name} <span className="font-bold">{e.rounds}R</span> ×
+                            </button>
+                          ))}
+                          {effectInput?.key === key && (
+                            <div className="flex items-center gap-1">
+                              <input autoFocus type="text" placeholder="Effet" value={effectInput.name}
+                                onChange={ev => setEffectInput(prev => prev ? { ...prev, name: ev.target.value } : prev)}
+                                onKeyDown={ev => {
+                                  if (ev.key === 'Enter') { const r = parseInt(effectInput.rounds, 10); if (effectInput.name.trim() && r > 0) { setCombatantEffects(prev => ({ ...prev, [key]: [...(prev[key] ?? []), { id: ++effectIdRef.current, name: effectInput.name.trim(), rounds: r }] })); setEffectInput(null) } }
+                                  if (ev.key === 'Escape') setEffectInput(null)
+                                }}
+                                className="w-28 bg-stone-800 border border-sky-700/50 rounded px-2 py-0.5 text-white text-xs focus:outline-none" />
+                              <input type="number" min={1} max={99} value={effectInput.rounds}
+                                onChange={ev => setEffectInput(prev => prev ? { ...prev, rounds: ev.target.value } : prev)}
+                                className="w-10 bg-stone-800 border border-stone-700 rounded px-1 py-0.5 text-white text-xs text-center focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                              <button onClick={() => { const r = parseInt(effectInput.rounds, 10); if (effectInput.name.trim() && r > 0) { setCombatantEffects(prev => ({ ...prev, [key]: [...(prev[key] ?? []), { id: ++effectIdRef.current, name: effectInput.name.trim(), rounds: r }] })) } setEffectInput(null) }} className="text-sky-400 text-xs px-1.5 rounded bg-stone-700 hover:bg-stone-600">✓</button>
+                              <button onClick={() => setEffectInput(null)} className="text-stone-500 text-xs">✕</button>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}
@@ -2693,12 +2749,17 @@ export function CombatPage() {
                     {/* Saved encounters list */}
                     {showSavedEncounters && campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (
                       <div className="bg-stone-800/60 rounded-lg p-2 space-y-1">
-                        {campaign!.saved_encounters!.map((saved, i) => (
+                        {campaign!.saved_encounters!.map((saved, i) => {
+                          const diff = computeEncounterDifficulty(saved.entries, characters.map(c => c.level))
+                          return (
                           <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-stone-700/50 transition-colors">
                             <div className="min-w-0">
-                              <p className="text-stone-200 text-xs font-medium truncate">{saved.name}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-stone-200 text-xs font-medium truncate">{saved.name}</p>
+                                {diff && <span className={`text-xs font-semibold shrink-0 ${difficultyColor(diff)}`}>{diff}</span>}
+                              </div>
                               <p className="text-stone-500 text-xs truncate">
-                                {saved.entries.map(e => `${e.count}× ${e.monster_name}`).join(', ')}
+                                {saved.entries.map(e => `${e.count}× ${e.monster_name}${e.cr ? ` CR${e.cr}` : ''}`).join(', ')}
                               </p>
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
@@ -2716,7 +2777,7 @@ export function CombatPage() {
                               </button>
                             </div>
                           </div>
-                        ))}
+                        )})}
                       </div>
                     )}
 

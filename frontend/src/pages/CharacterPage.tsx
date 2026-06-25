@@ -48,6 +48,7 @@ import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
 import { SPELL_DETAILS } from '../data/spell_details'
+import { computeMulticlassSlots } from '../data/multiclass'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
@@ -3235,6 +3236,37 @@ export function CharacterPage() {
             </div>
           )}
         </div>
+
+        {/* Multiclass spell slot calculator */}
+        {character.secondary_class && (() => {
+          const slots = computeMulticlassSlots(
+            character.character_class,
+            character.level - (character.secondary_level ?? 0),
+            character.secondary_class,
+            character.secondary_level ?? 0,
+          )
+          if (!slots) return null
+          return (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">
+                Emplacements multiclasse
+              </h2>
+              <p className="text-stone-500 text-xs mb-3">
+                {character.character_class} Niv.{character.level - (character.secondary_level ?? 0)} / {character.secondary_class} Niv.{character.secondary_level ?? 0}
+                {' → '}niveau de lanceur de sorts combiné
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {slots.map((count, i) => (
+                  <div key={i} className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-center min-w-[60px]">
+                    <p className="text-stone-500 text-xs mb-1">Niv. {i + 1}</p>
+                    <p className="text-violet-300 font-bold">{count}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="text-stone-600 text-xs mt-3">Emplacements combinés selon la table multiclasse D&D 5e (PHB p.165)</p>
+            </div>
+          )
+        })()}
 
         {/* Spells known */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">

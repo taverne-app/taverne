@@ -112,7 +112,9 @@ export function SharedCharacterPage() {
                 {character.name}
               </h1>
               <p className="text-stone-500 text-xs truncate">
-                {character.race} · {character.character_class}{character.subclass ? ` (${character.subclass})` : ''} · Niv. {character.level}
+                {character.race} · {character.character_class}{character.subclass ? ` (${character.subclass})` : ''}
+                {character.secondary_class ? ` / ${character.secondary_class}${character.secondary_level ? ` Niv.${character.secondary_level}` : ''}` : ''}
+                {' · Niv. '}{character.level}
                 {character.background ? ` · ${character.background}` : ''}
               </p>
             </div>
