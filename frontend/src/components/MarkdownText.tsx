@@ -1,3 +1,5 @@
+import type { JSX } from 'react'
+
 /**
  * Rendu markdown minimal : titres, gras, italique, listes, séparateurs.
  * Pas de dépendance externe.

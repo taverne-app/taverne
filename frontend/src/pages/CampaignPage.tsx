@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   getCampaign,
+  createCampaign,
   updateCampaign,
   addCharacterToCampaign,
   removeCharacterFromCampaign,
@@ -11,6 +12,7 @@ import {
   type TreasureItem,
   type Location,
   type SessionPrep,
+  type CustomMonster,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, longRest, updateInventory, type Character } from '../api/characters'
@@ -26,7 +28,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { canLevelUp } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
-import { computeEncounterDifficulty, difficultyColor, difficultyBg } from '../data/encounter_difficulty'
+import { computeEncounterDifficulty, difficultyColor } from '../data/encounter_difficulty'
+import { CR_XP } from '../data/monsters'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -119,6 +122,17 @@ export function CampaignPage() {
   const [editingSessionPrep, setEditingSessionPrep] = useState(false)
   const [hasSessionPrep, setHasSessionPrep] = useState(false)
   const [savingSessionPrep, setSavingSessionPrep] = useState(false)
+
+  // Bestiaire personnalisé
+  const emptyMonsterDraft = (): CustomMonster => ({ name: '', cr: '1', ac: 12, hp_avg: 10, initiative_mod: 0, xp: 200 })
+  const [monsterDraft, setMonsterDraft] = useState<CustomMonster>(emptyMonsterDraft())
+  const [addingMonster, setAddingMonster] = useState(false)
+
+  // Tableau de bord
+  const [showDashboard, setShowDashboard] = useState(true)
+
+  // Export / Import
+  const [importing, setImporting] = useState(false)
 
   // Load campaign
   useEffect(() => {
@@ -418,6 +432,77 @@ export function CampaignPage() {
     setDistributingIdx(null)
   }
 
+  async function handleAddCustomMonster() {
+    if (!campaign || !monsterDraft.name.trim()) return
+    const xp = CR_XP[monsterDraft.cr] ?? 0
+    const next = [...(campaign.custom_monsters ?? []), { ...monsterDraft, name: monsterDraft.name.trim(), xp }]
+    const updated = await updateCampaign(campaign.id, { custom_monsters: next })
+    setCampaign(updated)
+    setMonsterDraft(emptyMonsterDraft())
+    setAddingMonster(false)
+  }
+
+  async function handleDeleteCustomMonster(index: number) {
+    if (!campaign) return
+    const next = (campaign.custom_monsters ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaign.id, { custom_monsters: next })
+    setCampaign(updated)
+  }
+
+  function handleExportCampaign() {
+    if (!campaign) return
+    const data = {
+      _version: 1,
+      name: campaign.name,
+      description: campaign.description,
+      dm_notes: campaign.dm_notes,
+      npcs: campaign.npcs,
+      locations: campaign.locations,
+      party_treasury: campaign.party_treasury,
+      saved_encounters: campaign.saved_encounters,
+      custom_monsters: campaign.custom_monsters,
+      game_calendar: campaign.game_calendar,
+      session_prep: campaign.session_prep,
+      sessions: sessions,
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${campaign.name.replace(/[^a-z0-9]/gi, '_')}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function handleImportCampaign(file: File) {
+    setImporting(true)
+    try {
+      const text = await file.text()
+      const data = JSON.parse(text)
+      const newCampaign = await createCampaign(data.name ?? 'Campagne importée', data.description ?? null)
+      await updateCampaign(newCampaign.id, {
+        dm_notes: data.dm_notes ?? null,
+        npcs: data.npcs ?? [],
+        locations: data.locations ?? [],
+        party_treasury: data.party_treasury ?? [],
+        saved_encounters: data.saved_encounters ?? [],
+        custom_monsters: data.custom_monsters ?? [],
+        game_calendar: data.game_calendar ?? {},
+        session_prep: data.session_prep ?? null,
+      })
+      if (Array.isArray(data.sessions)) {
+        for (const s of data.sessions) {
+          await createSession(newCampaign.id, { title: s.title, session_date: s.session_date, notes: s.notes })
+        }
+      }
+      navigate(`/campaigns/${newCampaign.id}`)
+    } catch {
+      alert('Fichier invalide ou corrompu.')
+    } finally {
+      setImporting(false)
+    }
+  }
+
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
     clearAuth()
@@ -457,6 +542,96 @@ export function CampaignPage() {
       </header>
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+
+        {/* Tableau de bord MJ */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setShowDashboard(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-stone-800/50 transition-colors"
+          >
+            <span className="text-stone-300 text-sm font-semibold">Tableau de bord</span>
+            <span className="text-stone-500 text-xs">{showDashboard ? '▲' : '▼'}</span>
+          </button>
+          {showDashboard && (
+            <div className="px-5 pb-5 space-y-4 border-t border-stone-800">
+              {/* HP du groupe */}
+              {characters.length > 0 && (
+                <div>
+                  <p className="text-stone-500 text-xs uppercase tracking-widest mb-2 mt-3">Santé du groupe</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {characters.map(c => {
+                      const maxHp = c.combat.max_hp
+                      const curHp = c.combat.current_hp
+                      const pct = maxHp > 0 ? Math.min(1, curHp / maxHp) : 0
+                      const bar = pct > 0.5 ? 'bg-emerald-500' : pct > 0.25 ? 'bg-amber-500' : 'bg-red-500'
+                      const conditions = (c.state.conditions ?? []).filter(Boolean)
+                      return (
+                        <div key={c.id} className="bg-stone-800 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-stone-200 text-xs font-medium truncate max-w-[70%]">{c.name}</span>
+                            <span className="text-stone-400 text-xs">{curHp}/{maxHp}</span>
+                          </div>
+                          <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
+                            <div className={`h-full ${bar} rounded-full transition-all`} style={{ width: `${pct * 100}%` }} />
+                          </div>
+                          {conditions.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5">
+                              {conditions.map((cond: string, i: number) => (
+                                <span key={i} className="text-[10px] bg-amber-900/40 border border-amber-700/30 text-amber-300 rounded px-1.5 py-0.5">
+                                  {CONDITIONS_FR[cond] ?? cond}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="grid grid-cols-2 gap-4">
+                {/* Calendrier */}
+                {(campaign.game_calendar?.date || campaign.game_calendar?.weather) && (
+                  <div>
+                    <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Calendrier</p>
+                    <div className="bg-stone-800 rounded-lg p-3 space-y-1">
+                      {campaign.game_calendar.date && (
+                        <p className="text-stone-200 text-sm">📅 {campaign.game_calendar.date}</p>
+                      )}
+                      {campaign.game_calendar.time && (
+                        <p className="text-stone-400 text-xs capitalize">{campaign.game_calendar.time}</p>
+                      )}
+                      {campaign.game_calendar.weather && (
+                        <p className="text-stone-300 text-sm">🌤 {campaign.game_calendar.weather}</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Prochaine session */}
+                {campaign.session_prep && (
+                  <div>
+                    <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Prochaine session</p>
+                    <div className="bg-sky-950/40 border border-sky-800/30 rounded-lg p-3 space-y-1">
+                      <p className="text-sky-200 text-sm font-medium">{campaign.session_prep.title || 'Sans titre'}</p>
+                      {campaign.session_prep.date && (
+                        <p className="text-sky-400 text-xs">📅 {campaign.session_prep.date}</p>
+                      )}
+                      {campaign.session_prep.npc_names.length > 0 && (
+                        <p className="text-stone-400 text-xs">{campaign.session_prep.npc_names.length} PNJ · {campaign.session_prep.encounter_names.length} rencontres</p>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {characters.length === 0 && !campaign.game_calendar?.date && !campaign.session_prep && (
+                <p className="text-stone-600 text-sm text-center py-2">Ajoutez des personnages et configurez le calendrier pour voir le résumé ici.</p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Campaign identity */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
@@ -499,13 +674,32 @@ export function CampaignPage() {
                   <p className="text-stone-400 text-sm mt-1">{campaign.description}</p>
                 )}
               </div>
-              <div className="flex items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
                 <Link
                   to={`/combat?campaign=${campaign.id}`}
                   className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
                 >
                   ⚔ Combat
                 </Link>
+                <button
+                  onClick={handleExportCampaign}
+                  title="Exporter la campagne en JSON"
+                  className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
+                >
+                  ↓ Export
+                </button>
+                <label
+                  title="Importer une campagne depuis un JSON"
+                  className="text-stone-500 hover:text-stone-300 text-sm transition-colors cursor-pointer"
+                >
+                  {importing ? '…' : '↑ Import'}
+                  <input
+                    type="file"
+                    accept=".json"
+                    className="hidden"
+                    onChange={e => { const f = e.target.files?.[0]; if (f) handleImportCampaign(f); e.target.value = '' }}
+                  />
+                </label>
                 <button
                   onClick={startEdit}
                   className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
@@ -1596,6 +1790,127 @@ export function CampaignPage() {
             </div>
           ) : (
             <p className="text-stone-600 text-sm text-center py-4">Aucune session planifiée. Cliquez sur "+ Planifier" pour préparer la prochaine séance.</p>
+          )}
+        </div>
+
+        {/* Bestiaire personnalisé */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Bestiaire ({(campaign.custom_monsters ?? []).length})
+            </h2>
+            <button
+              onClick={() => { setAddingMonster(v => !v); setMonsterDraft(emptyMonsterDraft()) }}
+              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              {addingMonster ? 'Annuler' : '+ Monstre'}
+            </button>
+          </div>
+
+          {addingMonster && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-3">
+                  <label className="text-stone-500 text-xs block mb-1">Nom *</label>
+                  <input
+                    type="text"
+                    value={monsterDraft.name}
+                    onChange={e => setMonsterDraft(d => ({ ...d, name: e.target.value }))}
+                    autoFocus
+                    placeholder="ex. Gobelin des ombres"
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">CR</label>
+                  <select
+                    value={monsterDraft.cr}
+                    onChange={e => setMonsterDraft(d => ({ ...d, cr: e.target.value, xp: CR_XP[e.target.value] ?? 0 }))}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  >
+                    {['0','1/8','1/4','1/2','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27','28','29','30'].map(cr => (
+                      <option key={cr} value={cr}>CR {cr} — {CR_XP[cr] ?? 0} XP</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">CA</label>
+                  <input
+                    type="number"
+                    value={monsterDraft.ac}
+                    onChange={e => setMonsterDraft(d => ({ ...d, ac: Number(e.target.value) }))}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">PV moyens</label>
+                  <input
+                    type="number"
+                    value={monsterDraft.hp_avg}
+                    onChange={e => setMonsterDraft(d => ({ ...d, hp_avg: Number(e.target.value) }))}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Mod. Initiative</label>
+                  <input
+                    type="number"
+                    value={monsterDraft.initiative_mod}
+                    onChange={e => setMonsterDraft(d => ({ ...d, initiative_mod: Number(e.target.value) }))}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div className="sm:col-span-2">
+                  <label className="text-stone-500 text-xs block mb-1">Notes</label>
+                  <input
+                    type="text"
+                    value={monsterDraft.notes ?? ''}
+                    onChange={e => setMonsterDraft(d => ({ ...d, notes: e.target.value }))}
+                    placeholder="Résistances, attaques…"
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddCustomMonster}
+                  disabled={saving || !monsterDraft.name.trim()}
+                  className="bg-amber-500 hover:bg-amber-400 text-black text-sm font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(campaign.custom_monsters ?? []).length > 0 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(campaign.custom_monsters ?? []).map((m, i) => (
+                <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-white text-sm font-medium">{m.name}</p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                      <span className="text-stone-500 text-xs">CR {m.cr}</span>
+                      <span className="text-stone-500 text-xs">CA {m.ac}</span>
+                      <span className="text-stone-500 text-xs">{m.hp_avg} PV</span>
+                      <span className="text-stone-500 text-xs">Init {m.initiative_mod >= 0 ? '+' : ''}{m.initiative_mod}</span>
+                      <span className="text-amber-600/80 text-xs">{m.xp} XP</span>
+                    </div>
+                    {m.notes && <p className="text-stone-500 text-xs mt-1 italic">{m.notes}</p>}
+                  </div>
+                  <button
+                    onClick={() => handleDeleteCustomMonster(i)}
+                    className="text-stone-600 hover:text-red-400 text-lg leading-none shrink-0 transition-colors"
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            !addingMonster && (
+              <p className="text-stone-600 text-sm text-center py-4">Aucun monstre personnalisé. Créez-en pour les utiliser dans les rencontres.</p>
+            )
           )}
         </div>
 

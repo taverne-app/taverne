@@ -18,7 +18,7 @@ import { createSession } from '../api/sessions'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
-import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, type MonsterTemplate } from '../data/monsters'
+import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, CR_XP, type MonsterTemplate } from '../data/monsters'
 import { canLevelUp } from '../data/xp'
 import { CONDITIONS_FR } from '../data/conditions'
 import { ConditionTag } from '../components/ConditionTag'
@@ -404,6 +404,15 @@ export function CombatPage() {
   const [characters, setCharacters] = useState<Character[]>([])
   const [combatants, setCombatants] = useState<Combatant[]>([])
   const [campaign, setCampaign] = useState<Campaign | null>(null)
+  const allMonsters: MonsterTemplate[] = [
+    ...MONSTERS,
+    ...(campaign?.custom_monsters ?? []).map(m => ({
+      name: m.name, cr: m.cr, ac: m.ac,
+      hp_dice: 0, hp_sides: 1, hp_bonus: m.hp_avg,
+      hp_avg: m.hp_avg, initiative_mod: m.initiative_mod,
+      xp: CR_XP[m.cr] ?? m.xp,
+    })),
+  ]
   const [loading, setLoading] = useState(true)
   const [activeTurn, setActiveTurn] = useState(0)
   const [diceLog, setDiceLog] = useState<DiceRoll[]>(() => {
@@ -940,7 +949,7 @@ export function CombatPage() {
 
   function handleLoadSavedEncounter(saved: SavedEncounter) {
     const entries = saved.entries.flatMap(e => {
-      const monster = MONSTERS.find(m => m.name === e.monster_name)
+      const monster = allMonsters.find(m => m.name === e.monster_name)
       if (!monster) return []
       return [{ monster, count: e.count }]
     })
@@ -2569,7 +2578,7 @@ export function CombatPage() {
                           const val = e.target.value
                           setCombatantDraft(prev => ({ ...prev, name: val }))
                           if (val.length >= 2) {
-                            setMonsterSuggestions(MONSTERS.filter(m =>
+                            setMonsterSuggestions(allMonsters.filter(m =>
                               m.name.toLowerCase().includes(val.toLowerCase())
                             ).slice(0, 6))
                           } else {
@@ -2674,7 +2683,7 @@ export function CombatPage() {
                     <p className="text-emerald-400 text-xs font-medium">✓ {addedMonster} ajouté au combat</p>
                   )}
                   {(() => {
-                    const filtered = MONSTERS.filter(m =>
+                    const filtered = allMonsters.filter(m =>
                       m.name.toLowerCase().includes(bestiarySearch.toLowerCase()) &&
                       (CR_NUM[m.cr] ?? 0) >= (CR_NUM[bestiaryMinCr] ?? 0) &&
                       (CR_NUM[m.cr] ?? 0) <= (CR_NUM[bestiaryMaxCr] ?? 30)
@@ -2693,7 +2702,7 @@ export function CombatPage() {
                         </div>
                         <div className="flex items-center gap-3 shrink-0 text-stone-500 text-xs">
                           <span>CA {m.ac}</span>
-                          <span>{m.hp_dice}d{m.hp_sides}{m.hp_bonus > 0 ? `+${m.hp_bonus}` : m.hp_bonus < 0 ? m.hp_bonus : ''} PV</span>
+                          <span>{m.hp_dice > 0 ? `${m.hp_dice}d${m.hp_sides}${m.hp_bonus > 0 ? `+${m.hp_bonus}` : m.hp_bonus < 0 ? m.hp_bonus : ''}` : m.hp_bonus} PV</span>
                           <span className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">+ Ajouter</span>
                         </div>
                       </button>
@@ -2719,7 +2728,7 @@ export function CombatPage() {
                   [0, 0, 0, 0] as [number, number, number, number],
                 )
                 const difficulty = encounterEntries.length > 0 ? encounterDifficultyLabel(adjustedXp, partyThresholds) : null
-                const filteredMonsters = MONSTERS.filter(m =>
+                const filteredMonsters = allMonsters.filter(m =>
                   m.name.toLowerCase().includes(encounterSearch.toLowerCase()) &&
                   (CR_NUM[m.cr] ?? 0) >= (CR_NUM[encounterMinCr] ?? 0) &&
                   (CR_NUM[m.cr] ?? 0) <= (CR_NUM[encounterMaxCr] ?? 30)

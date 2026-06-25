@@ -3511,7 +3511,6 @@ export function CharacterPage() {
                                         <>
                                           <p className="text-stone-500">⏱ {detail.castingTime} · ↔ {detail.range}</p>
                                           <p className="text-stone-500">⌛ {detail.duration}</p>
-                                          {detail.concentration && <p className="text-violet-400">◈ Concentration</p>}
                                           <p className="text-stone-300 leading-relaxed pt-0.5 border-t border-stone-700">{detail.description}</p>
                                         </>
                                       )}
