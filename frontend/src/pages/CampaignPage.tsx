@@ -12,11 +12,14 @@ import {
   type TreasureItem,
   type Location,
   type SessionPrep,
+  type PrepScene,
   type CustomMonster,
   type Faction,
+  type RandomTable,
+  type RandomTableEntry,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, updateInventory, type Character } from '../api/characters'
+import { listCharacters, longRest, updateInventory, updateIdentity, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -27,10 +30,11 @@ import {
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
-import { canLevelUp } from '../data/xp'
+import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
 import { computeEncounterDifficulty, difficultyColor } from '../data/encounter_difficulty'
 import { CR_XP } from '../data/monsters'
+import { generateNpc, type GeneratedNpc } from '../data/npc_generator'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -118,7 +122,7 @@ export function CampaignPage() {
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null)
 
   // Préparation de session
-  const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [] })
+  const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
   const [sessionPrepDraft, setSessionPrepDraft] = useState<SessionPrep>(emptySessionPrep())
   const [editingSessionPrep, setEditingSessionPrep] = useState(false)
   const [hasSessionPrep, setHasSessionPrep] = useState(false)
@@ -134,6 +138,33 @@ export function CampaignPage() {
   const [factionDraft, setFactionDraft] = useState<Faction>(emptyFactionDraft())
   const [addingFaction, setAddingFaction] = useState(false)
   const [expandedFaction, setExpandedFaction] = useState<number | null>(null)
+
+  // Générateur de PNJ
+  const [generatedNpc, setGeneratedNpc] = useState<GeneratedNpc | null>(null)
+  const [showNpcGenerator, setShowNpcGenerator] = useState(false)
+
+  // XP
+  const [xpInput, setXpInput] = useState('')
+  const [showXpPanel, setShowXpPanel] = useState(false)
+  const [savingXp, setSavingXp] = useState(false)
+
+  // Tables aléatoires
+  const emptyTableDraft = (): RandomTable => ({ name: '', entries: [] })
+  const [tableDraft, setTableDraft] = useState<RandomTable>(emptyTableDraft())
+  const [addingTable, setAddingTable] = useState(false)
+  const [tableResults, setTableResults] = useState<Record<number, string>>({})
+  const [editingTableIdx, setEditingTableIdx] = useState<number | null>(null)
+  const [entryDraft, setEntryDraft] = useState<RandomTableEntry>({ weight: 1, text: '' })
+
+  // Scènes de préparation
+  const emptyScene = (): PrepScene => ({
+    id: crypto.randomUUID(),
+    title: '', location_name: '', npc_names: [], encounter_name: '',
+    treasure: '', hook: '', notes: '', done: false,
+  })
+  const [sceneDraft, setSceneDraft] = useState<PrepScene>(emptyScene())
+  const [addingScene, setAddingScene] = useState(false)
+  const [expandedScene, setExpandedScene] = useState<string | null>(null)
 
   // Tableau de bord
   const [showDashboard, setShowDashboard] = useState(true)
@@ -439,6 +470,134 @@ export function CampaignPage() {
     setDistributingIdx(null)
   }
 
+  function handleGenerateNpc() {
+    setGeneratedNpc(generateNpc())
+    setShowNpcGenerator(true)
+  }
+
+  async function handleSaveGeneratedNpc() {
+    if (!campaign || !generatedNpc) return
+    const npc: Npc = {
+      name: generatedNpc.name,
+      role: generatedNpc.profession,
+      status: 'inconnu',
+      location: '',
+      notes: `${generatedNpc.race} · ${generatedNpc.gender}\n\n**Apparence :** ${generatedNpc.appearance}\n**Personnalité :** ${generatedNpc.personality}\n**Lien :** ${generatedNpc.bond}\n**Défaut :** ${generatedNpc.flaw}\n**Voix :** ${generatedNpc.voice}`,
+    }
+    const next = [...(campaign.npcs ?? []), npc]
+    const updated = await updateCampaign(campaign.id, { npcs: next })
+    setCampaign(updated)
+    setShowNpcGenerator(false)
+    setGeneratedNpc(null)
+  }
+
+  async function handleAwardXp() {
+    if (!campaign || !xpInput.trim() || characters.length === 0) return
+    const amount = parseInt(xpInput)
+    if (isNaN(amount) || amount <= 0) return
+    setSavingXp(true)
+    try {
+      const updated = await Promise.all(
+        characters.map(c => updateIdentity(c.id, { experience_points: c.experience_points + amount }))
+      )
+      setCharacters(updated)
+      setXpInput('')
+      setShowXpPanel(false)
+    } finally { setSavingXp(false) }
+  }
+
+  async function handleAddTable() {
+    if (!campaign || !tableDraft.name.trim()) return
+    const next = [...(campaign.random_tables ?? []), { ...tableDraft, name: tableDraft.name.trim() }]
+    const updated = await updateCampaign(campaign.id, { random_tables: next })
+    setCampaign(updated)
+    setTableDraft(emptyTableDraft())
+    setAddingTable(false)
+  }
+
+  async function handleDeleteTable(idx: number) {
+    if (!campaign) return
+    const next = (campaign.random_tables ?? []).filter((_, i) => i !== idx)
+    const updated = await updateCampaign(campaign.id, { random_tables: next })
+    setCampaign(updated)
+    setTableResults(prev => { const n = { ...prev }; delete n[idx]; return n })
+  }
+
+  async function handleAddTableEntry(tableIdx: number) {
+    if (!campaign || !entryDraft.text.trim()) return
+    const tables = campaign.random_tables ?? []
+    const next = tables.map((t, i) =>
+      i === tableIdx ? { ...t, entries: [...t.entries, { ...entryDraft, text: entryDraft.text.trim() }] } : t
+    )
+    const updated = await updateCampaign(campaign.id, { random_tables: next })
+    setCampaign(updated)
+    setEntryDraft({ weight: 1, text: '' })
+  }
+
+  async function handleDeleteTableEntry(tableIdx: number, entryIdx: number) {
+    if (!campaign) return
+    const tables = campaign.random_tables ?? []
+    const next = tables.map((t, i) =>
+      i === tableIdx ? { ...t, entries: t.entries.filter((_, j) => j !== entryIdx) } : t
+    )
+    const updated = await updateCampaign(campaign.id, { random_tables: next })
+    setCampaign(updated)
+  }
+
+  function handleRollTable(tableIdx: number, table: RandomTable) {
+    if (table.entries.length === 0) return
+    const total = table.entries.reduce((s, e) => s + (e.weight || 1), 0)
+    let roll = Math.random() * total
+    for (const entry of table.entries) {
+      roll -= entry.weight || 1
+      if (roll <= 0) {
+        setTableResults(prev => ({ ...prev, [tableIdx]: entry.text }))
+        return
+      }
+    }
+    setTableResults(prev => ({ ...prev, [tableIdx]: table.entries[table.entries.length - 1].text }))
+  }
+
+  async function handleAddScene() {
+    if (!campaign || !sceneDraft.title.trim()) return
+    const prep = campaign.session_prep ?? emptySessionPrep()
+    const next: SessionPrep = {
+      ...prep,
+      scenes: [...(prep.scenes ?? []), { ...sceneDraft, id: crypto.randomUUID(), title: sceneDraft.title.trim() }],
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    setHasSessionPrep(true)
+    setSceneDraft(emptyScene())
+    setAddingScene(false)
+  }
+
+  async function handleToggleSceneDone(sceneId: string) {
+    if (!campaign?.session_prep) return
+    const next: SessionPrep = {
+      ...campaign.session_prep,
+      scenes: (campaign.session_prep.scenes ?? []).map(s =>
+        s.id === sceneId ? { ...s, done: !s.done } : s
+      ),
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+  }
+
+  async function handleDeleteScene(sceneId: string) {
+    if (!campaign?.session_prep) return
+    const next: SessionPrep = {
+      ...campaign.session_prep,
+      scenes: (campaign.session_prep.scenes ?? []).filter(s => s.id !== sceneId),
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    if (expandedScene === sceneId) setExpandedScene(null)
+  }
+
   async function handleAddFaction() {
     if (!campaign || !factionDraft.name.trim()) return
     const next = [...(campaign.factions ?? []), { ...factionDraft, name: factionDraft.name.trim() }]
@@ -495,6 +654,7 @@ export function CampaignPage() {
       saved_encounters: campaign.saved_encounters,
       custom_monsters: campaign.custom_monsters,
       factions: campaign.factions,
+      random_tables: campaign.random_tables,
       game_calendar: campaign.game_calendar,
       session_prep: campaign.session_prep,
       sessions: sessions,
@@ -522,6 +682,7 @@ export function CampaignPage() {
         saved_encounters: data.saved_encounters ?? [],
         custom_monsters: data.custom_monsters ?? [],
         factions: data.factions ?? [],
+        random_tables: data.random_tables ?? [],
         game_calendar: data.game_calendar ?? {},
         session_prep: data.session_prep ?? null,
       })
@@ -660,6 +821,69 @@ export function CampaignPage() {
                   </div>
                 )}
               </div>
+
+              {/* Progression XP */}
+              {characters.length > 0 && (
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-stone-500 text-xs uppercase tracking-widest">Progression XP</p>
+                    <button
+                      onClick={() => setShowXpPanel(v => !v)}
+                      className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+                    >
+                      {showXpPanel ? 'Annuler' : '+ Attribuer XP'}
+                    </button>
+                  </div>
+                  {showXpPanel && (
+                    <div className="flex items-center gap-2 mb-3">
+                      <input
+                        type="number"
+                        value={xpInput}
+                        onChange={e => setXpInput(e.target.value)}
+                        placeholder="XP à distribuer à tous…"
+                        autoFocus
+                        className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                      />
+                      <button
+                        onClick={handleAwardXp}
+                        disabled={savingXp || !xpInput.trim()}
+                        className="bg-amber-500 hover:bg-amber-400 text-black text-sm font-semibold rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
+                      >
+                        Distribuer
+                      </button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {characters.map(c => {
+                      const nextXp = xpForNextLevel(c.level)
+                      const prevXp = xpForNextLevel(c.level - 1) ?? 0
+                      const pct = nextXp ? Math.min(1, Math.max(0, (c.experience_points - prevXp) / (nextXp - prevXp))) : 1
+                      const levelUp = canLevelUp(c.level, c.experience_points)
+                      return (
+                        <div key={c.id} className="bg-stone-800 rounded-lg p-3">
+                          <div className="flex items-center justify-between mb-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <span className="text-stone-200 text-xs font-medium truncate">{c.name}</span>
+                              {levelUp && (
+                                <span className="text-xs bg-amber-500 text-black font-bold rounded px-1.5 py-0.5 shrink-0">↑ NIV</span>
+                              )}
+                            </div>
+                            <span className="text-stone-500 text-xs shrink-0 ml-2">Niv.{c.level} · {c.experience_points.toLocaleString()} XP</span>
+                          </div>
+                          <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
+                            <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${pct * 100}%` }} />
+                          </div>
+                          {nextXp && (
+                            <p className="text-stone-600 text-[10px] mt-0.5 text-right">
+                              {nextXp.toLocaleString()} XP pour niv.{c.level + 1}
+                            </p>
+                          )}
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
 
               {characters.length === 0 && !campaign.game_calendar?.date && !campaign.session_prep && (
                 <p className="text-stone-600 text-sm text-center py-2">Ajoutez des personnages et configurez le calendrier pour voir le résumé ici.</p>
@@ -1256,13 +1480,55 @@ export function CampaignPage() {
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               PNJ rencontrés ({(campaign.npcs ?? []).length})
             </h2>
-            <button
-              onClick={() => { setAddingNpc(v => !v); setNpcDraft({ name: '', role: '', status: 'inconnu', location: '', notes: '' }) }}
-              className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors"
-            >
-              {addingNpc ? 'Annuler' : '+ Ajouter un PNJ'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleGenerateNpc}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+              >
+                ⚡ Générer
+              </button>
+              <button
+                onClick={() => { setAddingNpc(v => !v); setNpcDraft({ name: '', role: '', status: 'inconnu', location: '', notes: '' }) }}
+                className="text-violet-400 hover:text-violet-300 text-xs font-semibold transition-colors"
+              >
+                {addingNpc ? 'Annuler' : '+ Ajouter'}
+              </button>
+            </div>
           </div>
+
+          {/* Générateur de PNJ */}
+          {showNpcGenerator && generatedNpc && (
+            <div className="bg-amber-950/30 border border-amber-800/30 rounded-xl p-4 mb-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-white font-bold text-base">{generatedNpc.name}</p>
+                  <p className="text-amber-400 text-xs">{generatedNpc.race} · {generatedNpc.gender} · {generatedNpc.profession}</p>
+                </div>
+                <button onClick={() => setShowNpcGenerator(false)} className="text-stone-600 hover:text-stone-400 text-lg leading-none">×</button>
+              </div>
+              <div className="space-y-1.5 text-sm">
+                <p className="text-stone-300"><span className="text-stone-500 text-xs">Apparence</span> {generatedNpc.appearance}</p>
+                <p className="text-stone-300"><span className="text-stone-500 text-xs">Personnalité</span> {generatedNpc.personality}</p>
+                <p className="text-stone-300"><span className="text-stone-500 text-xs">Lien</span> {generatedNpc.bond}</p>
+                <p className="text-stone-300"><span className="text-stone-500 text-xs">Défaut</span> {generatedNpc.flaw}</p>
+                <p className="text-stone-300"><span className="text-stone-500 text-xs">Voix</span> {generatedNpc.voice}</p>
+              </div>
+              <div className="flex items-center gap-3 pt-1">
+                <button
+                  onClick={() => setGeneratedNpc(generateNpc())}
+                  className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+                >
+                  ↻ Régénérer
+                </button>
+                <button
+                  onClick={handleSaveGeneratedNpc}
+                  className="bg-violet-700 hover:bg-violet-600 text-white text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  + Ajouter à la campagne
+                </button>
+              </div>
+            </div>
+          )}
 
           {addingNpc && (
             <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 mb-4 space-y-3">
@@ -1822,6 +2088,120 @@ export function CampaignPage() {
                   </button>
                 </div>
               )}
+
+              {/* Scènes de préparation */}
+              {hasSessionPrep && (
+                <div className="pt-2 border-t border-stone-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-stone-500 text-xs uppercase tracking-widest">
+                      Scènes ({(campaign.session_prep?.scenes ?? []).length})
+                    </p>
+                    <button
+                      onClick={() => { setAddingScene(v => !v); setSceneDraft(emptyScene()) }}
+                      className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors"
+                    >
+                      {addingScene ? 'Annuler' : '+ Scène'}
+                    </button>
+                  </div>
+
+                  {addingScene && (
+                    <div className="bg-stone-800/60 border border-stone-700 rounded-lg p-3 mb-3 space-y-2">
+                      <input
+                        type="text"
+                        value={sceneDraft.title}
+                        onChange={e => setSceneDraft(d => ({ ...d, title: e.target.value }))}
+                        autoFocus
+                        placeholder="Titre de la scène *"
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={sceneDraft.location_name}
+                          onChange={e => setSceneDraft(d => ({ ...d, location_name: e.target.value }))}
+                          placeholder="Lieu"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={sceneDraft.encounter_name}
+                          onChange={e => setSceneDraft(d => ({ ...d, encounter_name: e.target.value }))}
+                          placeholder="Rencontre liée"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={sceneDraft.hook}
+                          onChange={e => setSceneDraft(d => ({ ...d, hook: e.target.value }))}
+                          placeholder="Accroche / déclencheur"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={sceneDraft.treasure}
+                          onChange={e => setSceneDraft(d => ({ ...d, treasure: e.target.value }))}
+                          placeholder="Trésor / récompense"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                      </div>
+                      <textarea
+                        value={sceneDraft.notes}
+                        onChange={e => setSceneDraft(d => ({ ...d, notes: e.target.value }))}
+                        placeholder="Notes de la scène…"
+                        rows={2}
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors resize-none"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          onClick={handleAddScene}
+                          disabled={!sceneDraft.title.trim()}
+                          className="bg-sky-700 hover:bg-sky-600 text-white text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40"
+                        >
+                          Ajouter la scène
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {(campaign.session_prep?.scenes ?? []).length > 0 ? (
+                    <div className="space-y-2">
+                      {(campaign.session_prep!.scenes).map(scene => (
+                        <div key={scene.id} className={`border rounded-lg overflow-hidden transition-colors ${scene.done ? 'border-stone-800 opacity-60' : 'border-sky-800/40'}`}>
+                          <div
+                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-800/40 transition-colors"
+                            onClick={() => setExpandedScene(expandedScene === scene.id ? null : scene.id)}
+                          >
+                            <button
+                              onClick={e => { e.stopPropagation(); handleToggleSceneDone(scene.id) }}
+                              className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors ${scene.done ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-600 hover:border-sky-500'}`}
+                            >
+                              {scene.done && <span className="text-[10px] font-bold">✓</span>}
+                            </button>
+                            <p className={`text-sm font-medium flex-1 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
+                            {scene.location_name && <span className="text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDeleteScene(scene.id) }}
+                              className="text-stone-700 hover:text-red-400 text-base leading-none shrink-0 transition-colors ml-1"
+                            >×</button>
+                          </div>
+                          {expandedScene === scene.id && (
+                            <div className="px-3 pb-3 pt-0 text-xs space-y-1 border-t border-stone-800">
+                              {scene.hook && <p className="text-stone-400">⚡ <span className="text-stone-300">{scene.hook}</span></p>}
+                              {scene.encounter_name && <p className="text-stone-400">⚔ <span className="text-stone-300">{scene.encounter_name}</span></p>}
+                              {scene.treasure && <p className="text-stone-400">💰 <span className="text-stone-300">{scene.treasure}</span></p>}
+                              {scene.notes && <p className="text-stone-300 mt-1">{scene.notes}</p>}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    !addingScene && (
+                      <p className="text-stone-700 text-xs text-center py-2">Aucune scène. Structurez votre session en actes.</p>
+                    )
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-stone-600 text-sm text-center py-4">Aucune session planifiée. Cliquez sur "+ Planifier" pour préparer la prochaine séance.</p>
@@ -2075,6 +2455,127 @@ export function CampaignPage() {
           ) : (
             !addingFaction && (
               <p className="text-stone-600 text-sm text-center py-4">Aucune faction. Ajoutez des organisations pour suivre la réputation des PJs.</p>
+            )
+          )}
+        </div>
+
+        {/* Tables aléatoires */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Tables aléatoires ({(campaign.random_tables ?? []).length})
+            </h2>
+            <button
+              onClick={() => { setAddingTable(v => !v); setTableDraft(emptyTableDraft()) }}
+              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              {addingTable ? 'Annuler' : '+ Table'}
+            </button>
+          </div>
+
+          {addingTable && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div>
+                <label className="text-stone-500 text-xs block mb-1">Nom de la table *</label>
+                <input
+                  type="text"
+                  value={tableDraft.name}
+                  onChange={e => setTableDraft(d => ({ ...d, name: e.target.value }))}
+                  autoFocus
+                  placeholder="ex. Événements de voyage, Météo, PNJ de rue…"
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
+              <p className="text-stone-600 text-xs">Vous pourrez ajouter des entrées après la création.</p>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddTable}
+                  disabled={!tableDraft.name.trim()}
+                  className="bg-amber-500 hover:bg-amber-400 text-black text-sm font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-40"
+                >
+                  Créer
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(campaign.random_tables ?? []).length > 0 ? (
+            <div className="space-y-3">
+              {(campaign.random_tables ?? []).map((table, tIdx) => (
+                <div key={tIdx} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span className="text-white text-sm font-medium truncate">{table.name}</span>
+                      <span className="text-stone-600 text-xs shrink-0">{table.entries.length} entrée{table.entries.length !== 1 ? 's' : ''}</span>
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {tableResults[tIdx] && (
+                        <span className="text-amber-300 text-xs max-w-[180px] truncate italic">→ {tableResults[tIdx]}</span>
+                      )}
+                      <button
+                        onClick={() => handleRollTable(tIdx, table)}
+                        disabled={table.entries.length === 0}
+                        className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-bold rounded-lg px-3 py-1.5 transition-colors disabled:opacity-30"
+                      >
+                        🎲 Lancer
+                      </button>
+                      <button
+                        onClick={() => setEditingTableIdx(editingTableIdx === tIdx ? null : tIdx)}
+                        className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                      >
+                        {editingTableIdx === tIdx ? 'Fermer' : 'Éditer'}
+                      </button>
+                      <button
+                        onClick={() => handleDeleteTable(tIdx)}
+                        className="text-stone-600 hover:text-red-400 text-lg leading-none transition-colors"
+                      >×</button>
+                    </div>
+                  </div>
+                  {editingTableIdx === tIdx && (
+                    <div className="border-t border-stone-800 px-4 pb-4 pt-3 space-y-2">
+                      {table.entries.map((entry, eIdx) => (
+                        <div key={eIdx} className="flex items-center gap-2 text-sm">
+                          <span className="text-stone-600 text-xs w-6 text-right shrink-0">{entry.weight}</span>
+                          <span className="text-stone-300 flex-1">{entry.text}</span>
+                          <button
+                            onClick={() => handleDeleteTableEntry(tIdx, eIdx)}
+                            className="text-stone-600 hover:text-red-400 text-sm transition-colors shrink-0"
+                          >×</button>
+                        </div>
+                      ))}
+                      <div className="flex items-center gap-2 mt-2">
+                        <input
+                          type="number"
+                          value={entryDraft.weight}
+                          onChange={e => setEntryDraft(d => ({ ...d, weight: Math.max(1, Number(e.target.value)) }))}
+                          min={1}
+                          title="Poids (fréquence relative)"
+                          className="w-14 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-stone-200 text-sm text-center focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={entryDraft.text}
+                          onChange={e => setEntryDraft(d => ({ ...d, text: e.target.value }))}
+                          onKeyDown={e => { if (e.key === 'Enter' && entryDraft.text.trim()) handleAddTableEntry(tIdx) }}
+                          placeholder="Nouvelle entrée…"
+                          className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <button
+                          onClick={() => handleAddTableEntry(tIdx)}
+                          disabled={!entryDraft.text.trim()}
+                          className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
+                        >
+                          + Ajouter
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            !addingTable && (
+              <p className="text-stone-600 text-sm text-center py-4">Aucune table. Créez des tables de météo, d'événements ou de noms pour improviser.</p>
             )
           )}
         </div>

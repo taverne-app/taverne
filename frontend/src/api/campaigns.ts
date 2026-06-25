@@ -18,6 +18,18 @@ export interface Npc {
   notes: string
 }
 
+export interface PrepScene {
+  id: string
+  title: string
+  location_name: string
+  npc_names: string[]
+  encounter_name: string
+  treasure: string
+  hook: string
+  notes: string
+  done: boolean
+}
+
 export interface SessionPrep {
   title: string
   date: string
@@ -25,6 +37,17 @@ export interface SessionPrep {
   npc_names: string[]
   location_names: string[]
   encounter_names: string[]
+  scenes: PrepScene[]
+}
+
+export interface RandomTableEntry {
+  weight: number
+  text: string
+}
+
+export interface RandomTable {
+  name: string
+  entries: RandomTableEntry[]
 }
 
 export interface GameCalendar {
@@ -79,6 +102,7 @@ export interface Campaign {
   session_prep: SessionPrep | null
   custom_monsters: CustomMonster[]
   factions: Faction[]
+  random_tables: RandomTable[]
   share_token: string | null
   characters: Character[]
   combatants?: Combatant[]
@@ -108,7 +132,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[] }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
