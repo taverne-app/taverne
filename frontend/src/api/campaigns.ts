@@ -35,6 +35,7 @@ export interface Location {
   name: string
   type: 'ville' | 'donjon' | 'forêt' | 'taverne' | 'temple' | 'château' | 'autre'
   status: 'inconnu' | 'connu' | 'exploré'
+  reputation: 'héros' | 'respecté' | 'neutre' | 'suspect' | 'recherché'
   notes: string
 }
 

@@ -106,7 +106,7 @@ export function CampaignPage() {
   const [distributingIdx, setDistributingIdx] = useState<number | null>(null)
 
   // Lieux
-  const emptyLocationDraft = (): Location => ({ name: '', type: 'autre', status: 'inconnu', notes: '' })
+  const emptyLocationDraft = (): Location => ({ name: '', type: 'autre', status: 'inconnu', reputation: 'neutre', notes: '' })
   const [addingLocation, setAddingLocation]   = useState(false)
   const [locationDraft, setLocationDraft]     = useState<Location>(emptyLocationDraft())
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null)
@@ -324,6 +324,13 @@ export function CampaignPage() {
   async function handleUpdateLocationStatus(index: number, status: Location['status']) {
     if (!campaign) return
     const next = (campaign.locations ?? []).map((l, i) => i === index ? { ...l, status } : l)
+    const updated = await updateCampaign(campaign.id, { locations: next })
+    setCampaign(updated)
+  }
+
+  async function handleUpdateLocationReputation(index: number, reputation: Location['reputation']) {
+    if (!campaign) return
+    const next = (campaign.locations ?? []).map((l, i) => i === index ? { ...l, reputation } : l)
     const updated = await updateCampaign(campaign.id, { locations: next })
     setCampaign(updated)
   }
@@ -1269,9 +1276,20 @@ export function CampaignPage() {
                   onChange={e => setLocationDraft(d => ({ ...d, status: e.target.value as Location['status'] }))}
                   className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 >
-                  <option value="inconnu">Inconnu</option>
-                  <option value="connu">Connu</option>
-                  <option value="exploré">Exploré</option>
+                  <option value="inconnu">❓ Inconnu</option>
+                  <option value="connu">◎ Connu</option>
+                  <option value="exploré">✓ Exploré</option>
+                </select>
+                <select
+                  value={locationDraft.reputation}
+                  onChange={e => setLocationDraft(d => ({ ...d, reputation: e.target.value as Location['reputation'] }))}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                >
+                  <option value="héros">★ Héros</option>
+                  <option value="respecté">◆ Respecté</option>
+                  <option value="neutre">— Neutre</option>
+                  <option value="suspect">◇ Suspect</option>
+                  <option value="recherché">✕ Recherché</option>
                 </select>
               </div>
               <textarea
@@ -1307,6 +1325,9 @@ export function CampaignPage() {
               {(campaign?.locations ?? []).map((loc, i) => {
                 const typeIcon = loc.type === 'ville' ? '🏙' : loc.type === 'donjon' ? '⛏' : loc.type === 'forêt' ? '🌲' : loc.type === 'taverne' ? '🍺' : loc.type === 'temple' ? '⛪' : loc.type === 'château' ? '🏰' : '📍'
                 const statusColor = loc.status === 'exploré' ? 'text-emerald-400' : loc.status === 'connu' ? 'text-amber-400' : 'text-stone-500'
+                const rep = loc.reputation ?? 'neutre'
+                const repColor = rep === 'héros' ? 'text-amber-400' : rep === 'respecté' ? 'text-emerald-400' : rep === 'suspect' ? 'text-orange-400' : rep === 'recherché' ? 'text-red-400' : 'text-stone-500'
+                const repBg   = rep === 'héros' ? 'bg-amber-900/30 border-amber-700/40' : rep === 'respecté' ? 'bg-emerald-900/30 border-emerald-700/40' : rep === 'suspect' ? 'bg-orange-900/30 border-orange-700/40' : rep === 'recherché' ? 'bg-red-900/30 border-red-700/40' : 'bg-stone-800/60 border-stone-700/40'
                 return (
                   <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
                     <div className="flex items-start gap-3">
@@ -1325,14 +1346,28 @@ export function CampaignPage() {
                             <option value="exploré">✓ Exploré</option>
                           </select>
                         </div>
-                        {loc.notes && (
-                          <button
-                            onClick={() => setExpandedLocation(expandedLocation === i ? null : i)}
-                            className="text-stone-500 hover:text-stone-300 text-xs mt-1 transition-colors text-left"
+                        <div className="flex items-center gap-2 mt-1.5">
+                          <select
+                            value={rep}
+                            onChange={e => handleUpdateLocationReputation(i, e.target.value as Location['reputation'])}
+                            className={`text-xs font-medium rounded border px-1.5 py-0.5 focus:outline-none cursor-pointer transition-colors ${repColor} ${repBg}`}
+                            style={{ background: 'transparent' }}
                           >
-                            {expandedLocation === i ? '▲ Masquer' : '▼ Notes'}
-                          </button>
-                        )}
+                            <option value="héros">★ Héros</option>
+                            <option value="respecté">◆ Respecté</option>
+                            <option value="neutre">— Neutre</option>
+                            <option value="suspect">◇ Suspect</option>
+                            <option value="recherché">✕ Recherché</option>
+                          </select>
+                          {loc.notes && (
+                            <button
+                              onClick={() => setExpandedLocation(expandedLocation === i ? null : i)}
+                              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                            >
+                              {expandedLocation === i ? '▲ Masquer' : '▼ Notes'}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       <button
                         onClick={() => handleDeleteLocation(i)}
