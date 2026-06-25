@@ -461,6 +461,18 @@ export function CombatPage() {
   const [effectInput, setEffectInput] = useState<{ key: string; name: string; rounds: string } | null>(null)
   const effectIdRef = useRef(0)
 
+  // Turn timer
+  const [turnTimerMax, setTurnTimerMax] = useState(0)
+  const [turnTimerLeft, setTurnTimerLeft] = useState(0)
+  const [turnTimerExpired, setTurnTimerExpired] = useState(false)
+  const turnIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const turnTimerMaxRef = useRef(0)
+  turnTimerMaxRef.current = turnTimerMax
+
+  // Random encounter generator
+  const [generateDifficulty, setGenerateDifficulty] = useState<'facile' | 'moyen' | 'difficile' | 'mortelle'>('moyen')
+  const [showGeneratePanel, setShowGeneratePanel] = useState(false)
+
   // Manual initiative reordering
   const [manualOrder, setManualOrder] = useState<string[] | null>(null)
 
@@ -1105,6 +1117,8 @@ export function CombatPage() {
       logEvent('turn', `Tour ${newRound} — ${nextRow.data.name}`)
     }
 
+    startTurnTimer()
+
     if (campaignId && campaign?.share_token) {
       broadcastCombatTurn(campaignId, {
         active_kind: nextRow ? nextRow.kind : null,
@@ -1169,6 +1183,76 @@ export function CombatPage() {
     return () => window.removeEventListener('keydown', onKey)
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  function startTurnTimer() {
+    if (turnIntervalRef.current) clearInterval(turnIntervalRef.current)
+    if (turnTimerMaxRef.current === 0) return
+    setTurnTimerLeft(turnTimerMaxRef.current)
+    setTurnTimerExpired(false)
+    turnIntervalRef.current = setInterval(() => {
+      setTurnTimerLeft(prev => {
+        const next = prev - 1
+        if (next <= 0) {
+          clearInterval(turnIntervalRef.current!)
+          turnIntervalRef.current = null
+          setTurnTimerExpired(true)
+        }
+        return Math.max(0, next)
+      })
+    }, 1000)
+  }
+
+  function handleSetTurnTimerMax(seconds: number) {
+    if (turnIntervalRef.current) clearInterval(turnIntervalRef.current)
+    setTurnTimerMax(seconds)
+    setTurnTimerLeft(seconds)
+    setTurnTimerExpired(false)
+    if (seconds > 0 && withRollDisplay.length > 0) {
+      turnTimerMaxRef.current = seconds
+      setTimeout(startTurnTimer, 0)
+    }
+  }
+
+  function handleGenerateEncounter() {
+    if (characters.length === 0) return
+    const diffIdx = { facile: 0, moyen: 1, difficile: 2, mortelle: 3 }[generateDifficulty]
+    const partyThresholds = characters.reduce(
+      (acc, c) => {
+        const lvl = Math.max(1, Math.min(20, c.level))
+        const t = XP_THRESHOLDS[lvl] ?? XP_THRESHOLDS[1]
+        return [acc[0] + t[0], acc[1] + t[1], acc[2] + t[2], acc[3] + t[3]] as [number, number, number, number]
+      },
+      [0, 0, 0, 0] as [number, number, number, number],
+    )
+    const budget = partyThresholds[diffIdx]
+    const avgLevel = characters.reduce((s, c) => s + c.level, 0) / characters.length
+    const minCrNum = Math.max(0, avgLevel / 4 - 1)
+    const maxCrNum = Math.min(30, avgLevel * 2)
+    const eligible = allMonsters.filter(m => {
+      const crNum = CR_NUM[m.cr] ?? 0
+      return crNum >= minCrNum && crNum <= maxCrNum && m.xp > 0
+    })
+    if (eligible.length === 0) return
+    const entries: { monster: MonsterTemplate; count: number }[] = []
+    let spent = 0
+    let attempts = 0
+    while (spent < budget * 0.8 && attempts < 30) {
+      attempts++
+      const m = eligible[Math.floor(Math.random() * eligible.length)]
+      if (m.xp > budget * 1.5) continue
+      const existing = entries.find(e => e.monster.name === m.name)
+      if (existing) {
+        existing.count++
+      } else {
+        entries.push({ monster: m, count: 1 })
+      }
+      const totalCount = entries.reduce((s, e) => s + e.count, 0)
+      const mult = encounterMultiplier(totalCount)
+      spent = Math.floor(entries.reduce((s, e) => s + e.monster.xp * e.count, 0) * mult)
+    }
+    setEncounterEntries(entries)
+    setShowGeneratePanel(false)
+  }
 
   async function handleGroupRest(type: 'short' | 'long') {
     if (characters.length === 0) return
@@ -1367,36 +1451,67 @@ export function CombatPage() {
 
         {/* Turn controls */}
         {withRollDisplay.length > 0 && (
-          <div className="bg-stone-900 border border-amber-500/30 rounded-xl p-4 flex items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-3 mb-0.5">
-                <p className="text-stone-400 text-xs uppercase tracking-widest">Tour actif</p>
-                <span className="text-amber-600 text-xs font-semibold uppercase tracking-widest">
-                  Round {roundNumber}
-                </span>
+          <div className={`bg-stone-900 border rounded-xl p-4 ${turnTimerExpired ? 'border-red-500/60' : 'border-amber-500/30'}`}>
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-3 mb-0.5">
+                  <p className="text-stone-400 text-xs uppercase tracking-widest">Tour actif</p>
+                  <span className="text-amber-600 text-xs font-semibold uppercase tracking-widest">
+                    Round {roundNumber}
+                  </span>
+                </div>
+                <p className="text-white font-bold text-lg">{activeRowName}</p>
+                {activeRowSubtitle && (
+                  <p className="text-stone-400 text-xs mt-0.5">{activeRowSubtitle}</p>
+                )}
               </div>
-              <p className="text-white font-bold text-lg">{activeRowName}</p>
-              {activeRowSubtitle && (
-                <p className="text-stone-400 text-xs mt-0.5">{activeRowSubtitle}</p>
-              )}
+              <div className="flex items-center gap-2 flex-wrap justify-end">
+                {/* Timer config */}
+                <div className="flex items-center gap-1 mr-1">
+                  {[0, 30, 45, 60].map(s => (
+                    <button
+                      key={s}
+                      onClick={() => handleSetTurnTimerMax(s)}
+                      className={`text-xs rounded px-1.5 py-0.5 transition-colors ${turnTimerMax === s ? 'bg-stone-700 text-stone-200' : 'text-stone-600 hover:text-stone-400'}`}
+                    >
+                      {s === 0 ? '–' : `${s}s`}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={prevTurn}
+                  className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 rounded-lg px-3 py-2 text-sm transition-colors"
+                >
+                  ← Précédent
+                </button>
+                <span className="text-stone-500 text-sm">
+                  {activeTurn + 1}/{withRollDisplay.length}
+                </span>
+                <button
+                  onClick={nextTurn}
+                  className="bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
+                >
+                  Suivant →
+                </button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-              <button
-                onClick={prevTurn}
-                className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 rounded-lg px-3 py-2 text-sm transition-colors"
-              >
-                ← Précédent
-              </button>
-              <span className="text-stone-500 text-sm">
-                {activeTurn + 1}/{withRollDisplay.length}
-              </span>
-              <button
-                onClick={nextTurn}
-                className="bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded-lg px-4 py-2 text-sm transition-colors"
-              >
-                Suivant →
-              </button>
-            </div>
+            {/* Timer bar */}
+            {turnTimerMax > 0 && (
+              <div className="mt-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className={`text-xs font-mono ${turnTimerExpired ? 'text-red-400 font-bold' : turnTimerLeft <= 10 ? 'text-amber-400' : 'text-stone-500'}`}>
+                    {turnTimerExpired ? '⏰ Temps écoulé !' : `${turnTimerLeft}s`}
+                  </span>
+                  <span className="text-stone-600 text-xs">{turnTimerMax}s / tour</span>
+                </div>
+                <div className="h-1.5 bg-stone-800 rounded-full overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-1000 ${turnTimerExpired ? 'bg-red-500' : turnTimerLeft <= 10 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                    style={{ width: turnTimerMax > 0 ? `${(turnTimerLeft / turnTimerMax) * 100}%` : '0%' }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -2738,6 +2853,14 @@ export function CombatPage() {
                     <div className="flex items-center justify-between">
                       <p className="text-violet-400 text-xs font-semibold uppercase tracking-widest">⚔ Constructeur de rencontre</p>
                       <div className="flex items-center gap-2">
+                        {characters.length > 0 && (
+                          <button
+                            onClick={() => setShowGeneratePanel(v => !v)}
+                            className={`text-xs transition-colors ${showGeneratePanel ? 'text-amber-400' : 'text-stone-500 hover:text-amber-400'}`}
+                          >
+                            ⚡ Générer
+                          </button>
+                        )}
                         {campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (
                           <button
                             onClick={() => setShowSavedEncounters(v => !v)}
@@ -2754,6 +2877,37 @@ export function CombatPage() {
                         </button>
                       </div>
                     </div>
+
+                    {/* Random encounter generator */}
+                    {showGeneratePanel && (
+                      <div className="bg-amber-950/30 border border-amber-800/30 rounded-lg p-3">
+                        <p className="text-amber-400 text-xs font-semibold mb-2">Générer une rencontre aléatoire équilibrée</p>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {(['facile', 'moyen', 'difficile', 'mortelle'] as const).map(d => (
+                            <button
+                              key={d}
+                              onClick={() => setGenerateDifficulty(d)}
+                              className={`text-xs rounded-lg px-3 py-1.5 border transition-colors capitalize ${
+                                generateDifficulty === d
+                                  ? 'bg-amber-800/40 border-amber-600/50 text-amber-200'
+                                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-amber-700/50'
+                              }`}
+                            >
+                              {d.charAt(0).toUpperCase() + d.slice(1)}
+                            </button>
+                          ))}
+                          <button
+                            onClick={handleGenerateEncounter}
+                            className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors ml-auto"
+                          >
+                            Générer
+                          </button>
+                        </div>
+                        <p className="text-stone-600 text-xs mt-2">
+                          Groupe : niv. moy. {characters.length > 0 ? Math.round(characters.reduce((s, c) => s + c.level, 0) / characters.length) : '?'} · {characters.length} PJ{characters.length > 1 ? 's' : ''}
+                        </p>
+                      </div>
+                    )}
 
                     {/* Saved encounters list */}
                     {showSavedEncounters && campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (

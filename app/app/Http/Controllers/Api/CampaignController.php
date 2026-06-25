@@ -58,6 +58,7 @@ class CampaignController extends Controller
             'locations'        => ['sometimes', 'nullable', 'array'],
             'session_prep'     => ['sometimes', 'nullable', 'array'],
             'custom_monsters'  => ['sometimes', 'nullable', 'array'],
+            'factions'         => ['sometimes', 'nullable', 'array'],
         ]);
 
         $campaign->update($validated);

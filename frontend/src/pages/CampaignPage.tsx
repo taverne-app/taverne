@@ -13,6 +13,7 @@ import {
   type Location,
   type SessionPrep,
   type CustomMonster,
+  type Faction,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, longRest, updateInventory, type Character } from '../api/characters'
@@ -127,6 +128,12 @@ export function CampaignPage() {
   const emptyMonsterDraft = (): CustomMonster => ({ name: '', cr: '1', ac: 12, hp_avg: 10, initiative_mod: 0, xp: 200 })
   const [monsterDraft, setMonsterDraft] = useState<CustomMonster>(emptyMonsterDraft())
   const [addingMonster, setAddingMonster] = useState(false)
+
+  // Factions
+  const emptyFactionDraft = (): Faction => ({ name: '', description: '', reputation: 0, notes: '' })
+  const [factionDraft, setFactionDraft] = useState<Faction>(emptyFactionDraft())
+  const [addingFaction, setAddingFaction] = useState(false)
+  const [expandedFaction, setExpandedFaction] = useState<number | null>(null)
 
   // Tableau de bord
   const [showDashboard, setShowDashboard] = useState(true)
@@ -432,6 +439,32 @@ export function CampaignPage() {
     setDistributingIdx(null)
   }
 
+  async function handleAddFaction() {
+    if (!campaign || !factionDraft.name.trim()) return
+    const next = [...(campaign.factions ?? []), { ...factionDraft, name: factionDraft.name.trim() }]
+    const updated = await updateCampaign(campaign.id, { factions: next })
+    setCampaign(updated)
+    setFactionDraft(emptyFactionDraft())
+    setAddingFaction(false)
+  }
+
+  async function handleUpdateFactionReputation(index: number, delta: number) {
+    if (!campaign) return
+    const next = (campaign.factions ?? []).map((f, i) =>
+      i === index ? { ...f, reputation: Math.max(-5, Math.min(5, f.reputation + delta)) } : f
+    )
+    const updated = await updateCampaign(campaign.id, { factions: next })
+    setCampaign(updated)
+  }
+
+  async function handleDeleteFaction(index: number) {
+    if (!campaign) return
+    const next = (campaign.factions ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaign.id, { factions: next })
+    setCampaign(updated)
+    if (expandedFaction === index) setExpandedFaction(null)
+  }
+
   async function handleAddCustomMonster() {
     if (!campaign || !monsterDraft.name.trim()) return
     const xp = CR_XP[monsterDraft.cr] ?? 0
@@ -461,6 +494,7 @@ export function CampaignPage() {
       party_treasury: campaign.party_treasury,
       saved_encounters: campaign.saved_encounters,
       custom_monsters: campaign.custom_monsters,
+      factions: campaign.factions,
       game_calendar: campaign.game_calendar,
       session_prep: campaign.session_prep,
       sessions: sessions,
@@ -487,6 +521,7 @@ export function CampaignPage() {
         party_treasury: data.party_treasury ?? [],
         saved_encounters: data.saved_encounters ?? [],
         custom_monsters: data.custom_monsters ?? [],
+        factions: data.factions ?? [],
         game_calendar: data.game_calendar ?? {},
         session_prep: data.session_prep ?? null,
       })
@@ -1910,6 +1945,136 @@ export function CampaignPage() {
           ) : (
             !addingMonster && (
               <p className="text-stone-600 text-sm text-center py-4">Aucun monstre personnalisé. Créez-en pour les utiliser dans les rencontres.</p>
+            )
+          )}
+        </div>
+
+        {/* Factions */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Factions ({(campaign.factions ?? []).length})
+            </h2>
+            <button
+              onClick={() => { setAddingFaction(v => !v); setFactionDraft(emptyFactionDraft()) }}
+              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              {addingFaction ? 'Annuler' : '+ Faction'}
+            </button>
+          </div>
+
+          {addingFaction && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Nom *</label>
+                  <input
+                    type="text"
+                    value={factionDraft.name}
+                    onChange={e => setFactionDraft(d => ({ ...d, name: e.target.value }))}
+                    autoFocus
+                    placeholder="ex. La Guilde des Marchands"
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Description courte</label>
+                  <input
+                    type="text"
+                    value={factionDraft.description}
+                    onChange={e => setFactionDraft(d => ({ ...d, description: e.target.value }))}
+                    placeholder="ex. Marchands influents de la capitale"
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-stone-500 text-xs block mb-1">Notes</label>
+                <textarea
+                  value={factionDraft.notes}
+                  onChange={e => setFactionDraft(d => ({ ...d, notes: e.target.value }))}
+                  placeholder="Alliés, ennemis, objectifs…"
+                  rows={2}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-none"
+                />
+              </div>
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddFaction}
+                  disabled={saving || !factionDraft.name.trim()}
+                  className="bg-amber-500 hover:bg-amber-400 text-black text-sm font-semibold rounded-lg px-4 py-2 transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(campaign.factions ?? []).length > 0 ? (
+            <div className="space-y-2">
+              {(campaign.factions ?? []).map((faction, i) => {
+                const rep = faction.reputation
+                const repLabel = rep >= 4 ? 'Vénéré' : rep >= 2 ? 'Allié' : rep >= 0 ? 'Neutre' : rep >= -2 ? 'Suspect' : 'Ennemi'
+                const repColor = rep >= 2 ? 'text-emerald-400' : rep >= 0 ? 'text-stone-400' : rep >= -2 ? 'text-amber-400' : 'text-red-400'
+                const repDotColor = rep >= 2 ? 'bg-emerald-500' : rep >= 0 ? 'bg-stone-500' : rep >= -2 ? 'bg-amber-500' : 'bg-red-500'
+                return (
+                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                    <div
+                      className="flex items-center gap-3 p-4 cursor-pointer hover:bg-stone-800/50 transition-colors"
+                      onClick={() => setExpandedFaction(expandedFaction === i ? null : i)}
+                    >
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${repDotColor}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium">{faction.name}</p>
+                        {faction.description && <p className="text-stone-500 text-xs truncate">{faction.description}</p>}
+                      </div>
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className={`text-xs font-medium ${repColor}`}>{repLabel}</span>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={e => { e.stopPropagation(); handleUpdateFactionReputation(i, -1) }}
+                            disabled={rep <= -5}
+                            className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-sm font-bold transition-colors disabled:opacity-30 flex items-center justify-center"
+                          >−</button>
+                          <span className="text-stone-300 text-xs w-5 text-center font-mono">{rep > 0 ? `+${rep}` : rep}</span>
+                          <button
+                            onClick={e => { e.stopPropagation(); handleUpdateFactionReputation(i, +1) }}
+                            disabled={rep >= 5}
+                            className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-sm font-bold transition-colors disabled:opacity-30 flex items-center justify-center"
+                          >+</button>
+                        </div>
+                        <button
+                          onClick={e => { e.stopPropagation(); handleDeleteFaction(i) }}
+                          className="text-stone-600 hover:text-red-400 text-lg leading-none transition-colors ml-1"
+                        >×</button>
+                      </div>
+                    </div>
+                    {/* Reputation bar */}
+                    <div className="px-4 pb-1">
+                      <div className="h-1 bg-stone-800 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full rounded-full transition-all ${repDotColor}`}
+                          style={{ width: `${((rep + 5) / 10) * 100}%` }}
+                        />
+                      </div>
+                    </div>
+                    {expandedFaction === i && faction.notes && (
+                      <div className="px-4 pb-4 pt-1">
+                        <p className="text-stone-400 text-sm">{faction.notes}</p>
+                      </div>
+                    )}
+                    {expandedFaction === i && !faction.notes && (
+                      <div className="px-4 pb-3 pt-1">
+                        <p className="text-stone-600 text-xs italic">Aucune note.</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            !addingFaction && (
+              <p className="text-stone-600 text-sm text-center py-4">Aucune faction. Ajoutez des organisations pour suivre la réputation des PJs.</p>
             )
           )}
         </div>

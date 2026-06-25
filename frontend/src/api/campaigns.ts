@@ -59,6 +59,13 @@ export interface CustomMonster {
   notes?: string
 }
 
+export interface Faction {
+  name: string
+  description: string
+  reputation: number
+  notes: string
+}
+
 export interface Campaign {
   id: number
   name: string
@@ -71,6 +78,7 @@ export interface Campaign {
   locations: Location[]
   session_prep: SessionPrep | null
   custom_monsters: CustomMonster[]
+  factions: Faction[]
   share_token: string | null
   characters: Character[]
   combatants?: Combatant[]
@@ -100,7 +108,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[] }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),
