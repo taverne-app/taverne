@@ -15,6 +15,7 @@ export interface InventoryItem {
   notes: string
   equipped: boolean
   magical?: boolean
+  attuned?: boolean
 }
 
 export interface SpellSlot {

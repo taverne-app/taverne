@@ -46,6 +46,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS } from '../data/spells'
+import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
@@ -1067,6 +1068,9 @@ export function CharacterPage() {
   const [addingItem, setAddingItem] = useState(false)
   const [itemDraft, setItemDraft]   = useState<ItemDraft>(emptyItemDraft)
   const [inventorySearch, setInventorySearch] = useState('')
+  const [showItemCompendium, setShowItemCompendium] = useState(false)
+  const [compendiumSearch, setCompendiumSearch]     = useState('')
+  const [compendiumRarity, setCompendiumRarity]     = useState<ItemRarity | 'toutes'>('toutes')
 
   async function handleAddItem() {
     if (!character || !itemDraft.name.trim()) return
@@ -1112,8 +1116,38 @@ export function CharacterPage() {
   async function handleToggleMagical(index: number) {
     if (!character) return
     const next = character.inventory.items.map((item, i) =>
-      i === index ? { ...item, magical: !item.magical } : item,
+      i === index ? { ...item, magical: !item.magical, attuned: !item.magical ? item.attuned : false } : item,
     )
+    const updated = await withSave(() => updateInventory(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleToggleAttuned(index: number) {
+    if (!character) return
+    const item = character.inventory.items[index]
+    if (!item.magical) return
+    const attunedCount = character.inventory.items.filter(it => it.attuned).length
+    if (!item.attuned && attunedCount >= 3) return
+    const next = character.inventory.items.map((it, i) =>
+      i === index ? { ...it, attuned: !it.attuned } : it,
+    )
+    const updated = await withSave(() => updateInventory(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleAddFromCompendium(magicItem: MagicItem) {
+    if (!character) return
+    const item: InventoryItem = {
+      name:     magicItem.name,
+      quantity: 1,
+      weight:   0,
+      value:    '',
+      notes:    magicItem.description,
+      equipped: false,
+      magical:  true,
+      attuned:  false,
+    }
+    const next = [...character.inventory.items, item]
     const updated = await withSave(() => updateInventory(character.id, next))
     if (updated) setCharacter(updated)
   }
@@ -2773,14 +2807,22 @@ export function CharacterPage() {
                 )
                 const pct = Math.min(100, (total / character.inventory.capacity) * 100)
                 const color = pct > 80 ? 'bg-red-500' : pct > 50 ? 'bg-amber-500' : 'bg-emerald-500'
+                const attunedCount = character.inventory.items.filter(it => it.attuned).length
                 return (
-                  <div className="flex items-center gap-2 mt-1">
-                    <div className="w-24 h-1.5 bg-stone-700 rounded-full overflow-hidden">
-                      <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+                  <div className="flex items-center gap-3 mt-1">
+                    <div className="flex items-center gap-2">
+                      <div className="w-24 h-1.5 bg-stone-700 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all ${color}`} style={{ width: `${pct}%` }} />
+                      </div>
+                      <span className="text-stone-500 text-xs">
+                        {total.toFixed(1)} / {character.inventory.capacity} kg
+                      </span>
                     </div>
-                    <span className="text-stone-500 text-xs">
-                      {total.toFixed(1)} / {character.inventory.capacity} kg
-                    </span>
+                    {attunedCount > 0 && (
+                      <span className={`text-xs font-medium ${attunedCount >= 3 ? 'text-amber-400' : 'text-violet-400'}`}>
+                        ◈ {attunedCount}/3
+                      </span>
+                    )}
                   </div>
                 )
               })()}
@@ -2795,6 +2837,13 @@ export function CharacterPage() {
                   className="w-32 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors placeholder:text-stone-600"
                 />
               )}
+              <button
+                onClick={() => { setShowItemCompendium(true); setCompendiumSearch(''); setCompendiumRarity('toutes') }}
+                className="text-violet-400 hover:text-violet-300 text-xs transition-colors"
+                title="Ajouter depuis le compendium d'objets magiques"
+              >
+                ✦ Compendium
+              </button>
               <button
                 onClick={() => { setAddingItem(v => !v); setItemDraft(emptyItemDraft()) }}
                 className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
@@ -2882,7 +2931,7 @@ export function CharacterPage() {
                   <button
                     onClick={() => handleToggleMagical(i)}
                     disabled={saving}
-                    title={item.magical ? 'Objet magique' : 'Marquer comme magique'}
+                    title={item.magical ? 'Objet magique (cliquer pour retirer)' : 'Marquer comme magique'}
                     className={`text-xs shrink-0 transition-colors disabled:cursor-not-allowed ${
                       item.magical ? 'text-purple-400' : 'text-stone-700 hover:text-stone-500'
                     }`}
@@ -2890,10 +2939,29 @@ export function CharacterPage() {
                     ✦
                   </button>
 
+                  {/* Attunement toggle (only for magical items) */}
+                  {item.magical && (() => {
+                    const attunedCount = character.inventory.items.filter(it => it.attuned).length
+                    const canAttune = item.attuned || attunedCount < 3
+                    return (
+                      <button
+                        onClick={() => handleToggleAttuned(i)}
+                        disabled={saving || (!item.attuned && !canAttune)}
+                        title={item.attuned ? 'Syntonisé (cliquer pour retirer)' : canAttune ? 'Syntoniser' : 'Limite de 3 syntonie atteinte'}
+                        className={`text-xs shrink-0 transition-colors disabled:cursor-not-allowed ${
+                          item.attuned ? 'text-amber-400' : 'text-stone-700 hover:text-stone-500'
+                        }`}
+                      >
+                        ◈
+                      </button>
+                    )
+                  })()}
+
                   {/* Name */}
                   <span className={`flex-1 min-w-0 text-sm truncate ${item.equipped ? 'text-white font-medium' : 'text-stone-300'}`}>
                     {item.name}
                     {item.magical && <span className="ml-1 text-purple-400 text-xs">✦</span>}
+                    {item.attuned && <span className="ml-0.5 text-amber-400 text-xs">◈</span>}
                   </span>
 
                   {/* Quantity */}
@@ -3729,6 +3797,81 @@ export function CharacterPage() {
         </div>
       </main>
       {showCompendium && <SpellCompendiumModal onClose={() => setShowCompendium(false)} />}
+
+      {/* Modal compendium objets magiques */}
+      {showItemCompendium && (
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-start justify-center pt-16 px-4"
+          onClick={() => setShowItemCompendium(false)}
+        >
+          <div
+            className="bg-stone-900 border border-stone-700 rounded-2xl w-full max-w-lg shadow-2xl flex flex-col max-h-[70vh]"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="px-5 pt-5 pb-3 border-b border-stone-800 shrink-0">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-white font-semibold">Compendium d'objets magiques</h2>
+                <button onClick={() => setShowItemCompendium(false)} className="text-stone-500 hover:text-stone-300 transition-colors">✕</button>
+              </div>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Rechercher…"
+                  value={compendiumSearch}
+                  onChange={e => setCompendiumSearch(e.target.value)}
+                  autoFocus
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                />
+                <select
+                  value={compendiumRarity}
+                  onChange={e => setCompendiumRarity(e.target.value as ItemRarity | 'toutes')}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-stone-300 text-sm focus:outline-none focus:border-violet-500 transition-colors"
+                >
+                  <option value="toutes">Toutes raretés</option>
+                  <option value="commun">Commun</option>
+                  <option value="peu commun">Peu commun</option>
+                  <option value="rare">Rare</option>
+                  <option value="très rare">Très rare</option>
+                  <option value="légendaire">Légendaire</option>
+                </select>
+              </div>
+            </div>
+            <div className="overflow-y-auto flex-1 p-3 space-y-1">
+              {MAGIC_ITEMS
+                .filter(it =>
+                  (compendiumRarity === 'toutes' || it.rarity === compendiumRarity) &&
+                  it.name.toLowerCase().includes(compendiumSearch.toLowerCase())
+                )
+                .map((it, idx) => {
+                  const rarityColor = it.rarity === 'légendaire' ? 'text-amber-400' : it.rarity === 'très rare' ? 'text-purple-400' : it.rarity === 'rare' ? 'text-blue-400' : it.rarity === 'peu commun' ? 'text-emerald-400' : 'text-stone-400'
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => { handleAddFromCompendium(it); setShowItemCompendium(false) }}
+                      className="w-full text-left bg-stone-800/60 hover:bg-stone-800 border border-stone-700/50 hover:border-violet-700/50 rounded-lg px-3 py-2.5 transition-colors"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <span className="text-white text-sm font-medium">{it.name}</span>
+                          {it.attunement && <span className="ml-1.5 text-amber-400 text-xs">◈ syntonie</span>}
+                          <p className="text-stone-500 text-xs mt-0.5 leading-relaxed">{it.description}</p>
+                        </div>
+                        <span className={`text-xs shrink-0 ${rarityColor} capitalize`}>{it.rarity}</span>
+                      </div>
+                    </button>
+                  )
+                })
+              }
+              {MAGIC_ITEMS.filter(it =>
+                (compendiumRarity === 'toutes' || it.rarity === compendiumRarity) &&
+                it.name.toLowerCase().includes(compendiumSearch.toLowerCase())
+              ).length === 0 && (
+                <p className="text-stone-600 text-sm text-center py-8">Aucun objet trouvé.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast: sort lancé */}
       {castFeedback && (

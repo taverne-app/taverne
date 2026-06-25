@@ -31,6 +31,13 @@ export interface TreasureItem {
   notes: string
 }
 
+export interface Location {
+  name: string
+  type: 'ville' | 'donjon' | 'forêt' | 'taverne' | 'temple' | 'château' | 'autre'
+  status: 'inconnu' | 'connu' | 'exploré'
+  notes: string
+}
+
 export interface Campaign {
   id: number
   name: string
@@ -40,6 +47,7 @@ export interface Campaign {
   npcs: Npc[]
   game_calendar: Partial<GameCalendar>
   party_treasury: TreasureItem[]
+  locations: Location[]
   share_token: string | null
   characters: Character[]
   combatants?: Combatant[]
@@ -69,7 +77,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[] }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

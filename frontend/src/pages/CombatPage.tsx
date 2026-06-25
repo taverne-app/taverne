@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
+import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, updateConcentration, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
 import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter } from '../api/campaigns'
 import {
   listCombatants,
@@ -613,6 +613,8 @@ export function CombatPage() {
   const [encounterMaxCr, setEncounterMaxCr] = useState('30')
   const [addedMonster, setAddedMonster] = useState<string | null>(null)
   const [charHpInputs, setCharHpInputs] = useState<Record<number, string>>({})
+  const [concentrationPrompt, setConcentrationPrompt] = useState<{ character: Character; amount: number; dc: number } | null>(null)
+  const [concentrationRoll, setConcentrationRoll] = useState<{ roll: number; mod: number; total: number; success: boolean } | null>(null)
 
   const echoRef = useRef<ReturnType<typeof createEcho> | null>(null)
 
@@ -800,6 +802,11 @@ export function CombatPage() {
     updateCharacter(updated)
     setCharHpInputs(prev => ({ ...prev, [character.id]: '' }))
     logEvent('hp', `${character.name} : ${type === 'damage' ? `-${amount}` : `+${amount}`} PV`)
+    if (type === 'damage' && character.state.concentrating_on) {
+      const dc = Math.max(10, Math.floor(amount / 2))
+      setConcentrationPrompt({ character: updated, amount, dc })
+      setConcentrationRoll(null)
+    }
   }
 
   async function handleToggleCharacterCondition(id: number, condition: string, duration?: number) {
@@ -1162,15 +1169,15 @@ export function CombatPage() {
   }
 
   // Stable ref so the keyboard listener never goes stale
-  const kbRef = useRef({ handleNextTurn, prevTurn })
-  kbRef.current.handleNextTurn = handleNextTurn
+  const kbRef = useRef({ nextTurn, prevTurn })
+  kbRef.current.nextTurn = nextTurn
   kbRef.current.prevTurn = prevTurn
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
       const el = e.target as HTMLElement
       if (['INPUT', 'TEXTAREA', 'SELECT'].includes(el.tagName)) return
-      if (e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); kbRef.current.handleNextTurn() }
+      if (e.key === ' ' || e.key === 'ArrowRight') { e.preventDefault(); kbRef.current.nextTurn() }
       if (e.key === 'ArrowLeft') { e.preventDefault(); kbRef.current.prevTurn() }
       if (e.key === 'Escape') {
         setShowBestiary(false); setShowEncounterBuilder(false)
@@ -1793,9 +1800,17 @@ export function CombatPage() {
                           )}
                           {character.state.concentrating_on && (
                             <div className="mt-1">
-                              <span className="text-xs bg-violet-900/50 border border-violet-700/50 text-violet-300 rounded px-1.5 py-0.5">
+                              <button
+                                onClick={async () => {
+                                  const updated = await updateConcentration(character.id, null)
+                                  updateCharacter(updated)
+                                  logEvent('hp', `${character.name} : concentration sur "${character.state.concentrating_on}" relâchée`)
+                                }}
+                                title="Cliquer pour relâcher la concentration"
+                                className="text-xs bg-violet-900/50 hover:bg-violet-900/80 border border-violet-700/50 text-violet-300 rounded px-1.5 py-0.5 transition-colors"
+                              >
                                 ◈ {character.state.concentrating_on}
-                              </span>
+                              </button>
                             </div>
                           )}
                           {character.attack_macros.length > 0 && (
@@ -3141,6 +3156,72 @@ export function CombatPage() {
           </div>
         )}
       </main>
+
+      {/* Modal jet de concentration */}
+      {concentrationPrompt && (
+        <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center px-4">
+          <div className="bg-stone-900 border border-violet-800/60 rounded-2xl p-6 w-full max-w-sm shadow-2xl">
+            <div className="flex items-center gap-2 mb-4">
+              <span className="text-violet-400 text-lg">◈</span>
+              <h2 className="text-white font-semibold">Jet de Concentration</h2>
+            </div>
+            <p className="text-stone-300 text-sm mb-1">
+              <span className="text-white font-medium">{concentrationPrompt.character.name}</span> concentré·e sur{' '}
+              <span className="text-violet-300 font-medium">{concentrationPrompt.character.state.concentrating_on}</span>
+            </p>
+            <p className="text-stone-400 text-sm mb-4">
+              Reçu {concentrationPrompt.amount} dégâts · DC {concentrationPrompt.dc} (Constitution)
+            </p>
+
+            {!concentrationRoll ? (
+              <button
+                onClick={() => {
+                  const mod = concentrationPrompt.character.saving_throws.constitution.modifier
+                  const roll = Math.floor(Math.random() * 20) + 1
+                  const total = roll + mod
+                  const success = total >= concentrationPrompt.dc
+                  setConcentrationRoll({ roll, mod, total, success })
+                  logEvent('roll', `${concentrationPrompt.character.name} · Concentration DC${concentrationPrompt.dc} → ${total} [${roll}${mod >= 0 ? '+' : ''}${mod}] — ${success ? 'Maintenu ✓' : 'Perdu ✗'}`)
+                }}
+                className="w-full bg-violet-600 hover:bg-violet-500 text-white font-semibold rounded-lg py-2.5 transition-colors"
+              >
+                Lancer le d20
+              </button>
+            ) : (
+              <div className="space-y-3">
+                <div className={`rounded-xl border px-4 py-3 text-center ${concentrationRoll.success ? 'bg-emerald-900/30 border-emerald-700/50' : 'bg-red-900/30 border-red-700/50'}`}>
+                  <p className="text-2xl font-bold text-white">{concentrationRoll.total}</p>
+                  <p className="text-stone-400 text-xs">[{concentrationRoll.roll}] {concentrationRoll.mod >= 0 ? '+' : ''}{concentrationRoll.mod} CON</p>
+                  <p className={`text-sm font-semibold mt-1 ${concentrationRoll.success ? 'text-emerald-400' : 'text-red-400'}`}>
+                    {concentrationRoll.success ? '✓ Concentration maintenue' : '✗ Concentration perdue'}
+                  </p>
+                </div>
+                <div className="flex gap-2">
+                  {!concentrationRoll.success && (
+                    <button
+                      onClick={async () => {
+                        const updated = await updateConcentration(concentrationPrompt.character.id, null)
+                        updateCharacter(updated)
+                        setConcentrationPrompt(null)
+                        setConcentrationRoll(null)
+                      }}
+                      className="flex-1 bg-red-900/60 hover:bg-red-800/80 border border-red-700/50 text-red-300 text-sm font-semibold rounded-lg py-2 transition-colors"
+                    >
+                      Retirer la concentration
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setConcentrationPrompt(null); setConcentrationRoll(null) }}
+                    className="flex-1 bg-stone-800 hover:bg-stone-700 text-stone-300 text-sm font-semibold rounded-lg py-2 transition-colors"
+                  >
+                    {concentrationRoll.success ? 'Fermer' : 'Ignorer'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Modal résumé post-combat */}
       {showCombatSummary && (

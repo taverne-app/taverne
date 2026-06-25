@@ -55,6 +55,7 @@ class CampaignController extends Controller
             'npcs'             => ['sometimes', 'nullable', 'array'],
             'game_calendar'    => ['sometimes', 'nullable', 'array'],
             'party_treasury'   => ['sometimes', 'nullable', 'array'],
+            'locations'        => ['sometimes', 'nullable', 'array'],
         ]);
 
         $campaign->update($validated);

@@ -11,13 +11,14 @@ class Campaign extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'share_token'];
+    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'locations', 'share_token'];
 
     protected $casts = [
         'saved_encounters' => 'array',
         'npcs'             => 'array',
         'game_calendar'    => 'array',
         'party_treasury'   => 'array',
+        'locations'        => 'array',
     ];
 
     public function user(): BelongsTo

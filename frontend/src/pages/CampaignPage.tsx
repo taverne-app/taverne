@@ -9,6 +9,7 @@ import {
   type Npc,
   type GameCalendar,
   type TreasureItem,
+  type Location,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, longRest, updateInventory, type Character } from '../api/characters'
@@ -103,6 +104,12 @@ export function CampaignPage() {
   const [addingTreasury, setAddingTreasury]   = useState(false)
   const [treasuryDraft, setTreasuryDraft]     = useState<TreasureItem>(emptyTreasureDraft)
   const [distributingIdx, setDistributingIdx] = useState<number | null>(null)
+
+  // Lieux
+  const emptyLocationDraft = (): Location => ({ name: '', type: 'autre', status: 'inconnu', notes: '' })
+  const [addingLocation, setAddingLocation]   = useState(false)
+  const [locationDraft, setLocationDraft]     = useState<Location>(emptyLocationDraft())
+  const [expandedLocation, setExpandedLocation] = useState<number | null>(null)
 
   // Load campaign
   useEffect(() => {
@@ -294,6 +301,30 @@ export function CampaignPage() {
     if (!campaign) return
     const next = (campaign.npcs ?? []).map((n, i) => i === index ? { ...n, status } : n)
     const updated = await updateCampaign(campaign.id, { npcs: next })
+    setCampaign(updated)
+  }
+
+  async function handleAddLocation() {
+    if (!campaign || !locationDraft.name.trim()) return
+    const next: Location[] = [...(campaign.locations ?? []), { ...locationDraft, name: locationDraft.name.trim() }]
+    const updated = await updateCampaign(campaign.id, { locations: next })
+    setCampaign(updated)
+    setLocationDraft(emptyLocationDraft())
+    setAddingLocation(false)
+  }
+
+  async function handleDeleteLocation(index: number) {
+    if (!campaign) return
+    const next = (campaign.locations ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaign.id, { locations: next })
+    setCampaign(updated)
+    if (expandedLocation === index) setExpandedLocation(null)
+  }
+
+  async function handleUpdateLocationStatus(index: number, status: Location['status']) {
+    if (!campaign) return
+    const next = (campaign.locations ?? []).map((l, i) => i === index ? { ...l, status } : l)
+    const updated = await updateCampaign(campaign.id, { locations: next })
     setCampaign(updated)
   }
 
@@ -1191,6 +1222,134 @@ export function CampaignPage() {
                   )}
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Lieux */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Lieux ({(campaign?.locations ?? []).length})
+            </h2>
+            <button
+              onClick={() => { setAddingLocation(v => !v); setLocationDraft(emptyLocationDraft()) }}
+              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              {addingLocation ? 'Annuler' : '+ Ajouter'}
+            </button>
+          </div>
+
+          {addingLocation && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Nom du lieu *"
+                  value={locationDraft.name}
+                  onChange={e => setLocationDraft(d => ({ ...d, name: e.target.value }))}
+                  autoFocus
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <select
+                  value={locationDraft.type}
+                  onChange={e => setLocationDraft(d => ({ ...d, type: e.target.value as Location['type'] }))}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                >
+                  <option value="ville">Ville</option>
+                  <option value="donjon">Donjon</option>
+                  <option value="forêt">Forêt</option>
+                  <option value="taverne">Taverne</option>
+                  <option value="temple">Temple</option>
+                  <option value="château">Château</option>
+                  <option value="autre">Autre</option>
+                </select>
+                <select
+                  value={locationDraft.status}
+                  onChange={e => setLocationDraft(d => ({ ...d, status: e.target.value as Location['status'] }))}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                >
+                  <option value="inconnu">Inconnu</option>
+                  <option value="connu">Connu</option>
+                  <option value="exploré">Exploré</option>
+                </select>
+              </div>
+              <textarea
+                placeholder="Notes (description, PNJ associés, indices…)"
+                value={locationDraft.notes}
+                onChange={e => setLocationDraft(d => ({ ...d, notes: e.target.value }))}
+                rows={3}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddLocation}
+                  disabled={!locationDraft.name.trim()}
+                  className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(campaign?.locations ?? []).length === 0 && !addingLocation ? (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-8 text-center">
+              <p className="text-stone-500 text-sm">
+                Aucun lieu enregistré.{' '}
+                <button onClick={() => setAddingLocation(true)} className="text-amber-400 hover:text-amber-300 transition-colors">
+                  Ajouter le premier
+                </button>
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {(campaign?.locations ?? []).map((loc, i) => {
+                const typeIcon = loc.type === 'ville' ? '🏙' : loc.type === 'donjon' ? '⛏' : loc.type === 'forêt' ? '🌲' : loc.type === 'taverne' ? '🍺' : loc.type === 'temple' ? '⛪' : loc.type === 'château' ? '🏰' : '📍'
+                const statusColor = loc.status === 'exploré' ? 'text-emerald-400' : loc.status === 'connu' ? 'text-amber-400' : 'text-stone-500'
+                return (
+                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+                    <div className="flex items-start gap-3">
+                      <span className="text-lg shrink-0 mt-0.5">{typeIcon}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-stone-100 text-sm font-semibold">{loc.name}</span>
+                          <span className="text-stone-600 text-xs capitalize">{loc.type}</span>
+                          <select
+                            value={loc.status}
+                            onChange={e => handleUpdateLocationStatus(i, e.target.value as Location['status'])}
+                            className={`text-xs bg-transparent border-none focus:outline-none cursor-pointer font-medium ${statusColor}`}
+                          >
+                            <option value="inconnu">❓ Inconnu</option>
+                            <option value="connu">◎ Connu</option>
+                            <option value="exploré">✓ Exploré</option>
+                          </select>
+                        </div>
+                        {loc.notes && (
+                          <button
+                            onClick={() => setExpandedLocation(expandedLocation === i ? null : i)}
+                            className="text-stone-500 hover:text-stone-300 text-xs mt-1 transition-colors text-left"
+                          >
+                            {expandedLocation === i ? '▲ Masquer' : '▼ Notes'}
+                          </button>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => handleDeleteLocation(i)}
+                        title="Supprimer ce lieu"
+                        className="text-stone-700 hover:text-red-400 text-sm transition-colors shrink-0"
+                      >
+                        ✕
+                      </button>
+                    </div>
+                    {expandedLocation === i && loc.notes && (
+                      <div className="mt-3 pt-3 border-t border-stone-800 ml-8">
+                        <p className="text-stone-400 text-xs leading-relaxed whitespace-pre-wrap">{loc.notes}</p>
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           )}
         </div>
