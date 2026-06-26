@@ -17,6 +17,8 @@ import {
   type Faction,
   type RandomTable,
   type RandomTableEntry,
+  type MapPin,
+  type CampaignMap,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, longRest, updateInventory, updateIdentity, type Character } from '../api/characters'
@@ -165,6 +167,13 @@ export function CampaignPage() {
   const [sceneDraft, setSceneDraft] = useState<PrepScene>(emptyScene())
   const [addingScene, setAddingScene] = useState(false)
   const [expandedScene, setExpandedScene] = useState<string | null>(null)
+
+  // Carte de campagne
+  const [mapUrlDraft, setMapUrlDraft] = useState('')
+  const [editingMapUrl, setEditingMapUrl] = useState(false)
+  const [mapAddingPin, setMapAddingPin] = useState(false)
+  const [pinLabelDraft, setPinLabelDraft] = useState('')
+  const [pinColorDraft, setPinColorDraft] = useState<MapPin['color']>('amber')
 
   // Tableau de bord
   const [showDashboard, setShowDashboard] = useState(true)
@@ -596,6 +605,43 @@ export function CampaignPage() {
     setCampaign(updated)
     if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
     if (expandedScene === sceneId) setExpandedScene(null)
+  }
+
+  async function handleSetMapUrl() {
+    if (!campaign) return
+    const next: CampaignMap = { image_url: mapUrlDraft.trim(), pins: campaign.campaign_map?.pins ?? [] }
+    const updated = await updateCampaign(campaign.id, { campaign_map: next })
+    setCampaign(updated)
+    setEditingMapUrl(false)
+  }
+
+  async function handleMapClick(e: React.MouseEvent<HTMLDivElement>) {
+    if (!mapAddingPin || !campaign) return
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = ((e.clientX - rect.left) / rect.width) * 100
+    const y = ((e.clientY - rect.top) / rect.height) * 100
+    const pin: MapPin = {
+      id: crypto.randomUUID(),
+      label: pinLabelDraft.trim() || 'Lieu',
+      x, y,
+      color: pinColorDraft,
+    }
+    const currentMap = campaign.campaign_map ?? { image_url: '', pins: [] }
+    const next: CampaignMap = { ...currentMap, pins: [...currentMap.pins, pin] }
+    const updated = await updateCampaign(campaign.id, { campaign_map: next })
+    setCampaign(updated)
+    setMapAddingPin(false)
+    setPinLabelDraft('')
+  }
+
+  async function handleDeletePin(pinId: string) {
+    if (!campaign?.campaign_map) return
+    const next: CampaignMap = {
+      ...campaign.campaign_map,
+      pins: campaign.campaign_map.pins.filter(p => p.id !== pinId),
+    }
+    const updated = await updateCampaign(campaign.id, { campaign_map: next })
+    setCampaign(updated)
   }
 
   async function handleAddFaction() {
@@ -2205,6 +2251,138 @@ export function CampaignPage() {
             </div>
           ) : (
             <p className="text-stone-600 text-sm text-center py-4">Aucune session planifiée. Cliquez sur "+ Planifier" pour préparer la prochaine séance.</p>
+          )}
+        </div>
+
+        {/* Carte de campagne */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Carte de campagne</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setEditingMapUrl(v => !v); setMapUrlDraft(campaign.campaign_map?.image_url ?? '') }}
+                className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+              >
+                {campaign.campaign_map?.image_url ? '✎ URL' : '+ URL'}
+              </button>
+              {campaign.campaign_map?.image_url && (
+                <button
+                  onClick={() => { setMapAddingPin(v => !v); setPinLabelDraft('') }}
+                  className={`text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${
+                    mapAddingPin
+                      ? 'bg-sky-700/40 border-sky-500 text-sky-300'
+                      : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
+                  }`}
+                >
+                  {mapAddingPin ? 'Annuler' : '📍 Épingle'}
+                </button>
+              )}
+            </div>
+          </div>
+
+          {editingMapUrl && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 mb-4 space-y-3">
+              <div>
+                <label className="text-stone-500 text-xs block mb-1">URL de l'image</label>
+                <input
+                  type="url"
+                  value={mapUrlDraft}
+                  onChange={e => setMapUrlDraft(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && handleSetMapUrl()}
+                  placeholder="https://..."
+                  autoFocus
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setEditingMapUrl(false)} className="text-stone-500 text-xs hover:text-stone-300 transition-colors">Annuler</button>
+                <button
+                  onClick={handleSetMapUrl}
+                  disabled={!mapUrlDraft.trim()}
+                  className="bg-amber-600 hover:bg-amber-500 disabled:opacity-50 text-white text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  Définir
+                </button>
+              </div>
+            </div>
+          )}
+
+          {mapAddingPin && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 mb-4 space-y-3">
+              <p className="text-sky-400 text-xs">Saisissez le nom puis cliquez sur la carte pour placer l'épingle.</p>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={pinLabelDraft}
+                  onChange={e => setPinLabelDraft(e.target.value)}
+                  placeholder="Nom du lieu…"
+                  autoFocus
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500"
+                />
+                <div className="flex gap-1 shrink-0">
+                  {(['amber', 'red', 'blue', 'green', 'purple', 'sky'] as const).map(c => (
+                    <button
+                      key={c}
+                      onClick={() => setPinColorDraft(c)}
+                      className={`w-6 h-6 rounded-full border-2 transition-all ${
+                        pinColorDraft === c ? 'border-white scale-125' : 'border-transparent opacity-60 hover:opacity-100'
+                      } ${
+                        c === 'amber' ? 'bg-amber-500' : c === 'red' ? 'bg-red-500' :
+                        c === 'blue' ? 'bg-blue-500' : c === 'green' ? 'bg-emerald-500' :
+                        c === 'purple' ? 'bg-purple-500' : 'bg-sky-500'
+                      }`}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {campaign.campaign_map?.image_url ? (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+              <div
+                className={`relative select-none ${mapAddingPin ? 'cursor-crosshair' : ''}`}
+                onClick={handleMapClick}
+              >
+                <img
+                  src={campaign.campaign_map.image_url}
+                  alt="Carte de campagne"
+                  className="w-full object-contain max-h-[500px] pointer-events-none"
+                  onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+                />
+                {(campaign.campaign_map.pins ?? []).map(pin => (
+                  <div
+                    key={pin.id}
+                    className="absolute group"
+                    style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: 'translate(-50%, -100%)' }}
+                    onClick={e => e.stopPropagation()}
+                  >
+                    <div className={`relative flex items-center gap-1 text-white text-xs font-semibold px-2 py-1 rounded-lg shadow-lg whitespace-nowrap ${
+                      pin.color === 'amber' ? 'bg-amber-600' : pin.color === 'red' ? 'bg-red-600' :
+                      pin.color === 'blue' ? 'bg-blue-600' : pin.color === 'green' ? 'bg-emerald-600' :
+                      pin.color === 'purple' ? 'bg-purple-600' : 'bg-sky-600'
+                    }`}>
+                      📍 {pin.label}
+                      <button
+                        onClick={() => handleDeletePin(pin.id)}
+                        className="ml-1 text-white/60 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+                      >
+                        ×
+                      </button>
+                    </div>
+                    <div className={`absolute left-1/2 -translate-x-1/2 top-full w-0.5 h-2 ${
+                      pin.color === 'amber' ? 'bg-amber-500' : pin.color === 'red' ? 'bg-red-500' :
+                      pin.color === 'blue' ? 'bg-blue-500' : pin.color === 'green' ? 'bg-emerald-500' :
+                      pin.color === 'purple' ? 'bg-purple-500' : 'bg-sky-500'
+                    }`} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="border border-stone-800 border-dashed rounded-xl py-10 text-center">
+              <p className="text-stone-600 text-sm">Aucune carte. Ajoutez une URL d'image pour visualiser votre monde.</p>
+            </div>
           )}
         </div>
 

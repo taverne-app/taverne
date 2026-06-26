@@ -485,6 +485,7 @@ export function CombatPage() {
   const [dmDiceMod, setDmDiceMod] = useState('')
   const [dmDiceAdv, setDmDiceAdv] = useState<'none' | 'adv' | 'dis'>('none')
   const [dmDiceResult, setDmDiceResult] = useState<{ label: string; detail: string; total: number } | null>(null)
+  const [dmDiceExpr, setDmDiceExpr] = useState('')
   const dmDiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Encounter builder
@@ -597,6 +598,48 @@ export function CombatPage() {
     const total = chosen.reduce((s, r) => s + r, 0) + mod
     const detail = `[${rolls.join(', ')}]${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}${advLabel}`
     const label = `MJ — ${count}d${sides}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}`
+    if (dmDiceTimer.current) clearTimeout(dmDiceTimer.current)
+    setDmDiceResult({ label, detail, total })
+    dmDiceTimer.current = setTimeout(() => setDmDiceResult(null), 8000)
+    logEvent('roll', `${label} → ${total} (${detail})`)
+  }
+
+  function handleDmRollExpr() {
+    const raw = dmDiceExpr.trim().toLowerCase().replace(/\s+/g, '')
+    if (!raw) return
+    // Parse: (count)d(sides)(kh/kl N)(+/- mod)
+    const m = raw.match(/^(\d*)d(\d+|%)(kh(\d+)|kl(\d+)|dh(\d+)|dl(\d+))?([+-]\d+)?$/)
+    if (!m) return
+    const count = m[1] ? Math.max(1, parseInt(m[1])) : 1
+    const sides = m[2] === '%' ? 100 : parseInt(m[2])
+    const mod = m[8] ? parseInt(m[8]) : 0
+    const keepMode = m[3]
+      ? (m[3].startsWith('kh') || m[3].startsWith('dh') ? 'high' : 'low')
+      : null
+    // kh = keep highest, kl = keep lowest, dh = drop highest, dl = drop lowest
+    const keepN = keepMode
+      ? (() => {
+          const n = parseInt(m[4] ?? m[5] ?? m[6] ?? m[7])
+          const isKeep = m[3].startsWith('k')
+          return isKeep ? n : count - n
+        })()
+      : null
+    const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1)
+    let keptIndices: Set<number>
+    let kept: number[]
+    if (keepMode !== null && keepN !== null) {
+      const indices = rolls.map((_, i) => i)
+      indices.sort((a, b) => keepMode === 'high' ? rolls[b] - rolls[a] : rolls[a] - rolls[b])
+      keptIndices = new Set(indices.slice(0, keepN))
+      kept = indices.slice(0, keepN).map(i => rolls[i])
+    } else {
+      keptIndices = new Set(rolls.map((_, i) => i))
+      kept = rolls
+    }
+    const total = kept.reduce((s, r) => s + r, 0) + mod
+    const detailParts = rolls.map((r, i) => keptIndices.has(i) ? String(r) : `(${r})`)
+    const detail = `[${detailParts.join('+')}]${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}`
+    const label = `MJ — ${raw.replace('%', '100')}`
     if (dmDiceTimer.current) clearTimeout(dmDiceTimer.current)
     setDmDiceResult({ label, detail, total })
     dmDiceTimer.current = setTimeout(() => setDmDiceResult(null), 8000)
@@ -1412,6 +1455,24 @@ export function CombatPage() {
       {dmDiceOpen && (
         <div className="fixed bottom-0 left-0 right-0 z-30 bg-stone-900 border-t border-stone-700 shadow-2xl">
           <div className="max-w-5xl mx-auto px-4 py-4 space-y-3">
+            {/* Free expression input */}
+            <div className="flex items-center gap-2">
+              <input
+                type="text"
+                value={dmDiceExpr}
+                onChange={e => setDmDiceExpr(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && handleDmRollExpr()}
+                placeholder="Expression libre : 4d6kh3, 2d20+5, d%…"
+                className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm font-mono placeholder:text-stone-600 focus:outline-none focus:border-rose-500"
+              />
+              <button
+                onClick={handleDmRollExpr}
+                disabled={!dmDiceExpr.trim()}
+                className="bg-rose-700 hover:bg-rose-600 disabled:opacity-40 text-white font-bold text-sm rounded-lg px-4 py-2 transition-colors shrink-0"
+              >
+                ↵
+              </button>
+            </div>
             <div className="flex items-center gap-4 flex-wrap">
               {/* Dice selector */}
               <div className="flex gap-1.5 flex-wrap">

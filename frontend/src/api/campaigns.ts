@@ -89,6 +89,20 @@ export interface Faction {
   notes: string
 }
 
+export interface MapPin {
+  id: string
+  label: string
+  location_name?: string
+  x: number
+  y: number
+  color: 'amber' | 'red' | 'blue' | 'green' | 'purple' | 'sky'
+}
+
+export interface CampaignMap {
+  image_url: string
+  pins: MapPin[]
+}
+
 export interface Campaign {
   id: number
   name: string
@@ -103,6 +117,7 @@ export interface Campaign {
   custom_monsters: CustomMonster[]
   factions: Faction[]
   random_tables: RandomTable[]
+  campaign_map: CampaignMap | null
   share_token: string | null
   characters: Character[]
   combatants?: Combatant[]
@@ -132,7 +147,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

@@ -60,6 +60,7 @@ class CampaignController extends Controller
             'custom_monsters'  => ['sometimes', 'nullable', 'array'],
             'factions'         => ['sometimes', 'nullable', 'array'],
             'random_tables'    => ['sometimes', 'nullable', 'array'],
+            'campaign_map'     => ['sometimes', 'nullable', 'array'],
         ]);
 
         $campaign->update($validated);
