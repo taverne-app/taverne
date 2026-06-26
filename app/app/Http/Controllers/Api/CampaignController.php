@@ -62,6 +62,7 @@ class CampaignController extends Controller
             'random_tables'    => ['sometimes', 'nullable', 'array'],
             'campaign_map'          => ['sometimes', 'nullable', 'array'],
             'campaign_milestones'   => ['sometimes', 'nullable', 'array'],
+            'quests'                => ['sometimes', 'nullable', 'array'],
         ]);
 
         $campaign->update($validated);

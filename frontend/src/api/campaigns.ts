@@ -72,6 +72,13 @@ export interface Location {
   notes: string
 }
 
+export interface MonsterAttack {
+  name: string
+  bonus: string
+  damage: string
+  notes?: string
+}
+
 export interface CustomMonster {
   name: string
   cr: string
@@ -79,7 +86,9 @@ export interface CustomMonster {
   hp_avg: number
   initiative_mod: number
   xp: number
+  speed?: number
   notes?: string
+  attacks?: MonsterAttack[]
 }
 
 export interface Faction {
@@ -111,6 +120,15 @@ export interface Milestone {
   notes: string
 }
 
+export interface Quest {
+  id: string
+  title: string
+  description: string
+  status: 'active' | 'completed' | 'failed' | 'dormant'
+  giver: string
+  notes: string
+}
+
 export interface Campaign {
   id: number
   name: string
@@ -127,6 +145,7 @@ export interface Campaign {
   random_tables: RandomTable[]
   campaign_map: CampaignMap | null
   campaign_milestones: Milestone[]
+  quests: Quest[]
   share_token: string | null
   characters: Character[]
   combatants?: Combatant[]
@@ -156,7 +175,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; campaign_milestones?: Milestone[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; campaign_milestones?: Milestone[]; quests?: Quest[] }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

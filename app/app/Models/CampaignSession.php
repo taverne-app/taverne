@@ -9,7 +9,7 @@ class CampaignSession extends Model
 {
     protected $table = 'campaign_sessions';
 
-    protected $fillable = ['campaign_id', 'title', 'session_date', 'notes'];
+    protected $fillable = ['campaign_id', 'title', 'session_date', 'notes', 'xp_awarded', 'loot_notes'];
 
     protected $casts = ['session_date' => 'date'];
 

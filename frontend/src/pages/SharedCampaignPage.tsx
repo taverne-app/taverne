@@ -330,6 +330,27 @@ export function SharedCampaignPage() {
           <p className="text-stone-400 text-sm">{campaign.description}</p>
         )}
 
+        {/* Quêtes actives */}
+        {(campaign.quests ?? []).filter(q => q.status === 'active').length > 0 && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Quêtes en cours</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(campaign.quests ?? []).filter(q => q.status === 'active').map(q => (
+                <div key={q.id} className="bg-stone-900 border border-amber-900/40 rounded-xl p-4">
+                  <div className="flex items-start gap-2">
+                    <span className="text-amber-400 text-sm shrink-0 mt-0.5">🟡</span>
+                    <div className="min-w-0">
+                      <p className="text-white font-semibold text-sm leading-tight">{q.title}</p>
+                      {q.giver && <p className="text-stone-500 text-xs mt-0.5">— {q.giver}</p>}
+                      {q.description && <p className="text-stone-400 text-xs mt-1.5 leading-relaxed">{q.description}</p>}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
         {/* Journal de session */}
         {sessions.length > 0 && (
           <section>
@@ -347,6 +368,20 @@ export function SharedCampaignPage() {
                       </span>
                     )}
                   </div>
+                  {(s.xp_awarded != null || s.loot_notes) && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {s.xp_awarded != null && (
+                        <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2 py-0.5">
+                          +{s.xp_awarded.toLocaleString('fr-FR')} XP
+                        </span>
+                      )}
+                      {s.loot_notes && (
+                        <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2 py-0.5">
+                          🎁 {s.loot_notes}
+                        </span>
+                      )}
+                    </div>
+                  )}
                   {s.notes && <MarkdownText className="text-stone-400">{s.notes}</MarkdownText>}
                 </div>
               ))}

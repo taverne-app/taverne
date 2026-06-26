@@ -6,6 +6,8 @@ export interface CampaignSession {
   title: string
   session_date: string | null
   notes: string | null
+  xp_awarded: number | null
+  loot_notes: string | null
   created_at: string
   updated_at: string
 }
@@ -18,7 +20,7 @@ export async function listSessions(campaignId: number): Promise<CampaignSession[
 
 export async function createSession(
   campaignId: number,
-  data: { title: string; session_date?: string | null; notes?: string | null },
+  data: { title: string; session_date?: string | null; notes?: string | null; xp_awarded?: number | null; loot_notes?: string | null },
 ): Promise<CampaignSession> {
   const res = await apiFetch(`/campaigns/${campaignId}/sessions`, {
     method: 'POST',
@@ -31,7 +33,7 @@ export async function createSession(
 export async function updateSession(
   campaignId: number,
   sessionId: number,
-  data: { title?: string; session_date?: string | null; notes?: string | null },
+  data: { title?: string; session_date?: string | null; notes?: string | null; xp_awarded?: number | null; loot_notes?: string | null },
 ): Promise<CampaignSession> {
   const res = await apiFetch(`/campaigns/${campaignId}/sessions/${sessionId}`, {
     method: 'PATCH',

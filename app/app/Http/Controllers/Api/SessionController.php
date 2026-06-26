@@ -27,6 +27,8 @@ class SessionController extends Controller
             'title'        => ['required', 'string', 'max:255'],
             'session_date' => ['sometimes', 'nullable', 'date'],
             'notes'        => ['sometimes', 'nullable', 'string'],
+            'xp_awarded'   => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'loot_notes'   => ['sometimes', 'nullable', 'string'],
         ]);
 
         $session = $campaign->sessions()->create($validated);
@@ -43,6 +45,8 @@ class SessionController extends Controller
             'title'        => ['sometimes', 'string', 'max:255'],
             'session_date' => ['sometimes', 'nullable', 'date'],
             'notes'        => ['sometimes', 'nullable', 'string'],
+            'xp_awarded'   => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'loot_notes'   => ['sometimes', 'nullable', 'string'],
         ]);
 
         $session->update($validated);

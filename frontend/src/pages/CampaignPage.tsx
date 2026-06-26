@@ -20,6 +20,8 @@ import {
   type MapPin,
   type CampaignMap,
   type Milestone,
+  type Quest,
+  type MonsterAttack,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, type Character } from '../api/characters'
@@ -104,13 +106,22 @@ export function CampaignPage() {
   const [savingCalendar, setSavingCalendar] = useState(false)
 
   // Sessions
+  const emptySessionDraft = () => ({ title: '', session_date: '', notes: '', xp_awarded: '', loot_notes: '' })
   const [sessions, setSessions]               = useState<CampaignSession[]>([])
   const [addingSession, setAddingSession]     = useState(false)
-  const [sessionDraft, setSessionDraft]       = useState({ title: '', session_date: '', notes: '' })
+  const [sessionDraft, setSessionDraft]       = useState(emptySessionDraft())
   const [editingSession, setEditingSession]   = useState<number | null>(null)
-  const [editSessionDraft, setEditSessionDraft] = useState({ title: '', session_date: '', notes: '' })
+  const [editSessionDraft, setEditSessionDraft] = useState(emptySessionDraft())
   const [expandedSession, setExpandedSession] = useState<number | null>(null)
   const [sessionView, setSessionView] = useState<'list' | 'timeline'>('list')
+
+  // Quêtes
+  const emptyQuestDraft = (): Omit<Quest, 'id'> => ({ title: '', description: '', status: 'active', giver: '', notes: '' })
+  const [questDraft, setQuestDraft] = useState<Omit<Quest, 'id'>>(emptyQuestDraft())
+  const [addingQuest, setAddingQuest] = useState(false)
+  const [expandedQuest, setExpandedQuest] = useState<string | null>(null)
+  const [editingQuestId, setEditingQuestId] = useState<string | null>(null)
+  const [editQuestDraft, setEditQuestDraft] = useState<Omit<Quest, 'id'>>(emptyQuestDraft())
 
   // Trésor partagé
   const emptyTreasureDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
@@ -132,9 +143,11 @@ export function CampaignPage() {
   const [savingSessionPrep, setSavingSessionPrep] = useState(false)
 
   // Bestiaire personnalisé
-  const emptyMonsterDraft = (): CustomMonster => ({ name: '', cr: '1', ac: 12, hp_avg: 10, initiative_mod: 0, xp: 200 })
+  const emptyMonsterDraft = (): CustomMonster => ({ name: '', cr: '1', ac: 12, hp_avg: 10, initiative_mod: 0, xp: 200, speed: undefined, attacks: [] })
+  const emptyAttackDraft = (): MonsterAttack => ({ name: '', bonus: '', damage: '' })
   const [monsterDraft, setMonsterDraft] = useState<CustomMonster>(emptyMonsterDraft())
   const [addingMonster, setAddingMonster] = useState(false)
+  const [attackDraft, setAttackDraft] = useState<MonsterAttack>(emptyAttackDraft())
 
   // Factions
   const emptyFactionDraft = (): Faction => ({ name: '', description: '', reputation: 0, notes: '' })
@@ -317,10 +330,12 @@ export function CampaignPage() {
         title: sessionDraft.title.trim(),
         session_date: sessionDraft.session_date || null,
         notes: sessionDraft.notes || null,
+        xp_awarded: sessionDraft.xp_awarded ? parseInt(sessionDraft.xp_awarded, 10) || null : null,
+        loot_notes: sessionDraft.loot_notes.trim() || null,
       })
       setSessions(prev => [s, ...prev])
       setAddingSession(false)
-      setSessionDraft({ title: '', session_date: '', notes: '' })
+      setSessionDraft(emptySessionDraft())
       setExpandedSession(s.id)
     } finally { setSaving(false) }
   }
@@ -333,10 +348,48 @@ export function CampaignPage() {
         title: editSessionDraft.title.trim(),
         session_date: editSessionDraft.session_date || null,
         notes: editSessionDraft.notes || null,
+        xp_awarded: editSessionDraft.xp_awarded ? parseInt(editSessionDraft.xp_awarded, 10) || null : null,
+        loot_notes: editSessionDraft.loot_notes.trim() || null,
       })
       setSessions(prev => prev.map(s => s.id === sessionId ? updated : s))
       setEditingSession(null)
     } finally { setSaving(false) }
+  }
+
+  async function handleAddQuest() {
+    if (!campaign || !questDraft.title.trim()) return
+    const quest: Quest = { id: crypto.randomUUID(), ...questDraft, title: questDraft.title.trim() }
+    const next = [...(campaign.quests ?? []), quest]
+    const updated = await updateCampaign(campaign.id, { quests: next })
+    setCampaign(updated)
+    setQuestDraft(emptyQuestDraft())
+    setAddingQuest(false)
+    setExpandedQuest(quest.id)
+  }
+
+  async function handleUpdateQuest(questId: string) {
+    if (!campaign) return
+    const next = (campaign.quests ?? []).map(q =>
+      q.id === questId ? { ...q, ...editQuestDraft, title: editQuestDraft.title.trim() } : q
+    )
+    const updated = await updateCampaign(campaign.id, { quests: next })
+    setCampaign(updated)
+    setEditingQuestId(null)
+  }
+
+  async function handleDeleteQuest(questId: string) {
+    if (!campaign) return
+    const next = (campaign.quests ?? []).filter(q => q.id !== questId)
+    const updated = await updateCampaign(campaign.id, { quests: next })
+    setCampaign(updated)
+    if (expandedQuest === questId) setExpandedQuest(null)
+  }
+
+  async function handleToggleQuestStatus(questId: string, status: Quest['status']) {
+    if (!campaign) return
+    const next = (campaign.quests ?? []).map(q => q.id === questId ? { ...q, status } : q)
+    const updated = await updateCampaign(campaign.id, { quests: next })
+    setCampaign(updated)
   }
 
   async function handleDeleteSession(sessionId: number) {
@@ -2667,16 +2720,59 @@ export function CampaignPage() {
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                   />
                 </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Vitesse (m)</label>
+                  <input
+                    type="number"
+                    value={monsterDraft.speed ?? ''}
+                    onChange={e => setMonsterDraft(d => ({ ...d, speed: e.target.value ? Number(e.target.value) : undefined }))}
+                    placeholder="9"
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
                 <div className="sm:col-span-2">
                   <label className="text-stone-500 text-xs block mb-1">Notes</label>
                   <input
                     type="text"
                     value={monsterDraft.notes ?? ''}
                     onChange={e => setMonsterDraft(d => ({ ...d, notes: e.target.value }))}
-                    placeholder="Résistances, attaques…"
+                    placeholder="Résistances, traits…"
                     className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
                   />
                 </div>
+              </div>
+              {/* Attaques */}
+              <div>
+                <p className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-2">Attaques</p>
+                {(monsterDraft.attacks ?? []).map((atk, i) => (
+                  <div key={i} className="flex items-center gap-2 mb-1.5 bg-stone-800/60 rounded-lg px-3 py-1.5">
+                    <span className="text-stone-200 text-sm flex-1 truncate">{atk.name}</span>
+                    <span className="text-amber-300 text-xs font-mono">{atk.bonus}</span>
+                    <span className="text-stone-500 text-xs">→</span>
+                    <span className="text-red-300 text-xs font-mono">{atk.damage}</span>
+                    <button onClick={() => setMonsterDraft(d => ({ ...d, attacks: (d.attacks ?? []).filter((_, j) => j !== i) }))} className="text-stone-600 hover:text-red-400 text-sm transition-colors">×</button>
+                  </div>
+                ))}
+                <div className="grid grid-cols-3 gap-2 mt-1">
+                  <input type="text" placeholder="Nom (ex. Épée)" value={attackDraft.name} onChange={e => setAttackDraft(d => ({ ...d, name: e.target.value }))}
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors" />
+                  <input type="text" placeholder="+5 au toucher" value={attackDraft.bonus} onChange={e => setAttackDraft(d => ({ ...d, bonus: e.target.value }))}
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors" />
+                  <input type="text" placeholder="1d6+3 tranchant" value={attackDraft.damage} onChange={e => setAttackDraft(d => ({ ...d, damage: e.target.value }))}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' && attackDraft.name.trim() && attackDraft.damage.trim()) {
+                        setMonsterDraft(d => ({ ...d, attacks: [...(d.attacks ?? []), { ...attackDraft }] }))
+                        setAttackDraft(emptyAttackDraft())
+                      }
+                    }}
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors" />
+                </div>
+                {attackDraft.name.trim() && attackDraft.damage.trim() && (
+                  <button
+                    onClick={() => { setMonsterDraft(d => ({ ...d, attacks: [...(d.attacks ?? []), { ...attackDraft }] })); setAttackDraft(emptyAttackDraft()) }}
+                    className="text-amber-400 hover:text-amber-300 text-xs transition-colors mt-1"
+                  >+ Ajouter attaque</button>
+                )}
               </div>
               <div className="flex justify-end">
                 <button
@@ -2703,7 +2799,19 @@ export function CampaignPage() {
                       <span className="text-stone-500 text-xs">Init {m.initiative_mod >= 0 ? '+' : ''}{m.initiative_mod}</span>
                       <span className="text-amber-600/80 text-xs">{m.xp} XP</span>
                     </div>
+                    {m.speed != null && <span className="text-stone-500 text-xs">Vit. {m.speed} m</span>}
                     {m.notes && <p className="text-stone-500 text-xs mt-1 italic">{m.notes}</p>}
+                    {(m.attacks ?? []).length > 0 && (
+                      <div className="mt-2 space-y-0.5">
+                        {(m.attacks ?? []).map((atk, ai) => (
+                          <p key={ai} className="text-xs text-stone-400">
+                            <span className="font-medium">{atk.name}</span>
+                            {' '}<span className="text-amber-500/80">{atk.bonus}</span>
+                            {' → '}<span className="text-red-400/80">{atk.damage}</span>
+                          </p>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <button
                     onClick={() => handleDeleteCustomMonster(i)}
@@ -2847,6 +2955,191 @@ export function CampaignPage() {
           ) : (
             !addingFaction && (
               <p className="text-stone-600 text-sm text-center py-4">Aucune faction. Ajoutez des organisations pour suivre la réputation des PJs.</p>
+            )
+          )}
+        </div>
+
+        {/* Quêtes */}
+        <div>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Quêtes ({(campaign.quests ?? []).length})
+            </h2>
+            <button
+              onClick={() => { setAddingQuest(v => !v); setQuestDraft(emptyQuestDraft()) }}
+              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+            >
+              {addingQuest ? 'Annuler' : '+ Quête'}
+            </button>
+          </div>
+
+          {addingQuest && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Titre de la quête *"
+                  value={questDraft.title}
+                  onChange={e => setQuestDraft(d => ({ ...d, title: e.target.value }))}
+                  autoFocus
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+                <select
+                  value={questDraft.status}
+                  onChange={e => setQuestDraft(d => ({ ...d, status: e.target.value as Quest['status'] }))}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                >
+                  <option value="active">🟡 Active</option>
+                  <option value="dormant">⚪ En attente</option>
+                  <option value="completed">🟢 Terminée</option>
+                  <option value="failed">🔴 Échouée</option>
+                </select>
+              </div>
+              <input
+                type="text"
+                placeholder="Donneur de quête (PNJ, faction…)"
+                value={questDraft.giver}
+                onChange={e => setQuestDraft(d => ({ ...d, giver: e.target.value }))}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+              />
+              <textarea
+                placeholder="Description de la quête…"
+                value={questDraft.description}
+                onChange={e => setQuestDraft(d => ({ ...d, description: e.target.value }))}
+                rows={3}
+                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+              />
+              <div className="flex justify-end">
+                <button
+                  onClick={handleAddQuest}
+                  disabled={!questDraft.title.trim()}
+                  className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
+          {(campaign.quests ?? []).length > 0 ? (
+            <div className="space-y-2">
+              {(['active', 'dormant', 'completed', 'failed'] as Quest['status'][]).map(status => {
+                const quests = (campaign.quests ?? []).filter(q => q.status === status)
+                if (quests.length === 0) return null
+                const statusLabel: Record<Quest['status'], string> = { active: '🟡 Actives', dormant: '⚪ En attente', completed: '🟢 Terminées', failed: '🔴 Échouées' }
+                return (
+                  <div key={status}>
+                    <p className="text-stone-600 text-xs font-medium mb-1.5 mt-3 first:mt-0">{statusLabel[status]}</p>
+                    <div className="space-y-1.5">
+                      {quests.map(quest => (
+                        <div key={quest.id} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                          {editingQuestId === quest.id ? (
+                            <div className="p-4 space-y-3">
+                              <div className="flex gap-3">
+                                <input
+                                  type="text"
+                                  value={editQuestDraft.title}
+                                  onChange={e => setEditQuestDraft(d => ({ ...d, title: e.target.value }))}
+                                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                                />
+                                <select
+                                  value={editQuestDraft.status}
+                                  onChange={e => setEditQuestDraft(d => ({ ...d, status: e.target.value as Quest['status'] }))}
+                                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                                >
+                                  <option value="active">🟡 Active</option>
+                                  <option value="dormant">⚪ En attente</option>
+                                  <option value="completed">🟢 Terminée</option>
+                                  <option value="failed">🔴 Échouée</option>
+                                </select>
+                              </div>
+                              <input
+                                type="text"
+                                placeholder="Donneur de quête"
+                                value={editQuestDraft.giver}
+                                onChange={e => setEditQuestDraft(d => ({ ...d, giver: e.target.value }))}
+                                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                              />
+                              <textarea
+                                placeholder="Description…"
+                                value={editQuestDraft.description}
+                                onChange={e => setEditQuestDraft(d => ({ ...d, description: e.target.value }))}
+                                rows={3}
+                                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+                              />
+                              <textarea
+                                placeholder="Notes privées MJ…"
+                                value={editQuestDraft.notes}
+                                onChange={e => setEditQuestDraft(d => ({ ...d, notes: e.target.value }))}
+                                rows={2}
+                                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+                              />
+                              <div className="flex items-center justify-between">
+                                <button onClick={() => setEditingQuestId(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                                <div className="flex gap-4">
+                                  <button onClick={() => handleDeleteQuest(quest.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Supprimer</button>
+                                  <button onClick={() => handleUpdateQuest(quest.id)} disabled={!editQuestDraft.title.trim()} className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
+                                </div>
+                              </div>
+                            </div>
+                          ) : (
+                            <div>
+                              <button
+                                onClick={() => setExpandedQuest(expandedQuest === quest.id ? null : quest.id)}
+                                className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-800/50 transition-colors text-left group"
+                              >
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-stone-500 text-xs" style={{ transform: expandedQuest === quest.id ? 'rotate(90deg)' : 'rotate(0deg)', display: 'inline-block', transition: 'transform 0.2s' }}>▶</span>
+                                    <span className="text-white text-sm font-medium truncate">{quest.title}</span>
+                                    {quest.giver && (
+                                      <span className="text-stone-500 text-xs shrink-0">— {quest.giver}</span>
+                                    )}
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <select
+                                    value={quest.status}
+                                    onChange={e => { e.stopPropagation(); handleToggleQuestStatus(quest.id, e.target.value as Quest['status']) }}
+                                    onClick={e => e.stopPropagation()}
+                                    className="bg-stone-800 border border-stone-700 rounded-md px-2 py-1 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors"
+                                  >
+                                    <option value="active">🟡 Active</option>
+                                    <option value="dormant">⚪ En attente</option>
+                                    <option value="completed">🟢 Terminée</option>
+                                    <option value="failed">🔴 Échouée</option>
+                                  </select>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); setEditQuestDraft({ title: quest.title, description: quest.description, status: quest.status, giver: quest.giver, notes: quest.notes }); setEditingQuestId(quest.id); setExpandedQuest(null) }}
+                                    className="text-stone-600 hover:text-stone-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
+                                  >Modifier</button>
+                                </div>
+                              </button>
+                              {expandedQuest === quest.id && (
+                                <div className="px-4 pb-4 border-t border-stone-800 pt-3 space-y-2">
+                                  {quest.description && (
+                                    <p className="text-stone-300 text-sm">{quest.description}</p>
+                                  )}
+                                  {quest.notes && (
+                                    <p className="text-stone-500 text-xs italic">{quest.notes}</p>
+                                  )}
+                                  {!quest.description && !quest.notes && (
+                                    <p className="text-stone-600 text-sm">Aucune description.</p>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            !addingQuest && (
+              <p className="text-stone-600 text-sm text-center py-4">Aucune quête. Ajoutez des objectifs pour suivre la progression des PJs.</p>
             )
           )}
         </div>
@@ -3027,6 +3320,26 @@ export function CampaignPage() {
                   className="w-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
+              <div className="flex gap-3">
+                <div className="flex items-center gap-2">
+                  <label className="text-stone-500 text-xs shrink-0">XP distribué</label>
+                  <input
+                    type="number"
+                    placeholder="0"
+                    value={sessionDraft.xp_awarded}
+                    onChange={e => setSessionDraft(d => ({ ...d, xp_awarded: e.target.value }))}
+                    min={0}
+                    className="w-28 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  />
+                </div>
+                <input
+                  type="text"
+                  placeholder="Butins & récompenses (résumé)"
+                  value={sessionDraft.loot_notes}
+                  onChange={e => setSessionDraft(d => ({ ...d, loot_notes: e.target.value }))}
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                />
+              </div>
               <textarea
                 placeholder={"Notes de la session…\n\nSyntaxe : ## Titre  **gras**  *italique*  - liste  ---"}
                 value={sessionDraft.notes}
@@ -3152,6 +3465,15 @@ export function CampaignPage() {
                             onChange={e => setEditSessionDraft(d => ({ ...d, session_date: e.target.value }))}
                             className="w-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors" />
                         </div>
+                        <div className="flex gap-3">
+                          <div className="flex items-center gap-2">
+                            <label className="text-stone-500 text-xs shrink-0">XP</label>
+                            <input type="number" placeholder="0" value={editSessionDraft.xp_awarded} onChange={e => setEditSessionDraft(d => ({ ...d, xp_awarded: e.target.value }))} min={0}
+                              className="w-24 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors" />
+                          </div>
+                          <input type="text" placeholder="Butins & récompenses" value={editSessionDraft.loot_notes} onChange={e => setEditSessionDraft(d => ({ ...d, loot_notes: e.target.value }))}
+                            className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors" />
+                        </div>
                         <textarea value={editSessionDraft.notes}
                           onChange={e => setEditSessionDraft(d => ({ ...d, notes: e.target.value }))}
                           rows={5} placeholder={"## Titre  **gras**  *italique*  - liste"}
@@ -3183,18 +3505,36 @@ export function CampaignPage() {
                             )}
                           </div>
                           <button
-                            onClick={e => { e.stopPropagation(); setEditSessionDraft({ title: item.data.title, session_date: item.data.session_date ?? '', notes: item.data.notes ?? '' }); setEditingSession(item.data.id); setExpandedSession(null) }}
+                            onClick={e => { e.stopPropagation(); setEditSessionDraft({ title: item.data.title, session_date: item.data.session_date ?? '', notes: item.data.notes ?? '', xp_awarded: item.data.xp_awarded != null ? String(item.data.xp_awarded) : '', loot_notes: item.data.loot_notes ?? '' }); setEditingSession(item.data.id); setExpandedSession(null) }}
                             className="shrink-0 text-stone-600 hover:text-stone-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
                           >Modifier</button>
                         </button>
-                        {expandedSession === item.data.id && item.data.notes && (
-                          <div className="px-4 pb-4 border-t border-stone-800 pt-3">
-                            <MarkdownText>{item.data.notes}</MarkdownText>
+                        {expandedSession === item.data.id && (
+                          <div className="px-4 pb-4 border-t border-stone-800 pt-3 space-y-2">
+                            {(item.data.xp_awarded != null || item.data.loot_notes) && (
+                              <div className="flex flex-wrap gap-3 mb-2">
+                                {item.data.xp_awarded != null && (
+                                  <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2.5 py-0.5">
+                                    +{item.data.xp_awarded.toLocaleString('fr-FR')} XP
+                                  </span>
+                                )}
+                                {item.data.loot_notes && (
+                                  <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2.5 py-0.5">
+                                    🎁 {item.data.loot_notes}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {item.data.notes && <MarkdownText>{item.data.notes}</MarkdownText>}
+                            {!item.data.notes && !item.data.xp_awarded && !item.data.loot_notes && (
+                              <p className="text-stone-600 text-sm">Aucune note pour cette session.</p>
+                            )}
                           </div>
                         )}
                       </div>
                     )}
                   </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -3217,6 +3557,15 @@ export function CampaignPage() {
                           onChange={e => setEditSessionDraft(d => ({ ...d, session_date: e.target.value }))}
                           className="w-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
                         />
+                      </div>
+                      <div className="flex gap-3">
+                        <div className="flex items-center gap-2">
+                          <label className="text-stone-500 text-xs shrink-0">XP</label>
+                          <input type="number" placeholder="0" value={editSessionDraft.xp_awarded} onChange={e => setEditSessionDraft(d => ({ ...d, xp_awarded: e.target.value }))} min={0}
+                            className="w-24 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors" />
+                        </div>
+                        <input type="text" placeholder="Butins & récompenses" value={editSessionDraft.loot_notes} onChange={e => setEditSessionDraft(d => ({ ...d, loot_notes: e.target.value }))}
+                          className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors" />
                       </div>
                       <textarea
                         value={editSessionDraft.notes}
@@ -3262,7 +3611,7 @@ export function CampaignPage() {
                         <button
                           onClick={e => {
                             e.stopPropagation()
-                            setEditSessionDraft({ title: s.title, session_date: s.session_date ?? '', notes: s.notes ?? '' })
+                            setEditSessionDraft({ title: s.title, session_date: s.session_date ?? '', notes: s.notes ?? '', xp_awarded: s.xp_awarded != null ? String(s.xp_awarded) : '', loot_notes: s.loot_notes ?? '' })
                             setEditingSession(s.id)
                             setExpandedSession(null)
                           }}
@@ -3271,9 +3620,26 @@ export function CampaignPage() {
                           Modifier
                         </button>
                       </button>
-                      {expandedSession === s.id && s.notes && (
-                        <div className="px-5 pb-5 border-t border-stone-800 pt-4">
-                          <MarkdownText>{s.notes}</MarkdownText>
+                      {expandedSession === s.id && (
+                        <div className="px-5 pb-5 border-t border-stone-800 pt-4 space-y-2">
+                          {(s.xp_awarded != null || s.loot_notes) && (
+                            <div className="flex flex-wrap gap-3 mb-2">
+                              {s.xp_awarded != null && (
+                                <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2.5 py-0.5">
+                                  +{s.xp_awarded.toLocaleString('fr-FR')} XP
+                                </span>
+                              )}
+                              {s.loot_notes && (
+                                <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2.5 py-0.5">
+                                  🎁 {s.loot_notes}
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {s.notes && <MarkdownText>{s.notes}</MarkdownText>}
+                          {!s.notes && !s.xp_awarded && !s.loot_notes && (
+                            <p className="text-stone-600 text-sm">Aucune note pour cette session.</p>
+                          )}
                         </div>
                       )}
                     </div>

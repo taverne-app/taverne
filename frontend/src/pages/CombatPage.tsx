@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, updateConcentration, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
-import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter } from '../api/campaigns'
+import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter, type CustomMonster, type MonsterAttack } from '../api/campaigns'
 import {
   listCombatants,
   createCombatant,
@@ -582,6 +582,9 @@ export function CombatPage() {
 
   // Combatant HP input per combatant id
   const [combatantHpInputs, setCombatantHpInputs] = useState<Record<number, string>>({})
+
+  // Monster stats popup
+  const [monsterPopup, setMonsterPopup] = useState<CustomMonster | null>(null)
 
   function handleDmRoll() {
     const sides = dmDiceSides
@@ -2497,9 +2500,16 @@ export function CombatPage() {
                       {/* Name */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className={`font-semibold truncate ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}>
+                          <button
+                            onClick={() => {
+                              const m = (campaign?.custom_monsters ?? []).find(m => m.name === cb.name)
+                              if (m) setMonsterPopup(m)
+                            }}
+                            title={(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'Voir les stats' : undefined}
+                            className={`font-semibold truncate text-left ${(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'hover:underline cursor-pointer' : 'cursor-default'} ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}
+                          >
                             {cb.name}
-                          </span>
+                          </button>
                           <button
                             onClick={() => handleCycleFaction(cb.id)}
                             title="Changer la faction"
@@ -3667,6 +3677,71 @@ export function CombatPage() {
           onReset={() => { setShowCombatSummary(false); handleReset() }}
           onDistributeXp={characters.length > 0 ? handleDistributeXpAmount : undefined}
         />
+      )}
+
+      {/* Monster stats popup */}
+      {monsterPopup && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setMonsterPopup(null)}
+        >
+          <div
+            className="bg-stone-900 border border-stone-700 rounded-2xl p-6 w-full max-w-sm shadow-2xl"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-white font-bold text-lg leading-tight">{monsterPopup.name}</h2>
+                <p className="text-stone-500 text-xs mt-0.5">CR {monsterPopup.cr} · {monsterPopup.xp} XP</p>
+              </div>
+              <button onClick={() => setMonsterPopup(null)} className="text-stone-600 hover:text-stone-300 text-lg transition-colors leading-none mt-0.5">✕</button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-2 mb-4">
+              <div className="bg-stone-800 rounded-xl py-2.5 text-center">
+                <p className="text-stone-500 text-xs mb-0.5">CA</p>
+                <p className="text-white font-bold text-xl">{monsterPopup.ac}</p>
+              </div>
+              <div className="bg-stone-800 rounded-xl py-2.5 text-center">
+                <p className="text-stone-500 text-xs mb-0.5">PV moy.</p>
+                <p className="text-white font-bold text-xl">{monsterPopup.hp_avg}</p>
+              </div>
+              <div className="bg-stone-800 rounded-xl py-2.5 text-center">
+                <p className="text-stone-500 text-xs mb-0.5">Init.</p>
+                <p className="text-white font-bold text-xl">{monsterPopup.initiative_mod >= 0 ? `+${monsterPopup.initiative_mod}` : monsterPopup.initiative_mod}</p>
+              </div>
+            </div>
+
+            {monsterPopup.speed != null && (
+              <p className="text-stone-400 text-xs mb-3">Vitesse : {monsterPopup.speed} m</p>
+            )}
+
+            {(monsterPopup.attacks ?? []).length > 0 && (
+              <div className="mb-4">
+                <p className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-2">Attaques</p>
+                <div className="space-y-1.5">
+                  {(monsterPopup.attacks ?? []).map((atk: MonsterAttack, i: number) => (
+                    <div key={i} className="bg-stone-800 rounded-lg px-3 py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-white text-sm font-medium">{atk.name}</span>
+                        <div className="flex items-center gap-2 text-xs">
+                          <span className="text-amber-300 font-mono">{atk.bonus}</span>
+                          <span className="text-stone-400">→</span>
+                          <span className="text-red-300 font-mono">{atk.damage}</span>
+                        </div>
+                      </div>
+                      {atk.notes && <p className="text-stone-500 text-xs mt-0.5">{atk.notes}</p>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {monsterPopup.notes && (
+              <p className="text-stone-400 text-sm">{monsterPopup.notes}</p>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

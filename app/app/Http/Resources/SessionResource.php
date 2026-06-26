@@ -15,6 +15,8 @@ class SessionResource extends JsonResource
             'title'        => $this->title,
             'session_date' => $this->session_date?->toDateString(),
             'notes'        => $this->notes,
+            'xp_awarded'   => $this->xp_awarded,
+            'loot_notes'   => $this->loot_notes,
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,
         ];
