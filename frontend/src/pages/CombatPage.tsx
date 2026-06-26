@@ -475,6 +475,8 @@ export function CombatPage() {
 
   // Manual initiative reordering
   const [manualOrder, setManualOrder] = useState<string[] | null>(null)
+  const [dragRowId, setDragRowId] = useState<string | null>(null)
+  const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   // DM dice roller
   const [dmDiceOpen, setDmDiceOpen] = useState(false)
@@ -502,6 +504,8 @@ export function CombatPage() {
   interface CombatLogEntry { id: number; time: string; type: 'turn' | 'roll' | 'hp' | 'xp' | 'join'; text: string }
   const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([])
   const [showCombatLog, setShowCombatLog] = useState(false)
+  const [savingLog, setSavingLog] = useState(false)
+  const [logSaved, setLogSaved] = useState(false)
   const logIdRef = useRef(0)
 
   function logEvent(type: CombatLogEntry['type'], text: string) {
@@ -512,6 +516,24 @@ export function CombatPage() {
       text,
     }
     setCombatLog(prev => [entry, ...prev].slice(0, 150))
+  }
+
+  async function handleSaveLogToSession() {
+    if (!campaignId || combatLog.length === 0 || savingLog) return
+    setSavingLog(true)
+    try {
+      const today = new Date().toISOString().split('T')[0]
+      const lines = [...combatLog].reverse().map(e => `[${e.time}] ${e.text}`)
+      await createSession(campaignId, {
+        title: `Journal de combat — ${today}`,
+        session_date: today,
+        notes: lines.join('\n'),
+      })
+      setLogSaved(true)
+      setTimeout(() => setLogSaved(false), 3000)
+    } finally {
+      setSavingLog(false)
+    }
   }
 
   function handleRollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage') {
@@ -1068,6 +1090,26 @@ export function CombatPage() {
     ;[next[idx], next[targetIdx]] = [next[targetIdx], next[idx]]
     setManualOrder(next)
     // Keep activeTurn pointing at the same combatant
+    if (activeCombatant) {
+      const activeId = rowId(activeCombatant)
+      const newWithRollIds = next.filter(nId => sorted.find(r => rowId(r) === nId)?.initiativeRoll != null)
+      const newIdx = newWithRollIds.indexOf(activeId)
+      if (newIdx >= 0 && newIdx !== activeTurn) setActiveTurn(newIdx)
+    }
+  }
+
+  function handleDrop(targetId: string) {
+    if (!dragRowId || dragRowId === targetId) { setDragRowId(null); setDragOverId(null); return }
+    const currentOrder = manualOrder ?? sorted.map(rowId)
+    const fromIdx = currentOrder.indexOf(dragRowId)
+    const toIdx = currentOrder.indexOf(targetId)
+    if (fromIdx < 0 || toIdx < 0) return
+    const next = [...currentOrder]
+    next.splice(fromIdx, 1)
+    next.splice(toIdx, 0, dragRowId)
+    setManualOrder(next)
+    setDragRowId(null)
+    setDragOverId(null)
     if (activeCombatant) {
       const activeId = rowId(activeCombatant)
       const newWithRollIds = next.filter(nId => sorted.find(r => rowId(r) === nId)?.initiativeRoll != null)
@@ -1787,19 +1829,25 @@ export function CombatPage() {
                   return (
                     <div
                       key={rowId(row)}
-                      className={`px-5 py-4 transition-colors ${
-                        isActive
-                          ? 'bg-amber-500/10 border-l-2 border-amber-500'
-                          : 'hover:bg-stone-800/40'
+                      draggable={!!manualOrder}
+                      onDragStart={manualOrder ? () => setDragRowId(rowId(row)) : undefined}
+                      onDragOver={manualOrder ? e => { e.preventDefault(); setDragOverId(rowId(row)) } : undefined}
+                      onDrop={manualOrder ? e => { e.preventDefault(); handleDrop(rowId(row)) } : undefined}
+                      onDragEnd={manualOrder ? () => { setDragRowId(null); setDragOverId(null) } : undefined}
+                      className={`px-5 py-4 transition-colors ${manualOrder ? 'cursor-grab' : ''} ${
+                        manualOrder && dragRowId === rowId(row) ? 'opacity-40' :
+                        manualOrder && dragOverId === rowId(row) && dragRowId !== rowId(row) ? 'border-t border-sky-500' :
+                        isActive ? 'bg-amber-500/10 border-l-2 border-amber-500' :
+                        'hover:bg-stone-800/40'
                       }`}
                     >
                       <div className="flex items-center gap-4">
-                        {/* Reorder buttons */}
+                        {/* Reorder handle */}
                         {manualOrder && (
-                          <div className="flex flex-col gap-0.5 shrink-0">
-                            <button onClick={() => moveRow(rowId(row), 'up')} disabled={displayIdx === 0}
+                          <div className="flex flex-col gap-0.5 shrink-0 select-none">
+                            <button onClick={e => { e.stopPropagation(); moveRow(rowId(row), 'up') }} disabled={displayIdx === 0}
                               className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▲</button>
-                            <button onClick={() => moveRow(rowId(row), 'down')} disabled={displayIdx === displayRows.length - 1}
+                            <button onClick={e => { e.stopPropagation(); moveRow(rowId(row), 'down') }} disabled={displayIdx === displayRows.length - 1}
                               className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▼</button>
                           </div>
                         )}
@@ -2266,19 +2314,25 @@ export function CombatPage() {
                 return (
                   <div
                     key={rowId(row)}
-                    className={`px-5 py-4 transition-colors ${
-                      isActive
-                        ? 'bg-red-500/10 border-l-2 border-red-500'
-                        : 'hover:bg-stone-800/40'
+                    draggable={!!manualOrder}
+                    onDragStart={manualOrder ? () => setDragRowId(rowId(row)) : undefined}
+                    onDragOver={manualOrder ? e => { e.preventDefault(); setDragOverId(rowId(row)) } : undefined}
+                    onDrop={manualOrder ? e => { e.preventDefault(); handleDrop(rowId(row)) } : undefined}
+                    onDragEnd={manualOrder ? () => { setDragRowId(null); setDragOverId(null) } : undefined}
+                    className={`px-5 py-4 transition-colors ${manualOrder ? 'cursor-grab' : ''} ${
+                      manualOrder && dragRowId === rowId(row) ? 'opacity-40' :
+                      manualOrder && dragOverId === rowId(row) && dragRowId !== rowId(row) ? 'border-t border-sky-500' :
+                      isActive ? 'bg-red-500/10 border-l-2 border-red-500' :
+                      'hover:bg-stone-800/40'
                     }`}
                   >
                     <div className="flex items-center gap-4">
-                      {/* Reorder buttons */}
+                      {/* Reorder handle */}
                       {manualOrder && (
-                        <div className="flex flex-col gap-0.5 shrink-0">
-                          <button onClick={() => moveRow(rowId(row), 'up')} disabled={displayIdx === 0}
+                        <div className="flex flex-col gap-0.5 shrink-0 select-none">
+                          <button onClick={e => { e.stopPropagation(); moveRow(rowId(row), 'up') }} disabled={displayIdx === 0}
                             className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▲</button>
-                          <button onClick={() => moveRow(rowId(row), 'down')} disabled={displayIdx === displayRows.length - 1}
+                          <button onClick={e => { e.stopPropagation(); moveRow(rowId(row), 'down') }} disabled={displayIdx === displayRows.length - 1}
                             className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▼</button>
                         </div>
                       )}
@@ -3299,6 +3353,15 @@ export function CombatPage() {
                 <span className="ml-2 text-stone-600 font-normal normal-case tracking-normal">({combatLog.length})</span>
               </h2>
               <div className="flex items-center gap-3">
+                {campaignId && (
+                  <button
+                    onClick={e => { e.stopPropagation(); void handleSaveLogToSession() }}
+                    disabled={savingLog}
+                    className={`text-xs transition-colors ${logSaved ? 'text-emerald-400' : 'text-stone-600 hover:text-stone-400'}`}
+                  >
+                    {logSaved ? '✓ Sauvegardé' : savingLog ? '…' : '💾 Session'}
+                  </button>
+                )}
                 <button
                   onClick={e => { e.stopPropagation(); setCombatLog([]) }}
                   className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
