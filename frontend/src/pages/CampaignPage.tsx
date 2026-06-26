@@ -19,6 +19,7 @@ import {
   type RandomTableEntry,
   type MapPin,
   type CampaignMap,
+  type Milestone,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
 import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, type Character } from '../api/characters'
@@ -167,6 +168,11 @@ export function CampaignPage() {
   const [sceneDraft, setSceneDraft] = useState<PrepScene>(emptyScene())
   const [addingScene, setAddingScene] = useState(false)
   const [expandedScene, setExpandedScene] = useState<string | null>(null)
+
+  // Jalons de campagne
+  const emptyMilestone = (): Omit<Milestone, 'id'> => ({ date: '', title: '', type: 'other', notes: '' })
+  const [addingMilestone, setAddingMilestone] = useState(false)
+  const [milestoneDraft, setMilestoneDraft] = useState<Omit<Milestone, 'id'>>(emptyMilestone())
 
   // Carte de campagne
   const [mapUrlDraft, setMapUrlDraft] = useState('')
@@ -655,6 +661,23 @@ export function CampaignPage() {
       pins: campaign.campaign_map.pins.filter(p => p.id !== pinId),
     }
     const updated = await updateCampaign(campaign.id, { campaign_map: next })
+    setCampaign(updated)
+  }
+
+  async function handleAddMilestone() {
+    if (!campaign || !milestoneDraft.title.trim()) return
+    const milestone: Milestone = { ...milestoneDraft, id: crypto.randomUUID(), title: milestoneDraft.title.trim() }
+    const next = [...(campaign.campaign_milestones ?? []), milestone]
+    const updated = await updateCampaign(campaign.id, { campaign_milestones: next })
+    setCampaign(updated)
+    setMilestoneDraft(emptyMilestone())
+    setAddingMilestone(false)
+  }
+
+  async function handleDeleteMilestone(id: string) {
+    if (!campaign) return
+    const next = (campaign.campaign_milestones ?? []).filter(m => m.id !== id)
+    const updated = await updateCampaign(campaign.id, { campaign_milestones: next })
     setCampaign(updated)
   }
 
@@ -1516,6 +1539,45 @@ export function CampaignPage() {
                         ))}
                       </div>
                     )}
+
+                    {/* Hover card — spell slots, concentration, resources */}
+                    {(() => {
+                      const slots = Object.entries(c.spellcasting.slots).filter(([, s]) => s.max > 0)
+                      const resources = c.resources.filter(r => r.max > 0)
+                      const hasExtras = c.state.concentrating_on || slots.length > 0 || resources.length > 0
+                      if (!hasExtras) return null
+                      return (
+                        <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-2 pt-2 border-t border-stone-800">
+                          {c.state.concentrating_on && (
+                            <p className="text-violet-400 text-xs mb-1">⊙ {c.state.concentrating_on}</p>
+                          )}
+                          {slots.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-1">
+                              {slots.map(([lvl, s]) => (
+                                <span
+                                  key={lvl}
+                                  className={`text-xs font-mono px-1 rounded ${s.used >= s.max ? 'text-stone-600 bg-stone-800' : 'text-amber-400 bg-amber-900/30'}`}
+                                >
+                                  {lvl}:{s.max - s.used}/{s.max}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                          {resources.length > 0 && (
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                              {resources.map(r => (
+                                <span
+                                  key={r.name}
+                                  className={`text-xs ${r.current === 0 ? 'text-stone-600' : 'text-sky-400'}`}
+                                >
+                                  {r.name} {r.current}/{r.max}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}
@@ -2930,12 +2992,20 @@ export function CampaignPage() {
                 </div>
               )}
             </div>
-            <button
-              onClick={() => { setAddingSession(v => !v); setSessionDraft({ title: '', session_date: '', notes: '' }) }}
-              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-            >
-              {addingSession ? 'Annuler' : '+ Nouvelle session'}
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { setAddingMilestone(v => !v); setMilestoneDraft(emptyMilestone()) }}
+                className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors"
+              >
+                {addingMilestone ? 'Annuler' : '⭐ Jalon'}
+              </button>
+              <button
+                onClick={() => { setAddingSession(v => !v); setSessionDraft({ title: '', session_date: '', notes: '' }) }}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+              >
+                {addingSession ? 'Annuler' : '+ Nouvelle session'}
+              </button>
+            </div>
           </div>
 
           {/* Add session form */}
@@ -2976,6 +3046,55 @@ export function CampaignPage() {
             </div>
           )}
 
+          {/* Add milestone form */}
+          {addingMilestone && (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
+              <div className="flex gap-3">
+                <input
+                  type="text"
+                  placeholder="Titre du jalon *"
+                  value={milestoneDraft.title}
+                  onChange={e => setMilestoneDraft(d => ({ ...d, title: e.target.value }))}
+                  autoFocus
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                />
+                <input
+                  type="date"
+                  value={milestoneDraft.date}
+                  onChange={e => setMilestoneDraft(d => ({ ...d, date: e.target.value }))}
+                  className="w-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                />
+              </div>
+              <div className="flex gap-3">
+                <select
+                  value={milestoneDraft.type}
+                  onChange={e => setMilestoneDraft(d => ({ ...d, type: e.target.value as Milestone['type'] }))}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                >
+                  <option value="discovery">🔍 Découverte</option>
+                  <option value="death">💀 Mort / perte</option>
+                  <option value="arc">🏆 Arc narratif</option>
+                  <option value="combat">⚔ Combat notable</option>
+                  <option value="other">⭐ Autre</option>
+                </select>
+                <input
+                  type="text"
+                  placeholder="Notes optionnelles…"
+                  value={milestoneDraft.notes}
+                  onChange={e => setMilestoneDraft(d => ({ ...d, notes: e.target.value }))}
+                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                />
+                <button
+                  onClick={handleAddMilestone}
+                  disabled={!milestoneDraft.title.trim()}
+                  className="text-sky-400 hover:text-sky-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                >
+                  Ajouter
+                </button>
+              </div>
+            </div>
+          )}
+
           {sessions.length === 0 && !addingSession ? (
             <div className="bg-stone-900 border border-stone-800 rounded-xl p-8 text-center">
               <p className="text-stone-500 text-sm">
@@ -2985,16 +3104,45 @@ export function CampaignPage() {
                 </button>
               </p>
             </div>
-          ) : sessionView === 'timeline' ? (
+          ) : sessionView === 'timeline' ? (() => {
+            type TimelineItem =
+              | { kind: 'session'; sortKey: string; data: CampaignSession }
+              | { kind: 'milestone'; sortKey: string; data: Milestone }
+            const milestones = campaign.campaign_milestones ?? []
+            const items: TimelineItem[] = [
+              ...sessions.map(s => ({ kind: 'session' as const, sortKey: s.session_date ?? s.created_at ?? '', data: s })),
+              ...milestones.map(m => ({ kind: 'milestone' as const, sortKey: m.date ?? '', data: m })),
+            ].sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+            const sessionNums = new Map(sessions.map((s, si) => [s.id, si + 1]))
+            const milestoneIcons: Record<Milestone['type'], string> = { discovery: '🔍', death: '💀', arc: '🏆', combat: '⚔', other: '⭐' }
+            const milestoneColors: Record<Milestone['type'], string> = {
+              discovery: 'bg-sky-500', death: 'bg-red-600', arc: 'bg-amber-500', combat: 'bg-orange-500', other: 'bg-violet-500',
+            }
+            return (
             <div className="space-y-0">
-              {sessions.map((s, i) => (
-                <div key={s.id} className="flex gap-3">
+              {items.map((item, i) => (
+                <div key={item.kind === 'session' ? `s-${item.data.id}` : `m-${item.data.id}`} className="flex gap-3">
                   <div className="flex flex-col items-center shrink-0 w-5">
-                    <div className={`w-3 h-3 rounded-full mt-3 border-2 border-stone-950 shrink-0 transition-colors ${expandedSession === s.id ? 'bg-amber-500' : 'bg-stone-600'}`} />
-                    {i < sessions.length - 1 && <div className="flex-1 w-0.5 bg-stone-800 my-1 min-h-3" />}
+                    {item.kind === 'milestone' ? (
+                      <div className={`w-3.5 h-3.5 rounded-sm mt-3 shrink-0 ${milestoneColors[item.data.type]}`} />
+                    ) : (
+                      <div className={`w-3 h-3 rounded-full mt-3 border-2 border-stone-950 shrink-0 transition-colors ${expandedSession === item.data.id ? 'bg-amber-500' : 'bg-stone-600'}`} />
+                    )}
+                    {i < items.length - 1 && <div className="flex-1 w-0.5 bg-stone-800 my-1 min-h-3" />}
                   </div>
+                  {item.kind === 'milestone' ? (
+                    <div className="flex-1 pb-2">
+                      <div className="flex items-center gap-2 py-2">
+                        <span className="text-sm">{milestoneIcons[item.data.type]}</span>
+                        <span className="text-stone-200 text-sm font-medium">{item.data.title}</span>
+                        {item.data.date && <span className="text-stone-600 text-xs">{new Date(item.data.date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                        {item.data.notes && <span className="text-stone-500 text-xs italic truncate max-w-xs">{item.data.notes}</span>}
+                        <button onClick={() => handleDeleteMilestone(item.data.id)} className="ml-auto text-stone-700 hover:text-red-400 text-xs transition-colors">✕</button>
+                      </div>
+                    </div>
+                  ) : (
                   <div className="flex-1 pb-2">
-                    {editingSession === s.id ? (
+                    {editingSession === item.data.id ? (
                       <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 space-y-3">
                         <div className="flex gap-3">
                           <input type="text" value={editSessionDraft.title}
@@ -3011,8 +3159,8 @@ export function CampaignPage() {
                         <div className="flex items-center justify-between">
                           <button onClick={() => setEditingSession(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
                           <div className="flex gap-4">
-                            <button onClick={() => handleDeleteSession(s.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Supprimer</button>
-                            <button onClick={() => handleUpdateSession(s.id)} disabled={saving || !editSessionDraft.title.trim()}
+                            <button onClick={() => handleDeleteSession(item.data.id)} className="text-red-500 hover:text-red-400 text-xs transition-colors">Supprimer</button>
+                            <button onClick={() => handleUpdateSession(item.data.id)} disabled={saving || !editSessionDraft.title.trim()}
                               className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
                           </div>
                         </div>
@@ -3020,28 +3168,28 @@ export function CampaignPage() {
                     ) : (
                       <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
                         <button
-                          onClick={() => setExpandedSession(expandedSession === s.id ? null : s.id)}
+                          onClick={() => setExpandedSession(expandedSession === item.data.id ? null : item.data.id)}
                           className="w-full flex items-center justify-between gap-3 px-4 py-3 hover:bg-stone-800/50 transition-colors text-left group"
                         >
                           <div className="min-w-0">
                             <div className="flex items-center gap-2">
-                              <span className="text-stone-600 text-xs font-mono shrink-0">#{i + 1}</span>
-                              <span className="text-white text-sm font-medium truncate">{s.title}</span>
+                              <span className="text-stone-600 text-xs font-mono shrink-0">#{sessionNums.get(item.data.id)}</span>
+                              <span className="text-white text-sm font-medium truncate">{item.data.title}</span>
                             </div>
-                            {s.session_date && (
+                            {item.data.session_date && (
                               <p className="text-stone-500 text-xs mt-0.5">
-                                {new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
+                                {new Date(item.data.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                               </p>
                             )}
                           </div>
                           <button
-                            onClick={e => { e.stopPropagation(); setEditSessionDraft({ title: s.title, session_date: s.session_date ?? '', notes: s.notes ?? '' }); setEditingSession(s.id); setExpandedSession(null) }}
+                            onClick={e => { e.stopPropagation(); setEditSessionDraft({ title: item.data.title, session_date: item.data.session_date ?? '', notes: item.data.notes ?? '' }); setEditingSession(item.data.id); setExpandedSession(null) }}
                             className="shrink-0 text-stone-600 hover:text-stone-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
                           >Modifier</button>
                         </button>
-                        {expandedSession === s.id && s.notes && (
+                        {expandedSession === item.data.id && item.data.notes && (
                           <div className="px-4 pb-4 border-t border-stone-800 pt-3">
-                            <MarkdownText>{s.notes}</MarkdownText>
+                            <MarkdownText>{item.data.notes}</MarkdownText>
                           </div>
                         )}
                       </div>
@@ -3050,7 +3198,7 @@ export function CampaignPage() {
                 </div>
               ))}
             </div>
-          ) : (
+          )})() : (
             <div className="space-y-2">
               {sessions.map(s => (
                 <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">

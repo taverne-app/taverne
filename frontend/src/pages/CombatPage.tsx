@@ -428,6 +428,7 @@ export function CombatPage() {
   const [aoeMode, setAoeMode] = useState(false)
   const [aoeSelected, setAoeSelected] = useState<Set<string>>(new Set())
   const [aoeDamageInput, setAoeDamageInput] = useState('')
+  const [aoeCondition, setAoeCondition] = useState('')
   const [expandedMonster, setExpandedMonster] = useState<number | null>(null)
   const [expandedCharacterConditions, setExpandedCharacterConditions] = useState<number | null>(null)
   const [characterConditionDurationDraft, setCharacterConditionDurationDraft] = useState<Record<string, string>>({})
@@ -905,6 +906,32 @@ export function CombatPage() {
     setAoeDamageInput('')
     setAoeSelected(new Set())
     setAoeMode(false)
+  }
+
+  async function handleAoeCondition() {
+    if (!aoeCondition || aoeSelected.size === 0) return
+    const names: string[] = []
+    await Promise.all(Array.from(aoeSelected).map(async id => {
+      const [kind, rawId] = id.split('-')
+      const numId = parseInt(rawId, 10)
+      if (kind === 'character') {
+        const char = characters.find(c => c.id === numId)
+        if (!char || char.state.conditions.includes(aoeCondition)) return
+        names.push(char.name)
+        const updated = await updateConditions(numId, [...char.state.conditions, aoeCondition], char.state.condition_durations)
+        updateCharacter(updated)
+      } else if (kind === 'combatant' && campaignId) {
+        const cb = combatants.find(c => c.id === numId)
+        if (!cb || cb.conditions.includes(aoeCondition)) return
+        names.push(cb.name)
+        const updated = await updateCombatantConditions(campaignId, numId, [...cb.conditions, aoeCondition], cb.condition_durations)
+        setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+      }
+    }))
+    if (names.length > 0) {
+      logEvent('condition', `${CONDITIONS_FR[aoeCondition] ?? aoeCondition} → ${names.join(', ')}`)
+    }
+    setAoeCondition('')
   }
 
   async function handleDeleteCombatant(id: number) {
@@ -1567,6 +1594,45 @@ export function CombatPage() {
                 {activeRowSubtitle && (
                   <p className="text-stone-400 text-xs mt-0.5">{activeRowSubtitle}</p>
                 )}
+                {activeCombatant && (() => {
+                  if (activeCombatant.kind === 'character') {
+                    const ch = activeCombatant.data
+                    const slots = Object.entries(ch.spellcasting.slots).filter(([, s]) => s.max > 0)
+                    const resources = ch.resources.filter(r => r.max > 0)
+                    const hasExtras = ch.state.concentrating_on || slots.length > 0 || resources.length > 0 || ch.state.conditions.length > 0
+                    if (!hasExtras) return null
+                    return (
+                      <div className="flex flex-wrap gap-x-3 gap-y-1 mt-1.5">
+                        {ch.state.concentrating_on && (
+                          <span className="text-violet-400 text-xs">⊙ {ch.state.concentrating_on}</span>
+                        )}
+                        {ch.state.conditions.map(cond => (
+                          <span key={cond} className="text-purple-300 text-xs bg-purple-900/40 rounded px-1">{CONDITIONS_FR[cond] ?? cond}</span>
+                        ))}
+                        {slots.map(([lvl, s]) => (
+                          <span key={lvl} className={`text-xs font-mono ${s.used >= s.max ? 'text-stone-600' : 'text-amber-400'}`}>
+                            {lvl}:{s.max - s.used}/{s.max}
+                          </span>
+                        ))}
+                        {resources.map(r => (
+                          <span key={r.name} className={`text-xs ${r.current === 0 ? 'text-stone-600' : 'text-sky-400'}`}>
+                            {r.name} {r.current}/{r.max}
+                          </span>
+                        ))}
+                      </div>
+                    )
+                  } else {
+                    const cb = activeCombatant.data
+                    if (cb.conditions.length === 0) return null
+                    return (
+                      <div className="flex flex-wrap gap-x-2 gap-y-1 mt-1.5">
+                        {cb.conditions.map(cond => (
+                          <span key={cond} className="text-purple-300 text-xs bg-purple-900/40 rounded px-1">{CONDITIONS_FR[cond] ?? cond}</span>
+                        ))}
+                      </div>
+                    )
+                  }
+                })()}
               </div>
               <div className="flex items-center gap-2 flex-wrap justify-end">
                 {/* Timer config */}
@@ -2743,8 +2809,26 @@ export function CombatPage() {
                 >
                   Soins
                 </button>
+                <span className="text-stone-700">|</span>
+                <select
+                  value={aoeCondition}
+                  onChange={e => setAoeCondition(e.target.value)}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-stone-300 text-xs focus:outline-none focus:border-orange-500 transition-colors"
+                >
+                  <option value="">État...</option>
+                  {Object.entries(CONDITIONS_FR).map(([key, label]) => (
+                    <option key={key} value={key}>{label}</option>
+                  ))}
+                </select>
                 <button
-                  onClick={() => { setAoeMode(false); setAoeSelected(new Set()); setAoeDamageInput('') }}
+                  onClick={handleAoeCondition}
+                  disabled={!aoeCondition || aoeSelected.size === 0}
+                  className="bg-purple-800/60 hover:bg-purple-700/80 disabled:opacity-40 border border-purple-700/50 text-purple-200 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
+                >
+                  Appliquer
+                </button>
+                <button
+                  onClick={() => { setAoeMode(false); setAoeSelected(new Set()); setAoeDamageInput(''); setAoeCondition('') }}
                   className="text-stone-500 hover:text-stone-300 text-xs transition-colors ml-auto"
                 >
                   Annuler
