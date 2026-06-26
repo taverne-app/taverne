@@ -354,6 +354,110 @@ export function SharedCampaignPage() {
           </section>
         )}
 
+        {/* Carte de campagne */}
+        {campaign.campaign_map?.image_url && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Carte</h2>
+            <div className="relative bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+              <div className="relative" style={{ userSelect: 'none' }}>
+                <img
+                  src={campaign.campaign_map.image_url}
+                  alt="Carte de campagne"
+                  className="w-full h-auto block"
+                  onError={e => { (e.target as HTMLImageElement).parentElement!.style.display = 'none' }}
+                />
+                {campaign.campaign_map.pins.map(pin => {
+                  const colorClasses: Record<string, string> = {
+                    amber: 'bg-amber-500 border-amber-400',
+                    red: 'bg-red-500 border-red-400',
+                    blue: 'bg-blue-500 border-blue-400',
+                    green: 'bg-emerald-500 border-emerald-400',
+                    purple: 'bg-purple-500 border-purple-400',
+                    sky: 'bg-sky-500 border-sky-400',
+                  }
+                  const textClasses: Record<string, string> = {
+                    amber: 'bg-amber-900/90 border-amber-600/60 text-amber-200',
+                    red: 'bg-red-900/90 border-red-600/60 text-red-200',
+                    blue: 'bg-blue-900/90 border-blue-600/60 text-blue-200',
+                    green: 'bg-emerald-900/90 border-emerald-600/60 text-emerald-200',
+                    purple: 'bg-purple-900/90 border-purple-600/60 text-purple-200',
+                    sky: 'bg-sky-900/90 border-sky-600/60 text-sky-200',
+                  }
+                  return (
+                    <div
+                      key={pin.id}
+                      className="absolute pointer-events-none"
+                      style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: 'translate(-50%, -100%)' }}
+                    >
+                      <span className={`block text-xs font-semibold whitespace-nowrap border rounded px-1.5 py-0.5 mb-0.5 ${textClasses[pin.color] ?? textClasses.amber}`}>
+                        {pin.label}
+                      </span>
+                      <div className={`w-0.5 h-3 mx-auto rounded-full ${colorClasses[pin.color] ?? colorClasses.amber}`} />
+                      <div className={`w-2 h-2 rounded-full border mx-auto ${colorClasses[pin.color] ?? colorClasses.amber}`} />
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </section>
+        )}
+
+        {/* PNJ connus (alliés / neutres) */}
+        {(campaign.npcs ?? []).filter(n => n.status === 'allié' || n.status === 'neutre').length > 0 && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">PNJ connus</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(campaign.npcs ?? [])
+                .filter(n => n.status === 'allié' || n.status === 'neutre')
+                .map((npc, i) => (
+                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+                    <div className="flex items-start gap-2">
+                      <span className="text-base shrink-0 mt-0.5">
+                        {npc.status === 'allié' ? '🟢' : '🟡'}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="text-white font-semibold text-sm leading-tight">{npc.name}</p>
+                        {npc.role && <p className="text-stone-400 text-xs mt-0.5">{npc.role}</p>}
+                        {npc.location && (
+                          <p className="text-stone-500 text-xs mt-1">📍 {npc.location}</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </section>
+        )}
+
+        {/* Lieux connus / explorés */}
+        {(campaign.locations ?? []).filter(l => l.status === 'connu' || l.status === 'exploré').length > 0 && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Lieux</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {(campaign.locations ?? [])
+                .filter(l => l.status === 'connu' || l.status === 'exploré')
+                .map((loc, i) => (
+                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="text-white font-semibold text-sm leading-tight capitalize">{loc.name}</p>
+                        <p className="text-stone-500 text-xs mt-0.5 capitalize">{loc.type}</p>
+                      </div>
+                      <span className={`shrink-0 text-xs font-medium rounded-full px-2 py-0.5 border ${
+                        loc.status === 'exploré'
+                          ? 'bg-emerald-900/50 border-emerald-700/50 text-emerald-400'
+                          : 'bg-amber-900/50 border-amber-700/50 text-amber-400'
+                      }`}>
+                        {loc.status === 'exploré' ? 'Exploré' : 'Connu'}
+                      </span>
+                    </div>
+                    {loc.notes && <p className="text-stone-400 text-xs mt-2 line-clamp-2">{loc.notes}</p>}
+                  </div>
+                ))}
+            </div>
+          </section>
+        )}
+
         {characters.length === 0 && combatants.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-stone-500 text-sm">Aucun personnage dans cette campagne.</p>

@@ -21,7 +21,7 @@ import {
   type CampaignMap,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, updateInventory, updateIdentity, type Character } from '../api/characters'
+import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -36,7 +36,7 @@ import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
 import { computeEncounterDifficulty, difficultyColor } from '../data/encounter_difficulty'
 import { CR_XP } from '../data/monsters'
-import { generateNpc, type GeneratedNpc } from '../data/npc_generator'
+import { generateNpc, generateNpcName, NPC_RACES, type GeneratedNpc } from '../data/npc_generator'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -180,6 +180,13 @@ export function CampaignPage() {
 
   // Export / Import
   const [importing, setImporting] = useState(false)
+
+  // Recherche globale
+  const [searchQuery, setSearchQuery] = useState('')
+
+  // HP rapide (tableau de bord santé du groupe)
+  const [hpEditCharId, setHpEditCharId] = useState<number | null>(null)
+  const [hpDeltaValue, setHpDeltaValue] = useState(5)
 
   // Load campaign
   useEffect(() => {
@@ -427,6 +434,13 @@ export function CampaignPage() {
     setSessionPrepDraft(emptySessionPrep())
     setHasSessionPrep(false)
     setEditingSessionPrep(false)
+  }
+
+  async function handleQuickHp(charId: number, amount: number, type: 'damage' | 'heal') {
+    if (amount <= 0) return
+    const updated = await updateHp(charId, amount, type)
+    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
+    setHpEditCharId(null)
   }
 
   async function handleGroupLongRest() {
@@ -785,6 +799,102 @@ export function CampaignPage() {
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
+        {/* Recherche globale */}
+        {(() => {
+          const q = searchQuery.trim().toLowerCase()
+          const active = q.length >= 2
+          const npcs = active ? (campaign.npcs ?? []).filter(n =>
+            n.name.toLowerCase().includes(q) || n.role.toLowerCase().includes(q) || n.notes.toLowerCase().includes(q)
+          ) : []
+          const locs = active ? (campaign.locations ?? []).filter(l => l.name.toLowerCase().includes(q) || l.notes.toLowerCase().includes(q)) : []
+          const monsters = active ? (campaign.custom_monsters ?? []).filter(m => m.name.toLowerCase().includes(q)) : []
+          const sess = active ? sessions.filter(s => s.title.toLowerCase().includes(q) || (s.notes ?? '').toLowerCase().includes(q)) : []
+          const total = npcs.length + locs.length + monsters.length + sess.length
+          return (
+            <>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, sessions…"
+                  value={searchQuery}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  className="w-full bg-stone-900 border border-stone-800 rounded-xl px-4 py-3 pr-10 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+                {active ? (
+                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 text-lg leading-none transition-colors">×</button>
+                ) : (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-600 text-sm">🔍</span>
+                )}
+              </div>
+              {active && (
+                <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 space-y-4 -mt-3">
+                  {total === 0 ? (
+                    <p className="text-stone-500 text-sm text-center py-2">Aucun résultat pour «{searchQuery.trim()}»</p>
+                  ) : (
+                    <>
+                      {npcs.length > 0 && (
+                        <div>
+                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">PNJ ({npcs.length})</p>
+                          <div className="divide-y divide-stone-800">
+                            {npcs.map((n, i) => (
+                              <div key={i} className="flex items-center gap-3 py-1.5">
+                                <span className="text-base shrink-0">{n.status === 'allié' ? '🟢' : n.status === 'ennemi' ? '🔴' : n.status === 'neutre' ? '🟡' : '❓'}</span>
+                                <span className="text-white text-sm font-medium">{n.name}</span>
+                                {n.role && <span className="text-stone-500 text-xs">{n.role}</span>}
+                                {n.location && <span className="text-stone-600 text-xs">📍 {n.location}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {locs.length > 0 && (
+                        <div>
+                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Lieux ({locs.length})</p>
+                          <div className="divide-y divide-stone-800">
+                            {locs.map((l, i) => (
+                              <div key={i} className="flex items-center gap-3 py-1.5">
+                                <span className="text-white text-sm font-medium">{l.name}</span>
+                                <span className="text-stone-500 text-xs capitalize">{l.type}</span>
+                                <span className={`text-xs ${l.status === 'exploré' ? 'text-emerald-400' : l.status === 'connu' ? 'text-amber-400' : 'text-stone-500'}`}>{l.status}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {monsters.length > 0 && (
+                        <div>
+                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Bestiaire ({monsters.length})</p>
+                          <div className="divide-y divide-stone-800">
+                            {monsters.map((m, i) => (
+                              <div key={i} className="flex items-center gap-3 py-1.5">
+                                <span className="text-white text-sm font-medium">{m.name}</span>
+                                <span className="text-stone-500 text-xs">CR {m.cr} · {m.hp_avg} PV · CA {m.ac}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {sess.length > 0 && (
+                        <div>
+                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Sessions ({sess.length})</p>
+                          <div className="divide-y divide-stone-800">
+                            {sess.map(s => (
+                              <div key={s.id} className="flex items-center gap-3 py-1.5">
+                                <span className="text-white text-sm font-medium">{s.title}</span>
+                                {s.session_date && <span className="text-stone-500 text-xs">{new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR')}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
+            </>
+          )
+        })()}
+
         {/* Tableau de bord MJ */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
           <button
@@ -807,11 +917,19 @@ export function CampaignPage() {
                       const pct = maxHp > 0 ? Math.min(1, curHp / maxHp) : 0
                       const bar = pct > 0.5 ? 'bg-emerald-500' : pct > 0.25 ? 'bg-amber-500' : 'bg-red-500'
                       const conditions = (c.state.conditions ?? []).filter(Boolean)
+                      const editing = hpEditCharId === c.id
                       return (
                         <div key={c.id} className="bg-stone-800 rounded-lg p-3">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-stone-200 text-xs font-medium truncate max-w-[70%]">{c.name}</span>
-                            <span className="text-stone-400 text-xs">{curHp}/{maxHp}</span>
+                            <span className="text-stone-200 text-xs font-medium truncate max-w-[60%]">{c.name}</span>
+                            <button
+                              onClick={() => { setHpEditCharId(editing ? null : c.id); setHpDeltaValue(5) }}
+                              className={`text-xs tabular-nums transition-colors ${curHp <= 0 ? 'text-red-400' : editing ? 'text-amber-400' : 'text-stone-400 hover:text-white'}`}
+                              title="Cliquer pour modifier les PV"
+                            >
+                              {curHp}/{maxHp}
+                              {c.combat.temporary_hp > 0 && <span className="text-sky-400 ml-0.5">+{c.combat.temporary_hp}</span>}
+                            </button>
                           </div>
                           <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
                             <div className={`h-full ${bar} rounded-full transition-all`} style={{ width: `${pct * 100}%` }} />
@@ -823,6 +941,29 @@ export function CampaignPage() {
                                   {CONDITIONS_FR[cond] ?? cond}
                                 </span>
                               ))}
+                            </div>
+                          )}
+                          {editing && (
+                            <div className="mt-2 flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={hpDeltaValue}
+                                onChange={e => setHpDeltaValue(Math.max(1, parseInt(e.target.value) || 1))}
+                                min={1}
+                                className="w-14 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-white text-xs text-center focus:outline-none"
+                              />
+                              <button
+                                onClick={() => handleQuickHp(c.id, hpDeltaValue, 'heal')}
+                                className="flex-1 bg-emerald-900/60 hover:bg-emerald-900/80 border border-emerald-800/50 text-emerald-400 text-xs font-semibold rounded py-1 transition-colors"
+                              >
+                                + Soin
+                              </button>
+                              <button
+                                onClick={() => handleQuickHp(c.id, hpDeltaValue, 'damage')}
+                                className="flex-1 bg-red-900/60 hover:bg-red-900/80 border border-red-800/50 text-red-400 text-xs font-semibold rounded py-1 transition-colors"
+                              >
+                                − Dégât
+                              </button>
                             </div>
                           )}
                         </div>
@@ -1579,14 +1720,25 @@ export function CampaignPage() {
           {addingNpc && (
             <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 mb-4 space-y-3">
               <div className="grid grid-cols-2 gap-3">
-                <input
-                  type="text"
-                  placeholder="Nom *"
-                  value={npcDraft.name}
-                  onChange={e => setNpcDraft(d => ({ ...d, name: e.target.value }))}
-                  autoFocus
-                  className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
-                />
+                <div className="flex gap-1">
+                  <input
+                    type="text"
+                    placeholder="Nom *"
+                    value={npcDraft.name}
+                    onChange={e => setNpcDraft(d => ({ ...d, name: e.target.value }))}
+                    autoFocus
+                    className="flex-1 min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  />
+                  <select
+                    onChange={e => setNpcDraft(d => ({ ...d, name: generateNpcName(e.target.value || undefined) }))}
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-1.5 py-2 text-stone-300 text-xs focus:outline-none focus:border-violet-500 transition-colors"
+                    title="Générer un nom par race"
+                    defaultValue=""
+                  >
+                    <option value="">🎲</option>
+                    {NPC_RACES.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </div>
                 <input
                   type="text"
                   placeholder="Rôle / occupation"

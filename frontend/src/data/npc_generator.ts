@@ -130,8 +130,17 @@ const VOICES = [
   'formule sèche, dix mots quand cent suffiraient', 'exagère tout avec des superlatifs',
 ]
 
+export const NPC_RACES = Object.keys(NAMES)
+
 function pick<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)]
+}
+
+export function generateNpcName(race?: string, gender?: 'Homme' | 'Femme'): string {
+  const r = race && NAMES[race] ? race : pick(NPC_RACES)
+  const g = gender ?? (Math.random() < 0.5 ? 'Homme' : 'Femme')
+  const pool = NAMES[r]
+  return pick(g === 'Homme' ? pool.m : pool.f)
 }
 
 export function generateNpc(): GeneratedNpc {
