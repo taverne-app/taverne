@@ -8,6 +8,7 @@ export interface CampaignSession {
   notes: string | null
   xp_awarded: number | null
   loot_notes: string | null
+  xp_distributed: boolean
   created_at: string
   updated_at: string
 }
@@ -33,7 +34,7 @@ export async function createSession(
 export async function updateSession(
   campaignId: number,
   sessionId: number,
-  data: { title?: string; session_date?: string | null; notes?: string | null; xp_awarded?: number | null; loot_notes?: string | null },
+  data: { title?: string; session_date?: string | null; notes?: string | null; xp_awarded?: number | null; loot_notes?: string | null; xp_distributed?: boolean },
 ): Promise<CampaignSession> {
   const res = await apiFetch(`/campaigns/${campaignId}/sessions/${sessionId}`, {
     method: 'PATCH',

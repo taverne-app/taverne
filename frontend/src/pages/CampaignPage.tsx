@@ -356,6 +356,20 @@ export function CampaignPage() {
     } finally { setSaving(false) }
   }
 
+  async function handleDistributeSessionXp(sessionId: number, xpAmount: number) {
+    if (!campaign || characters.length === 0) return
+    setSaving(true)
+    try {
+      const perChar = Math.floor(xpAmount / characters.length)
+      const updated = await Promise.all(
+        characters.map(c => updateIdentity(c.id, { experience_points: c.experience_points + perChar }))
+      )
+      setCharacters(updated)
+      const updatedSession = await updateSession(campaign.id, sessionId, { xp_distributed: true })
+      setSessions(prev => prev.map(s => s.id === sessionId ? updatedSession : s))
+    } finally { setSaving(false) }
+  }
+
   async function handleAddQuest() {
     if (!campaign || !questDraft.title.trim()) return
     const quest: Quest = { id: crypto.randomUUID(), ...questDraft, title: questDraft.title.trim() }
@@ -1414,6 +1428,12 @@ export function CampaignPage() {
                           )}
                         </div>
 
+                        {/* Passive perception */}
+                        <div className="hidden lg:flex flex-col items-center shrink-0 w-12" title="Perception passive">
+                          <span className="text-stone-500 text-[10px] uppercase tracking-wide">PP</span>
+                          <span className="text-stone-200 text-sm font-semibold">{c.passive_perception}</span>
+                        </div>
+
                         {/* Spell slots + exhaustion + concentration */}
                         <div className="hidden xl:flex flex-col gap-1 shrink-0 min-w-[120px]">
                           {c.state.concentrating_on && (
@@ -1685,6 +1705,14 @@ export function CampaignPage() {
                   <div className="bg-stone-800 rounded-lg p-3 text-center">
                     <p className="text-stone-500 text-xs mb-1">XP total</p>
                     <p className="text-white font-bold text-xl">{totalXp.toLocaleString('fr-FR')}</p>
+                  </div>
+                )}
+                {sessions.some(s => s.xp_awarded != null) && (
+                  <div className="bg-stone-800 rounded-lg p-3 text-center">
+                    <p className="text-stone-500 text-xs mb-1">XP sessions</p>
+                    <p className="text-amber-400 font-bold text-xl">
+                      {sessions.reduce((sum, s) => sum + (s.xp_awarded ?? 0), 0).toLocaleString('fr-FR')}
+                    </p>
                   </div>
                 )}
               </div>
@@ -3512,7 +3540,7 @@ export function CampaignPage() {
                         {expandedSession === item.data.id && (
                           <div className="px-4 pb-4 border-t border-stone-800 pt-3 space-y-2">
                             {(item.data.xp_awarded != null || item.data.loot_notes) && (
-                              <div className="flex flex-wrap gap-3 mb-2">
+                              <div className="flex flex-wrap items-center gap-3 mb-2">
                                 {item.data.xp_awarded != null && (
                                   <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2.5 py-0.5">
                                     +{item.data.xp_awarded.toLocaleString('fr-FR')} XP
@@ -3522,6 +3550,19 @@ export function CampaignPage() {
                                   <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2.5 py-0.5">
                                     🎁 {item.data.loot_notes}
                                   </span>
+                                )}
+                                {item.data.xp_awarded != null && characters.length > 0 && !item.data.xp_distributed && (
+                                  <button
+                                    onClick={() => handleDistributeSessionXp(item.data.id, item.data.xp_awarded!)}
+                                    disabled={saving}
+                                    className="text-xs bg-emerald-900/40 border border-emerald-700/40 text-emerald-400 hover:bg-emerald-900/60 rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-50"
+                                    title={`Distribuer ${Math.floor(item.data.xp_awarded / characters.length)} XP à chaque personnage`}
+                                  >
+                                    ↗ Distribuer XP
+                                  </button>
+                                )}
+                                {item.data.xp_distributed && (
+                                  <span className="text-xs text-stone-600">✓ XP distribué</span>
                                 )}
                               </div>
                             )}
@@ -3623,7 +3664,7 @@ export function CampaignPage() {
                       {expandedSession === s.id && (
                         <div className="px-5 pb-5 border-t border-stone-800 pt-4 space-y-2">
                           {(s.xp_awarded != null || s.loot_notes) && (
-                            <div className="flex flex-wrap gap-3 mb-2">
+                            <div className="flex flex-wrap items-center gap-3 mb-2">
                               {s.xp_awarded != null && (
                                 <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2.5 py-0.5">
                                   +{s.xp_awarded.toLocaleString('fr-FR')} XP
@@ -3633,6 +3674,19 @@ export function CampaignPage() {
                                 <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2.5 py-0.5">
                                   🎁 {s.loot_notes}
                                 </span>
+                              )}
+                              {s.xp_awarded != null && characters.length > 0 && !s.xp_distributed && (
+                                <button
+                                  onClick={() => handleDistributeSessionXp(s.id, s.xp_awarded!)}
+                                  disabled={saving}
+                                  className="text-xs bg-emerald-900/40 border border-emerald-700/40 text-emerald-400 hover:bg-emerald-900/60 rounded-full px-2.5 py-0.5 transition-colors disabled:opacity-50"
+                                  title={`Distribuer ${Math.floor(s.xp_awarded / characters.length)} XP à chaque personnage`}
+                                >
+                                  ↗ Distribuer XP
+                                </button>
+                              )}
+                              {s.xp_distributed && (
+                                <span className="text-xs text-stone-600">✓ XP distribué</span>
                               )}
                             </div>
                           )}

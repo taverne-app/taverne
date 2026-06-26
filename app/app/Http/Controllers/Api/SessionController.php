@@ -42,11 +42,12 @@ class SessionController extends Controller
         abort_if($session->campaign_id !== $campaign->id, 403);
 
         $validated = $request->validate([
-            'title'        => ['sometimes', 'string', 'max:255'],
-            'session_date' => ['sometimes', 'nullable', 'date'],
-            'notes'        => ['sometimes', 'nullable', 'string'],
-            'xp_awarded'   => ['sometimes', 'nullable', 'integer', 'min:0'],
-            'loot_notes'   => ['sometimes', 'nullable', 'string'],
+            'title'          => ['sometimes', 'string', 'max:255'],
+            'session_date'   => ['sometimes', 'nullable', 'date'],
+            'notes'          => ['sometimes', 'nullable', 'string'],
+            'xp_awarded'     => ['sometimes', 'nullable', 'integer', 'min:0'],
+            'loot_notes'     => ['sometimes', 'nullable', 'string'],
+            'xp_distributed' => ['sometimes', 'boolean'],
         ]);
 
         $session->update($validated);

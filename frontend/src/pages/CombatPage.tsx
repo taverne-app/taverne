@@ -2036,10 +2036,20 @@ export function CombatPage() {
                                 À terre
                               </span>
                             )}
+                            {character.state.exhaustion_level > 0 && (
+                              <span className={`shrink-0 text-xs rounded px-1.5 py-0.5 border ${
+                                character.state.exhaustion_level <= 2 ? 'bg-amber-900/40 border-amber-700/50 text-amber-400' :
+                                character.state.exhaustion_level <= 4 ? 'bg-orange-900/40 border-orange-700/50 text-orange-400' :
+                                'bg-red-900/40 border-red-700/50 text-red-400'
+                              }`} title={`Niveau d'épuisement ${character.state.exhaustion_level}`}>
+                                Épuis. {character.state.exhaustion_level}
+                              </span>
+                            )}
                           </div>
                           <p className="text-stone-500 text-xs truncate mt-0.5">
                             {character.race} · {character.character_class} · Niv.{character.level}
                             {' · '}CA {character.combat.armor_class}
+                            {' · '}PP {character.passive_perception}
                           </p>
                           {(character.damage_modifiers.resistances.length > 0 ||
                             character.damage_modifiers.immunities.length > 0 ||

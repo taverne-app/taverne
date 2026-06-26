@@ -9,9 +9,9 @@ class CampaignSession extends Model
 {
     protected $table = 'campaign_sessions';
 
-    protected $fillable = ['campaign_id', 'title', 'session_date', 'notes', 'xp_awarded', 'loot_notes'];
+    protected $fillable = ['campaign_id', 'title', 'session_date', 'notes', 'xp_awarded', 'loot_notes', 'xp_distributed'];
 
-    protected $casts = ['session_date' => 'date'];
+    protected $casts = ['session_date' => 'date', 'xp_distributed' => 'boolean'];
 
     public function campaign(): BelongsTo
     {
