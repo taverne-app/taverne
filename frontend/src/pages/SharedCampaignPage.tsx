@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCampaign } from '../api/share'
-import type { Campaign, CampaignSession } from '../api/campaigns'
+import type { Campaign, CampaignSession, TreasureItem } from '../api/campaigns'
 import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
 import { createPublicEcho, REVERB_CONFIGURED } from '../lib/echo'
@@ -489,6 +489,27 @@ export function SharedCampaignPage() {
                     {loc.notes && <p className="text-stone-400 text-xs mt-2 line-clamp-2">{loc.notes}</p>}
                   </div>
                 ))}
+            </div>
+          </section>
+        )}
+
+        {/* Trésor commun */}
+        {(campaign.party_treasury ?? []).length > 0 && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Trésor du groupe</h2>
+            <div className="bg-stone-900 border border-stone-800 rounded-xl divide-y divide-stone-800">
+              {(campaign.party_treasury as TreasureItem[]).map((item, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 px-4 py-3">
+                  <div className="min-w-0">
+                    <p className="text-stone-200 text-sm font-medium truncate">{item.name}</p>
+                    {item.notes && <p className="text-stone-500 text-xs mt-0.5 truncate">{item.notes}</p>}
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    {item.value && <span className="text-amber-400 text-xs font-medium">{item.value}</span>}
+                    {item.quantity > 1 && <span className="text-stone-400 text-xs">×{item.quantity}</span>}
+                  </div>
+                </div>
+              ))}
             </div>
           </section>
         )}

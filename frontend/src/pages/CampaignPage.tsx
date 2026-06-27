@@ -24,7 +24,7 @@ import {
   type MonsterAttack,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, type Character } from '../api/characters'
+import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, updateInspiration, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -137,6 +137,8 @@ export function CampaignPage() {
   const [addingLocation, setAddingLocation]   = useState(false)
   const [locationDraft, setLocationDraft]     = useState<Location>(emptyLocationDraft())
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null)
+  const [editingLocationIdx, setEditingLocationIdx] = useState<number | null>(null)
+  const [editLocationDraft, setEditLocationDraft]   = useState<Location>(emptyLocationDraft())
 
   // Préparation de session
   const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
@@ -498,6 +500,19 @@ export function CampaignPage() {
     const next = (campaign.locations ?? []).map((l, i) => i === index ? { ...l, reputation } : l)
     const updated = await updateCampaign(campaign.id, { locations: next })
     setCampaign(updated)
+  }
+
+  async function handleUpdateLocation(index: number) {
+    if (!campaign || !editLocationDraft.name.trim()) return
+    const next = (campaign.locations ?? []).map((l, i) => i === index ? { ...editLocationDraft, name: editLocationDraft.name.trim() } : l)
+    const updated = await updateCampaign(campaign.id, { locations: next })
+    setCampaign(updated)
+    setEditingLocationIdx(null)
+  }
+
+  async function handleToggleInspiration(charId: number, current: boolean) {
+    const updated = await updateInspiration(charId, !current)
+    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
   }
 
   async function handleSaveSessionPrep() {
@@ -1385,9 +1400,11 @@ export function CampaignPage() {
                                 ⬆ Niv
                               </span>
                             )}
-                            {c.combat.inspiration && (
-                              <span className="shrink-0 text-amber-400 text-xs" title="Inspiration">✦</span>
-                            )}
+                            <button
+                              onClick={e => { e.preventDefault(); handleToggleInspiration(c.id, c.combat.inspiration) }}
+                              title={c.combat.inspiration ? 'Retirer l\'inspiration' : 'Accorder l\'inspiration'}
+                              className={`shrink-0 text-xs transition-colors ${c.combat.inspiration ? 'text-amber-400 hover:text-amber-300' : 'text-stone-700 hover:text-amber-500'}`}
+                            >✦</button>
                           </div>
                           <p className="text-stone-500 text-xs truncate mt-0.5">
                             {c.character_class} Niv.{c.level} · CA {c.combat.armor_class}
@@ -2331,29 +2348,46 @@ export function CampaignPage() {
                 const repBg   = rep === 'héros' ? 'bg-amber-900/30 border-amber-700/40' : rep === 'respecté' ? 'bg-emerald-900/30 border-emerald-700/40' : rep === 'suspect' ? 'bg-orange-900/30 border-orange-700/40' : rep === 'recherché' ? 'bg-red-900/30 border-red-700/40' : 'bg-stone-800/60 border-stone-700/40'
                 const locNpcs = (campaign.npcs ?? []).filter(n => n.location === loc.name)
                 return (
-                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
-                    <div className="flex items-start gap-3">
-                      <span className="text-lg shrink-0 mt-0.5">{typeIcon}</span>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-stone-100 text-sm font-semibold">{loc.name}</span>
-                          <span className="text-stone-600 text-xs capitalize">{loc.type}</span>
+                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                    {editingLocationIdx === i ? (
+                      <div className="p-4 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editLocationDraft.name}
+                            onChange={e => setEditLocationDraft(d => ({ ...d, name: e.target.value }))}
+                            placeholder="Nom *"
+                            className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500"
+                          />
                           <select
-                            value={loc.status}
-                            onChange={e => handleUpdateLocationStatus(i, e.target.value as Location['status'])}
-                            className={`text-xs bg-transparent border-none focus:outline-none cursor-pointer font-medium ${statusColor}`}
+                            value={editLocationDraft.type}
+                            onChange={e => setEditLocationDraft(d => ({ ...d, type: e.target.value as Location['type'] }))}
+                            className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
+                          >
+                            <option value="ville">🏙 Ville</option>
+                            <option value="donjon">⛏ Donjon</option>
+                            <option value="forêt">🌲 Forêt</option>
+                            <option value="taverne">🍺 Taverne</option>
+                            <option value="temple">⛪ Temple</option>
+                            <option value="château">🏰 Château</option>
+                            <option value="autre">📍 Autre</option>
+                          </select>
+                        </div>
+                        <div className="flex gap-2">
+                          <select
+                            value={editLocationDraft.status}
+                            onChange={e => setEditLocationDraft(d => ({ ...d, status: e.target.value as Location['status'] }))}
+                            className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
                           >
                             <option value="inconnu">❓ Inconnu</option>
                             <option value="connu">◎ Connu</option>
                             <option value="exploré">✓ Exploré</option>
                           </select>
-                        </div>
-                        <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                           <select
-                            value={rep}
-                            onChange={e => handleUpdateLocationReputation(i, e.target.value as Location['reputation'])}
-                            className={`text-xs font-medium rounded border px-1.5 py-0.5 focus:outline-none cursor-pointer transition-colors ${repColor} ${repBg}`}
-                            style={{ background: 'transparent' }}
+                            value={editLocationDraft.reputation ?? 'neutre'}
+                            onChange={e => setEditLocationDraft(d => ({ ...d, reputation: e.target.value as Location['reputation'] }))}
+                            className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500"
                           >
                             <option value="héros">★ Héros</option>
                             <option value="respecté">◆ Respecté</option>
@@ -2361,31 +2395,88 @@ export function CampaignPage() {
                             <option value="suspect">◇ Suspect</option>
                             <option value="recherché">✕ Recherché</option>
                           </select>
-                          {locNpcs.length > 0 && locNpcs.map((n, ni) => (
-                            <span key={ni} className="text-xs text-violet-400/70 bg-violet-900/20 border border-violet-800/30 rounded px-1.5 py-0.5">{n.name}</span>
-                          ))}
-                          {loc.notes && (
-                            <button
-                              onClick={() => setExpandedLocation(expandedLocation === i ? null : i)}
-                              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
-                            >
-                              {expandedLocation === i ? '▲ Masquer' : '▼ Notes'}
-                            </button>
-                          )}
+                        </div>
+                        <textarea
+                          value={editLocationDraft.notes}
+                          onChange={e => setEditLocationDraft(d => ({ ...d, notes: e.target.value }))}
+                          placeholder="Notes…"
+                          rows={2}
+                          className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 resize-none"
+                        />
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => setEditingLocationIdx(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                          <button
+                            onClick={() => handleUpdateLocation(i)}
+                            disabled={!editLocationDraft.name.trim()}
+                            className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
+                          >
+                            Sauvegarder
+                          </button>
                         </div>
                       </div>
-                      <button
-                        onClick={() => handleDeleteLocation(i)}
-                        title="Supprimer ce lieu"
-                        className="text-stone-700 hover:text-red-400 text-sm transition-colors shrink-0"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                    {expandedLocation === i && loc.notes && (
-                      <div className="mt-3 pt-3 border-t border-stone-800 ml-8">
-                        <p className="text-stone-400 text-xs leading-relaxed whitespace-pre-wrap">{loc.notes}</p>
-                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-start gap-3 p-4">
+                          <span className="text-lg shrink-0 mt-0.5">{typeIcon}</span>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="text-stone-100 text-sm font-semibold">{loc.name}</span>
+                              <span className="text-stone-600 text-xs capitalize">{loc.type}</span>
+                              <select
+                                value={loc.status}
+                                onChange={e => handleUpdateLocationStatus(i, e.target.value as Location['status'])}
+                                className={`text-xs bg-transparent border-none focus:outline-none cursor-pointer font-medium ${statusColor}`}
+                              >
+                                <option value="inconnu">❓ Inconnu</option>
+                                <option value="connu">◎ Connu</option>
+                                <option value="exploré">✓ Exploré</option>
+                              </select>
+                            </div>
+                            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                              <select
+                                value={rep}
+                                onChange={e => handleUpdateLocationReputation(i, e.target.value as Location['reputation'])}
+                                className={`text-xs font-medium rounded border px-1.5 py-0.5 focus:outline-none cursor-pointer transition-colors ${repColor} ${repBg}`}
+                                style={{ background: 'transparent' }}
+                              >
+                                <option value="héros">★ Héros</option>
+                                <option value="respecté">◆ Respecté</option>
+                                <option value="neutre">— Neutre</option>
+                                <option value="suspect">◇ Suspect</option>
+                                <option value="recherché">✕ Recherché</option>
+                              </select>
+                              {locNpcs.length > 0 && locNpcs.map((n, ni) => (
+                                <span key={ni} className="text-xs text-violet-400/70 bg-violet-900/20 border border-violet-800/30 rounded px-1.5 py-0.5">{n.name}</span>
+                              ))}
+                              {loc.notes && (
+                                <button
+                                  onClick={() => setExpandedLocation(expandedLocation === i ? null : i)}
+                                  className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+                                >
+                                  {expandedLocation === i ? '▲ Masquer' : '▼ Notes'}
+                                </button>
+                              )}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <button
+                              onClick={() => { setEditLocationDraft({ ...loc }); setEditingLocationIdx(i); setExpandedLocation(null) }}
+                              className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                              title="Modifier ce lieu"
+                            >✎</button>
+                            <button
+                              onClick={() => handleDeleteLocation(i)}
+                              title="Supprimer ce lieu"
+                              className="text-stone-700 hover:text-red-400 text-sm transition-colors"
+                            >✕</button>
+                          </div>
+                        </div>
+                        {expandedLocation === i && loc.notes && (
+                          <div className="px-4 pb-4 border-t border-stone-800 pt-3 ml-8">
+                            <MarkdownText className="text-stone-400 text-xs">{loc.notes}</MarkdownText>
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )
