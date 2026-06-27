@@ -100,6 +100,9 @@ export function CampaignPage() {
   const [npcDraft, setNpcDraft] = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', notes: '' })
   const [addingNpc, setAddingNpc] = useState(false)
   const [expandedNpc, setExpandedNpc] = useState<number | null>(null)
+  const [editingNpcIdx, setEditingNpcIdx]   = useState<number | null>(null)
+  const [editNpcDraft, setEditNpcDraft]     = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', notes: '' })
+  const [npcStatusFilter, setNpcStatusFilter] = useState<'all' | Npc['status']>('all')
 
   // Calendrier
   const [calendarDraft, setCalendarDraft] = useState<Partial<GameCalendar>>({})
@@ -456,6 +459,14 @@ export function CampaignPage() {
     const next = (campaign.npcs ?? []).map((n, i) => i === index ? { ...n, status } : n)
     const updated = await updateCampaign(campaign.id, { npcs: next })
     setCampaign(updated)
+  }
+
+  async function handleUpdateNpc(index: number) {
+    if (!campaign || !editNpcDraft.name.trim()) return
+    const next = (campaign.npcs ?? []).map((n, i) => i === index ? { ...editNpcDraft, name: editNpcDraft.name.trim() } : n)
+    const updated = await updateCampaign(campaign.id, { npcs: next })
+    setCampaign(updated)
+    setEditingNpcIdx(null)
   }
 
   async function handleAddLocation() {
@@ -1380,6 +1391,9 @@ export function CampaignPage() {
                           </div>
                           <p className="text-stone-500 text-xs truncate mt-0.5">
                             {c.character_class} Niv.{c.level} · CA {c.combat.armor_class}
+                            {(c.currency.pp + c.currency.po + c.currency.pe + c.currency.pa + c.currency.pc) > 0 && (
+                              <> · {Math.round(c.currency.pp * 10 + c.currency.po + c.currency.pe * 0.5 + c.currency.pa * 0.1 + c.currency.pc * 0.01)} po</>
+                            )}
                           </p>
                         </div>
 
@@ -1934,57 +1948,160 @@ export function CampaignPage() {
           {(campaign.npcs ?? []).length === 0 && !addingNpc ? (
             <p className="text-stone-600 text-sm text-center py-6">Aucun PNJ enregistré. Ajoutez les personnages importants rencontrés par le groupe.</p>
           ) : (
-            <div className="space-y-2">
-              {(campaign.npcs ?? []).map((npc, i) => {
-                const statusColor = npc.status === 'allié' ? 'text-emerald-400' : npc.status === 'ennemi' ? 'text-red-400' : npc.status === 'neutre' ? 'text-amber-400' : 'text-stone-400'
-                const statusIcon = npc.status === 'allié' ? '🟢' : npc.status === 'ennemi' ? '🔴' : npc.status === 'neutre' ? '🟡' : '❓'
-                return (
-                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
-                    <div className="flex items-center gap-3 p-3">
-                      <span className="text-base shrink-0">{statusIcon}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-stone-200 text-sm font-medium truncate">{npc.name}</p>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {npc.role && <p className="text-stone-500 text-xs truncate">{npc.role}</p>}
-                          {npc.location && <span className="text-xs text-sky-400/70">📍 {npc.location}</span>}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <select
-                          value={npc.status}
-                          onChange={e => handleUpdateNpcStatus(i, e.target.value as Npc['status'])}
-                          className={`bg-transparent text-xs border-none outline-none cursor-pointer ${statusColor}`}
-                        >
-                          <option value="inconnu">Inconnu</option>
-                          <option value="allié">Allié</option>
-                          <option value="neutre">Neutre</option>
-                          <option value="ennemi">Ennemi</option>
-                        </select>
-                        {npc.notes && (
-                          <button
-                            onClick={() => setExpandedNpc(expandedNpc === i ? null : i)}
-                            className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
-                          >
-                            {expandedNpc === i ? '▲' : '▼'}
-                          </button>
+            <>
+              {/* Filtre par statut */}
+              {(campaign.npcs ?? []).length > 1 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {(['all', 'allié', 'ennemi', 'neutre', 'inconnu'] as const).map(s => {
+                    const count = s === 'all'
+                      ? (campaign.npcs ?? []).length
+                      : (campaign.npcs ?? []).filter(n => n.status === s).length
+                    if (s !== 'all' && count === 0) return null
+                    const label = s === 'all' ? `Tous (${count})` : `${s === 'allié' ? '🟢' : s === 'ennemi' ? '🔴' : s === 'neutre' ? '🟡' : '❓'} ${s[0].toUpperCase() + s.slice(1)} (${count})`
+                    return (
+                      <button
+                        key={s}
+                        onClick={() => setNpcStatusFilter(s)}
+                        className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                          npcStatusFilter === s
+                            ? 'bg-violet-900/60 border-violet-600/60 text-violet-300'
+                            : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+
+              <div className="space-y-2">
+                {(campaign.npcs ?? [])
+                  .map((npc, i) => ({ npc, i }))
+                  .filter(({ npc }) => npcStatusFilter === 'all' || npc.status === npcStatusFilter)
+                  .map(({ npc, i }) => {
+                    const statusColor = npc.status === 'allié' ? 'text-emerald-400' : npc.status === 'ennemi' ? 'text-red-400' : npc.status === 'neutre' ? 'text-amber-400' : 'text-stone-400'
+                    const statusIcon = npc.status === 'allié' ? '🟢' : npc.status === 'ennemi' ? '🔴' : npc.status === 'neutre' ? '🟡' : '❓'
+                    return (
+                      <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                        {editingNpcIdx === i ? (
+                          <div className="p-3 space-y-2">
+                            <div className="grid grid-cols-2 gap-2">
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editNpcDraft.name}
+                                onChange={e => setEditNpcDraft(d => ({ ...d, name: e.target.value }))}
+                                placeholder="Nom *"
+                                className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500"
+                              />
+                              <input
+                                type="text"
+                                value={editNpcDraft.role}
+                                onChange={e => setEditNpcDraft(d => ({ ...d, role: e.target.value }))}
+                                placeholder="Rôle"
+                                className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500"
+                              />
+                            </div>
+                            <div className="flex gap-2">
+                              <select
+                                value={editNpcDraft.status}
+                                onChange={e => setEditNpcDraft(d => ({ ...d, status: e.target.value as Npc['status'] }))}
+                                className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500"
+                              >
+                                <option value="inconnu">❓ Inconnu</option>
+                                <option value="allié">🟢 Allié</option>
+                                <option value="neutre">🟡 Neutre</option>
+                                <option value="ennemi">🔴 Ennemi</option>
+                              </select>
+                              {(campaign.locations ?? []).length > 0 && (
+                                <select
+                                  value={editNpcDraft.location ?? ''}
+                                  onChange={e => setEditNpcDraft(d => ({ ...d, location: e.target.value }))}
+                                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500"
+                                >
+                                  <option value="">📍 Lieu</option>
+                                  {(campaign.locations ?? []).map((l, li) => (
+                                    <option key={li} value={l.name}>{l.name}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                            <textarea
+                              value={editNpcDraft.notes}
+                              onChange={e => setEditNpcDraft(d => ({ ...d, notes: e.target.value }))}
+                              placeholder="Notes…"
+                              rows={2}
+                              className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 resize-none"
+                            />
+                            <div className="flex gap-2 justify-end">
+                              <button onClick={() => setEditingNpcIdx(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                              <button
+                                onClick={() => handleUpdateNpc(i)}
+                                disabled={!editNpcDraft.name.trim()}
+                                className="bg-violet-700 hover:bg-violet-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
+                              >
+                                Sauvegarder
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="flex items-center gap-3 p-3">
+                              <span className="text-base shrink-0">{statusIcon}</span>
+                              <div className="flex-1 min-w-0">
+                                <p className="text-stone-200 text-sm font-medium truncate">{npc.name}</p>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  {npc.role && <p className="text-stone-500 text-xs truncate">{npc.role}</p>}
+                                  {npc.location && <span className="text-xs text-sky-400/70">📍 {npc.location}</span>}
+                                </div>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <select
+                                  value={npc.status}
+                                  onChange={e => handleUpdateNpcStatus(i, e.target.value as Npc['status'])}
+                                  className={`bg-transparent text-xs border-none outline-none cursor-pointer ${statusColor}`}
+                                >
+                                  <option value="inconnu">Inconnu</option>
+                                  <option value="allié">Allié</option>
+                                  <option value="neutre">Neutre</option>
+                                  <option value="ennemi">Ennemi</option>
+                                </select>
+                                <button
+                                  onClick={() => { setEditNpcDraft({ ...npc }); setEditingNpcIdx(i); setExpandedNpc(null) }}
+                                  className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                                  title="Modifier ce PNJ"
+                                >
+                                  ✎
+                                </button>
+                                {npc.notes && (
+                                  <button
+                                    onClick={() => setExpandedNpc(expandedNpc === i ? null : i)}
+                                    className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                                  >
+                                    {expandedNpc === i ? '▲' : '▼'}
+                                  </button>
+                                )}
+                                <button
+                                  onClick={() => handleDeleteNpc(i)}
+                                  className="text-stone-700 hover:text-red-400 text-xs transition-colors"
+                                >
+                                  ✕
+                                </button>
+                              </div>
+                            </div>
+                            {expandedNpc === i && npc.notes && (
+                              <div className="px-4 pb-3 pt-0 border-t border-stone-800">
+                                <MarkdownText className="text-stone-400 text-xs">{npc.notes}</MarkdownText>
+                              </div>
+                            )}
+                          </>
                         )}
-                        <button
-                          onClick={() => handleDeleteNpc(i)}
-                          className="text-stone-700 hover:text-red-400 text-xs transition-colors"
-                        >
-                          ✕
-                        </button>
                       </div>
-                    </div>
-                    {expandedNpc === i && npc.notes && (
-                      <div className="px-4 pb-3 pt-0">
-                        <p className="text-stone-400 text-xs leading-relaxed">{npc.notes}</p>
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
+                    )
+                  })}
+              </div>
+            </>
           )}
         </div>
 
