@@ -131,6 +131,8 @@ export function CampaignPage() {
   const [addingTreasury, setAddingTreasury]   = useState(false)
   const [treasuryDraft, setTreasuryDraft]     = useState<TreasureItem>(emptyTreasureDraft)
   const [distributingIdx, setDistributingIdx] = useState<number | null>(null)
+  const [editingTreasureIdx, setEditingTreasureIdx] = useState<number | null>(null)
+  const [editTreasureDraft, setEditTreasureDraft]   = useState<TreasureItem>(emptyTreasureDraft())
 
   // Lieux
   const emptyLocationDraft = (): Location => ({ name: '', type: 'autre', status: 'inconnu', reputation: 'neutre', notes: '' })
@@ -191,11 +193,15 @@ export function CampaignPage() {
   const [sceneDraft, setSceneDraft] = useState<PrepScene>(emptyScene())
   const [addingScene, setAddingScene] = useState(false)
   const [expandedScene, setExpandedScene] = useState<string | null>(null)
+  const [editingSceneId, setEditingSceneId] = useState<string | null>(null)
+  const [editSceneDraft, setEditSceneDraft] = useState<PrepScene>(emptyScene())
 
   // Jalons de campagne
   const emptyMilestone = (): Omit<Milestone, 'id'> => ({ date: '', title: '', type: 'other', notes: '' })
   const [addingMilestone, setAddingMilestone] = useState(false)
   const [milestoneDraft, setMilestoneDraft] = useState<Omit<Milestone, 'id'>>(emptyMilestone())
+  const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null)
+  const [editMilestoneDraft, setEditMilestoneDraft] = useState<Omit<Milestone, 'id'>>(emptyMilestone())
 
   // Carte de campagne
   const [mapUrlDraft, setMapUrlDraft] = useState('')
@@ -577,6 +583,16 @@ export function CampaignPage() {
     if (distributingIdx === index) setDistributingIdx(null)
   }
 
+  async function handleUpdateTreasureItem(index: number) {
+    if (!campaign || !editTreasureDraft.name.trim()) return
+    const next = (campaign.party_treasury ?? []).map((item, i) =>
+      i === index ? { ...editTreasureDraft, name: editTreasureDraft.name.trim() } : item
+    )
+    const updated = await updateCampaign(campaign.id, { party_treasury: next })
+    setCampaign(updated)
+    setEditingTreasureIdx(null)
+  }
+
   async function handleDistributeItem(index: number, character: Character) {
     if (!campaign) return
     const item = campaign.party_treasury[index]
@@ -725,6 +741,20 @@ export function CampaignPage() {
     if (expandedScene === sceneId) setExpandedScene(null)
   }
 
+  async function handleUpdateScene(sceneId: string) {
+    if (!campaign?.session_prep || !editSceneDraft.title.trim()) return
+    const next: SessionPrep = {
+      ...campaign.session_prep,
+      scenes: (campaign.session_prep.scenes ?? []).map(s =>
+        s.id === sceneId ? { ...editSceneDraft, id: sceneId, title: editSceneDraft.title.trim() } : s
+      ),
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    setEditingSceneId(null)
+  }
+
   async function handleSetMapUrl() {
     if (!campaign) return
     const next: CampaignMap = { image_url: mapUrlDraft.trim(), pins: campaign.campaign_map?.pins ?? [] }
@@ -777,6 +807,16 @@ export function CampaignPage() {
     const next = (campaign.campaign_milestones ?? []).filter(m => m.id !== id)
     const updated = await updateCampaign(campaign.id, { campaign_milestones: next })
     setCampaign(updated)
+  }
+
+  async function handleUpdateMilestone(id: string) {
+    if (!campaign || !editMilestoneDraft.title.trim()) return
+    const next = (campaign.campaign_milestones ?? []).map(m =>
+      m.id === id ? { ...editMilestoneDraft, id, title: editMilestoneDraft.title.trim() } : m
+    )
+    const updated = await updateCampaign(campaign.id, { campaign_milestones: next })
+    setCampaign(updated)
+    setEditingMilestoneId(null)
   }
 
   async function handleAddFaction() {
@@ -2318,55 +2358,109 @@ export function CampaignPage() {
             <div className="space-y-2">
               {(campaign?.party_treasury ?? []).map((item, i) => (
                 <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-stone-100 text-sm font-semibold">{item.name}</span>
-                        {item.quantity > 1 && (
-                          <span className="text-xs bg-stone-800 border border-stone-700 text-stone-400 rounded px-1.5 py-0.5">
-                            ×{item.quantity}
-                          </span>
-                        )}
-                        {item.value && (
-                          <span className="text-xs text-amber-400 font-medium">{item.value}</span>
-                        )}
+                  {editingTreasureIdx === i ? (
+                    <div className="space-y-2">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={editTreasureDraft.name}
+                          onChange={e => setEditTreasureDraft(d => ({ ...d, name: e.target.value }))}
+                          autoFocus
+                          placeholder="Nom *"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={editTreasureDraft.value}
+                          onChange={e => setEditTreasureDraft(d => ({ ...d, value: e.target.value }))}
+                          placeholder="Valeur (ex: 50 po)"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                        />
                       </div>
-                      {item.notes && (
-                        <p className="text-stone-500 text-xs mt-1">{item.notes}</p>
-                      )}
+                      <div className="flex gap-2 items-center">
+                        <label className="text-stone-500 text-xs shrink-0">Qté</label>
+                        <input
+                          type="number"
+                          value={editTreasureDraft.quantity}
+                          onChange={e => setEditTreasureDraft(d => ({ ...d, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
+                          min={1}
+                          className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={editTreasureDraft.notes}
+                          onChange={e => setEditTreasureDraft(d => ({ ...d, notes: e.target.value }))}
+                          placeholder="Notes"
+                          className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                        />
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <button onClick={() => setEditingTreasureIdx(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                        <button
+                          onClick={() => handleUpdateTreasureItem(i)}
+                          disabled={!editTreasureDraft.name.trim()}
+                          className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
+                        >Enregistrer</button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => setDistributingIdx(distributingIdx === i ? null : i)}
-                        className="text-xs text-sky-400 hover:text-sky-300 transition-colors font-medium"
-                      >
-                        Distribuer
-                      </button>
-                      <button
-                        onClick={() => handleRemoveTreasureItem(i)}
-                        className="text-xs text-stone-600 hover:text-red-400 transition-colors"
-                        title="Retirer du trésor"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  </div>
-
-                  {distributingIdx === i && characters.length > 0 && (
-                    <div className="mt-3 pt-3 border-t border-stone-800">
-                      <p className="text-stone-500 text-xs mb-2">Donner à :</p>
-                      <div className="flex flex-wrap gap-2">
-                        {characters.map(c => (
+                  ) : (
+                    <>
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-stone-100 text-sm font-semibold">{item.name}</span>
+                            {item.quantity > 1 && (
+                              <span className="text-xs bg-stone-800 border border-stone-700 text-stone-400 rounded px-1.5 py-0.5">
+                                ×{item.quantity}
+                              </span>
+                            )}
+                            {item.value && (
+                              <span className="text-xs text-amber-400 font-medium">{item.value}</span>
+                            )}
+                          </div>
+                          {item.notes && (
+                            <p className="text-stone-500 text-xs mt-1">{item.notes}</p>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
                           <button
-                            key={c.id}
-                            onClick={() => handleDistributeItem(i, c)}
-                            className="text-xs bg-stone-800 hover:bg-sky-900/40 border border-stone-700 hover:border-sky-700/50 text-stone-300 hover:text-sky-200 rounded-lg px-3 py-1.5 transition-colors"
+                            onClick={() => { setEditingTreasureIdx(i); setEditTreasureDraft({ ...item }); setDistributingIdx(null) }}
+                            className="text-xs text-stone-500 hover:text-amber-400 transition-colors"
+                            title="Modifier"
+                          >✎</button>
+                          <button
+                            onClick={() => setDistributingIdx(distributingIdx === i ? null : i)}
+                            className="text-xs text-sky-400 hover:text-sky-300 transition-colors font-medium"
                           >
-                            {c.name}
+                            Distribuer
                           </button>
-                        ))}
+                          <button
+                            onClick={() => handleRemoveTreasureItem(i)}
+                            className="text-xs text-stone-600 hover:text-red-400 transition-colors"
+                            title="Retirer du trésor"
+                          >
+                            ✕
+                          </button>
+                        </div>
                       </div>
-                    </div>
+
+                      {distributingIdx === i && characters.length > 0 && (
+                        <div className="mt-3 pt-3 border-t border-stone-800">
+                          <p className="text-stone-500 text-xs mb-2">Donner à :</p>
+                          <div className="flex flex-wrap gap-2">
+                            {characters.map(c => (
+                              <button
+                                key={c.id}
+                                onClick={() => handleDistributeItem(i, c)}
+                                className="text-xs bg-stone-800 hover:bg-sky-900/40 border border-stone-700 hover:border-sky-700/50 text-stone-300 hover:text-sky-200 rounded-lg px-3 py-1.5 transition-colors"
+                              >
+                                {c.name}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               ))}
@@ -2839,30 +2933,61 @@ export function CampaignPage() {
                     <div className="space-y-2">
                       {(campaign.session_prep!.scenes).map(scene => (
                         <div key={scene.id} className={`border rounded-lg overflow-hidden transition-colors ${scene.done ? 'border-stone-800 opacity-60' : 'border-sky-800/40'}`}>
-                          <div
-                            className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-800/40 transition-colors"
-                            onClick={() => setExpandedScene(expandedScene === scene.id ? null : scene.id)}
-                          >
-                            <button
-                              onClick={e => { e.stopPropagation(); handleToggleSceneDone(scene.id) }}
-                              className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors ${scene.done ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-600 hover:border-sky-500'}`}
-                            >
-                              {scene.done && <span className="text-[10px] font-bold">✓</span>}
-                            </button>
-                            <p className={`text-sm font-medium flex-1 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
-                            {scene.location_name && <span className="text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
-                            <button
-                              onClick={e => { e.stopPropagation(); handleDeleteScene(scene.id) }}
-                              className="text-stone-700 hover:text-red-400 text-base leading-none shrink-0 transition-colors ml-1"
-                            >×</button>
-                          </div>
-                          {expandedScene === scene.id && (
-                            <div className="px-3 pb-3 pt-0 text-xs space-y-1 border-t border-stone-800">
-                              {scene.hook && <p className="text-stone-400">⚡ <span className="text-stone-300">{scene.hook}</span></p>}
-                              {scene.encounter_name && <p className="text-stone-400">⚔ <span className="text-stone-300">{scene.encounter_name}</span></p>}
-                              {scene.treasure && <p className="text-stone-400">💰 <span className="text-stone-300">{scene.treasure}</span></p>}
-                              {scene.notes && <p className="text-stone-300 mt-1">{scene.notes}</p>}
+                          {editingSceneId === scene.id ? (
+                            <div className="px-3 py-3 space-y-2">
+                              <input
+                                type="text"
+                                value={editSceneDraft.title}
+                                onChange={e => setEditSceneDraft(d => ({ ...d, title: e.target.value }))}
+                                autoFocus
+                                placeholder="Titre *"
+                                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <input type="text" value={editSceneDraft.location_name} onChange={e => setEditSceneDraft(d => ({ ...d, location_name: e.target.value }))} placeholder="Lieu" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                                <input type="text" value={editSceneDraft.encounter_name} onChange={e => setEditSceneDraft(d => ({ ...d, encounter_name: e.target.value }))} placeholder="Rencontre liée" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                                <input type="text" value={editSceneDraft.hook} onChange={e => setEditSceneDraft(d => ({ ...d, hook: e.target.value }))} placeholder="Accroche / déclencheur" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                                <input type="text" value={editSceneDraft.treasure} onChange={e => setEditSceneDraft(d => ({ ...d, treasure: e.target.value }))} placeholder="Trésor / récompense" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                              </div>
+                              <textarea value={editSceneDraft.notes} onChange={e => setEditSceneDraft(d => ({ ...d, notes: e.target.value }))} placeholder="Notes…" rows={2} className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors resize-none" />
+                              <div className="flex justify-between items-center">
+                                <button onClick={() => setEditingSceneId(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                                <button onClick={() => handleUpdateScene(scene.id)} disabled={!editSceneDraft.title.trim()} className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
+                              </div>
                             </div>
+                          ) : (
+                            <>
+                              <div
+                                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-800/40 transition-colors"
+                                onClick={() => setExpandedScene(expandedScene === scene.id ? null : scene.id)}
+                              >
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleToggleSceneDone(scene.id) }}
+                                  className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors ${scene.done ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-600 hover:border-sky-500'}`}
+                                >
+                                  {scene.done && <span className="text-[10px] font-bold">✓</span>}
+                                </button>
+                                <p className={`text-sm font-medium flex-1 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
+                                {scene.location_name && <span className="text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
+                                <button
+                                  onClick={e => { e.stopPropagation(); setEditingSceneId(scene.id); setEditSceneDraft({ ...scene }); setExpandedScene(null) }}
+                                  className="text-stone-600 hover:text-sky-400 text-sm leading-none shrink-0 transition-colors"
+                                  title="Modifier"
+                                >✎</button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDeleteScene(scene.id) }}
+                                  className="text-stone-700 hover:text-red-400 text-base leading-none shrink-0 transition-colors ml-1"
+                                >×</button>
+                              </div>
+                              {expandedScene === scene.id && (
+                                <div className="px-3 pb-3 pt-0 text-xs space-y-1 border-t border-stone-800">
+                                  {scene.hook && <p className="text-stone-400">⚡ <span className="text-stone-300">{scene.hook}</span></p>}
+                                  {scene.encounter_name && <p className="text-stone-400">⚔ <span className="text-stone-300">{scene.encounter_name}</span></p>}
+                                  {scene.treasure && <p className="text-stone-400">💰 <span className="text-stone-300">{scene.treasure}</span></p>}
+                                  {scene.notes && <p className="text-stone-300 mt-1">{scene.notes}</p>}
+                                </div>
+                              )}
+                            </>
                           )}
                         </div>
                       ))}
@@ -3896,13 +4021,63 @@ export function CampaignPage() {
                   </div>
                   {item.kind === 'milestone' ? (
                     <div className="flex-1 pb-2">
-                      <div className="flex items-center gap-2 py-2">
-                        <span className="text-sm">{milestoneIcons[item.data.type]}</span>
-                        <span className="text-stone-200 text-sm font-medium">{item.data.title}</span>
-                        {item.data.date && <span className="text-stone-600 text-xs">{new Date(item.data.date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
-                        {item.data.notes && <span className="text-stone-500 text-xs italic truncate max-w-xs">{item.data.notes}</span>}
-                        <button onClick={() => handleDeleteMilestone(item.data.id)} className="ml-auto text-stone-700 hover:text-red-400 text-xs transition-colors">✕</button>
-                      </div>
+                      {editingMilestoneId === item.data.id ? (
+                        <div className="bg-stone-900 border border-stone-800 rounded-xl p-3 my-1 space-y-2">
+                          <div className="flex gap-2">
+                            <input
+                              type="text"
+                              value={editMilestoneDraft.title}
+                              onChange={e => setEditMilestoneDraft(d => ({ ...d, title: e.target.value }))}
+                              autoFocus
+                              placeholder="Titre *"
+                              className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                            />
+                            <input
+                              type="date"
+                              value={editMilestoneDraft.date}
+                              onChange={e => setEditMilestoneDraft(d => ({ ...d, date: e.target.value }))}
+                              className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                            />
+                          </div>
+                          <div className="flex gap-2">
+                            <select
+                              value={editMilestoneDraft.type}
+                              onChange={e => setEditMilestoneDraft(d => ({ ...d, type: e.target.value as Milestone['type'] }))}
+                              className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                            >
+                              <option value="discovery">🔍 Découverte</option>
+                              <option value="death">💀 Mort</option>
+                              <option value="arc">🏆 Arc narratif</option>
+                              <option value="combat">⚔ Combat notable</option>
+                              <option value="other">⭐ Autre</option>
+                            </select>
+                            <input
+                              type="text"
+                              value={editMilestoneDraft.notes}
+                              onChange={e => setEditMilestoneDraft(d => ({ ...d, notes: e.target.value }))}
+                              placeholder="Notes…"
+                              className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                            />
+                          </div>
+                          <div className="flex justify-between items-center">
+                            <button onClick={() => setEditingMilestoneId(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                            <button onClick={() => handleUpdateMilestone(item.data.id)} disabled={!editMilestoneDraft.title.trim()} className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 py-2">
+                          <span className="text-sm">{milestoneIcons[item.data.type]}</span>
+                          <span className="text-stone-200 text-sm font-medium">{item.data.title}</span>
+                          {item.data.date && <span className="text-stone-600 text-xs">{new Date(item.data.date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span>}
+                          {item.data.notes && <span className="text-stone-500 text-xs italic truncate max-w-xs">{item.data.notes}</span>}
+                          <button
+                            onClick={() => { setEditingMilestoneId(item.data.id); setEditMilestoneDraft({ title: item.data.title, date: item.data.date, type: item.data.type, notes: item.data.notes }) }}
+                            className="text-stone-600 hover:text-sky-400 text-sm leading-none transition-colors"
+                            title="Modifier"
+                          >✎</button>
+                          <button onClick={() => handleDeleteMilestone(item.data.id)} className="ml-auto text-stone-700 hover:text-red-400 text-xs transition-colors">✕</button>
+                        </div>
+                      )}
                     </div>
                   ) : (
                   <div className="flex-1 pb-2">
