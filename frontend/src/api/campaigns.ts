@@ -15,6 +15,7 @@ export interface Npc {
   role: string
   status: 'allié' | 'neutre' | 'ennemi' | 'inconnu'
   location?: string
+  faction?: string
   notes: string
 }
 

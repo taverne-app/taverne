@@ -24,7 +24,7 @@ import {
   type MonsterAttack,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, updateInspiration, type Character } from '../api/characters'
+import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -97,11 +97,11 @@ export function CampaignPage() {
   const [savingNotes, setSavingNotes] = useState(false)
 
   // PNJs
-  const [npcDraft, setNpcDraft] = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', notes: '' })
+  const [npcDraft, setNpcDraft] = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
   const [addingNpc, setAddingNpc] = useState(false)
   const [expandedNpc, setExpandedNpc] = useState<number | null>(null)
   const [editingNpcIdx, setEditingNpcIdx]   = useState<number | null>(null)
-  const [editNpcDraft, setEditNpcDraft]     = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', notes: '' })
+  const [editNpcDraft, setEditNpcDraft]     = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
   const [npcStatusFilter, setNpcStatusFilter] = useState<'all' | Npc['status']>('all')
 
   // Calendrier
@@ -159,6 +159,8 @@ export function CampaignPage() {
   const [factionDraft, setFactionDraft] = useState<Faction>(emptyFactionDraft())
   const [addingFaction, setAddingFaction] = useState(false)
   const [expandedFaction, setExpandedFaction] = useState<number | null>(null)
+  const [editingFactionIdx, setEditingFactionIdx] = useState<number | null>(null)
+  const [editFactionDraft, setEditFactionDraft]   = useState<Faction>(emptyFactionDraft())
 
   // Générateur de PNJ
   const [generatedNpc, setGeneratedNpc] = useState<GeneratedNpc | null>(null)
@@ -444,7 +446,7 @@ export function CampaignPage() {
     const next: Npc[] = [...(campaign.npcs ?? []), { ...npcDraft, name: npcDraft.name.trim() }]
     const updated = await updateCampaign(campaign.id, { npcs: next })
     setCampaign(updated)
-    setNpcDraft({ name: '', role: '', status: 'inconnu', location: '', notes: '' })
+    setNpcDraft({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
     setAddingNpc(false)
   }
 
@@ -790,6 +792,30 @@ export function CampaignPage() {
     )
     const updated = await updateCampaign(campaign.id, { factions: next })
     setCampaign(updated)
+  }
+
+  async function handleUpdateFaction(index: number) {
+    if (!campaign || !editFactionDraft.name.trim()) return
+    const next = (campaign.factions ?? []).map((f, i) => i === index ? { ...editFactionDraft, name: editFactionDraft.name.trim() } : f)
+    const updated = await updateCampaign(campaign.id, { factions: next })
+    setCampaign(updated)
+    setEditingFactionIdx(null)
+  }
+
+  async function handleRemoveCondition(charId: number, cond: string) {
+    const char = characters.find(c => c.id === charId)
+    if (!char) return
+    const next = char.state.conditions.filter(c => c !== cond)
+    const updated = await updateConditions(charId, next)
+    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
+  }
+
+  async function handleAddCondition(charId: number, cond: string) {
+    const char = characters.find(c => c.id === charId)
+    if (!char || !cond || char.state.conditions.includes(cond)) return
+    const next = [...char.state.conditions, cond]
+    const updated = await updateConditions(charId, next)
+    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
   }
 
   async function handleDeleteFaction(index: number) {
@@ -1446,17 +1472,30 @@ export function CampaignPage() {
                           </div>
                         )}
 
-                        {/* Conditions */}
-                        <div className="flex flex-wrap gap-1 flex-1 min-w-0">
-                          {c.state.conditions.length === 0 && !isDying ? (
-                            <span className="text-stone-700 text-xs">—</span>
-                          ) : (
-                            c.state.conditions.map(cond => (
-                              <span key={cond} className="text-xs bg-purple-900/50 border border-purple-700 text-purple-300 rounded px-1.5 py-0.5">
-                                {CONDITIONS_FR[cond] ?? cond}
-                              </span>
-                            ))
-                          )}
+                        {/* Conditions — cliquables pour retirer, + select pour ajouter */}
+                        <div className="flex flex-wrap gap-1 flex-1 min-w-0 items-center" onClick={e => e.preventDefault()}>
+                          {c.state.conditions.map(cond => (
+                            <button
+                              key={cond}
+                              onClick={e => { e.preventDefault(); handleRemoveCondition(c.id, cond) }}
+                              title="Cliquer pour retirer"
+                              className="text-xs bg-purple-900/50 border border-purple-700 text-purple-300 hover:bg-red-900/40 hover:border-red-700 hover:text-red-300 rounded px-1.5 py-0.5 transition-colors"
+                            >
+                              {CONDITIONS_FR[cond] ?? cond} ×
+                            </button>
+                          ))}
+                          <select
+                            value=""
+                            onChange={e => { if (e.target.value) { handleAddCondition(c.id, e.target.value); e.target.value = '' } }}
+                            onClick={e => e.preventDefault()}
+                            className="text-xs bg-transparent border border-stone-700 text-stone-600 hover:text-stone-400 rounded px-1 py-0.5 focus:outline-none cursor-pointer transition-colors"
+                            title="Ajouter une condition"
+                          >
+                            <option value="">+ cond.</option>
+                            {Object.entries(CONDITIONS_FR).filter(([k]) => !c.state.conditions.includes(k)).map(([k, v]) => (
+                              <option key={k} value={k}>{v}</option>
+                            ))}
+                          </select>
                         </div>
 
                         {/* Passive perception */}
@@ -1944,6 +1983,18 @@ export function CampaignPage() {
                     ))}
                   </select>
                 )}
+                {(campaign?.factions ?? []).length > 0 && (
+                  <select
+                    value={npcDraft.faction ?? ''}
+                    onChange={e => setNpcDraft(d => ({ ...d, faction: e.target.value }))}
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-violet-500 transition-colors"
+                  >
+                    <option value="">⚔ Faction</option>
+                    {(campaign?.factions ?? []).map((f, i) => (
+                      <option key={i} value={f.name}>{f.name}</option>
+                    ))}
+                  </select>
+                )}
                 <input
                   type="text"
                   placeholder="Notes (secret, lien…)"
@@ -2043,6 +2094,18 @@ export function CampaignPage() {
                                   ))}
                                 </select>
                               )}
+                              {(campaign.factions ?? []).length > 0 && (
+                                <select
+                                  value={editNpcDraft.faction ?? ''}
+                                  onChange={e => setEditNpcDraft(d => ({ ...d, faction: e.target.value }))}
+                                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-violet-500"
+                                >
+                                  <option value="">⚔ Faction</option>
+                                  {(campaign.factions ?? []).map((f, fi) => (
+                                    <option key={fi} value={f.name}>{f.name}</option>
+                                  ))}
+                                </select>
+                              )}
                             </div>
                             <textarea
                               value={editNpcDraft.notes}
@@ -2071,6 +2134,7 @@ export function CampaignPage() {
                                 <div className="flex items-center gap-2 flex-wrap">
                                   {npc.role && <p className="text-stone-500 text-xs truncate">{npc.role}</p>}
                                   {npc.location && <span className="text-xs text-sky-400/70">📍 {npc.location}</span>}
+                                  {npc.faction && <span className="text-xs text-amber-400/70">⚔ {npc.faction}</span>}
                                 </div>
                               </div>
                               <div className="flex items-center gap-2 shrink-0">
@@ -3133,56 +3197,101 @@ export function CampaignPage() {
                 const repLabel = rep >= 4 ? 'Vénéré' : rep >= 2 ? 'Allié' : rep >= 0 ? 'Neutre' : rep >= -2 ? 'Suspect' : 'Ennemi'
                 const repColor = rep >= 2 ? 'text-emerald-400' : rep >= 0 ? 'text-stone-400' : rep >= -2 ? 'text-amber-400' : 'text-red-400'
                 const repDotColor = rep >= 2 ? 'bg-emerald-500' : rep >= 0 ? 'bg-stone-500' : rep >= -2 ? 'bg-amber-500' : 'bg-red-500'
+                const factionNpcs = (campaign.npcs ?? []).filter(n => n.faction === faction.name)
                 return (
                   <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
-                    <div
-                      className="flex items-center gap-3 p-4 cursor-pointer hover:bg-stone-800/50 transition-colors"
-                      onClick={() => setExpandedFaction(expandedFaction === i ? null : i)}
-                    >
-                      <div className={`w-2 h-2 rounded-full shrink-0 ${repDotColor}`} />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-white text-sm font-medium">{faction.name}</p>
-                        {faction.description && <p className="text-stone-500 text-xs truncate">{faction.description}</p>}
-                      </div>
-                      <div className="flex items-center gap-3 shrink-0">
-                        <span className={`text-xs font-medium ${repColor}`}>{repLabel}</span>
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={e => { e.stopPropagation(); handleUpdateFactionReputation(i, -1) }}
-                            disabled={rep <= -5}
-                            className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-sm font-bold transition-colors disabled:opacity-30 flex items-center justify-center"
-                          >−</button>
-                          <span className="text-stone-300 text-xs w-5 text-center font-mono">{rep > 0 ? `+${rep}` : rep}</span>
-                          <button
-                            onClick={e => { e.stopPropagation(); handleUpdateFactionReputation(i, +1) }}
-                            disabled={rep >= 5}
-                            className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-sm font-bold transition-colors disabled:opacity-30 flex items-center justify-center"
-                          >+</button>
+                    {editingFactionIdx === i ? (
+                      <div className="p-4 space-y-2">
+                        <div className="grid grid-cols-2 gap-2">
+                          <input
+                            autoFocus
+                            type="text"
+                            value={editFactionDraft.name}
+                            onChange={e => setEditFactionDraft(d => ({ ...d, name: e.target.value }))}
+                            placeholder="Nom *"
+                            className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500"
+                          />
+                          <input
+                            type="text"
+                            value={editFactionDraft.description}
+                            onChange={e => setEditFactionDraft(d => ({ ...d, description: e.target.value }))}
+                            placeholder="Description courte"
+                            className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500"
+                          />
                         </div>
-                        <button
-                          onClick={e => { e.stopPropagation(); handleDeleteFaction(i) }}
-                          className="text-stone-600 hover:text-red-400 text-lg leading-none transition-colors ml-1"
-                        >×</button>
-                      </div>
-                    </div>
-                    {/* Reputation bar */}
-                    <div className="px-4 pb-1">
-                      <div className="h-1 bg-stone-800 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all ${repDotColor}`}
-                          style={{ width: `${((rep + 5) / 10) * 100}%` }}
+                        <textarea
+                          value={editFactionDraft.notes}
+                          onChange={e => setEditFactionDraft(d => ({ ...d, notes: e.target.value }))}
+                          placeholder="Notes…"
+                          rows={2}
+                          className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 resize-none"
                         />
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => setEditingFactionIdx(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                          <button
+                            onClick={() => handleUpdateFaction(i)}
+                            disabled={!editFactionDraft.name.trim()}
+                            className="bg-amber-700 hover:bg-amber-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
+                          >Sauvegarder</button>
+                        </div>
                       </div>
-                    </div>
-                    {expandedFaction === i && faction.notes && (
-                      <div className="px-4 pb-4 pt-1">
-                        <p className="text-stone-400 text-sm">{faction.notes}</p>
-                      </div>
-                    )}
-                    {expandedFaction === i && !faction.notes && (
-                      <div className="px-4 pb-3 pt-1">
-                        <p className="text-stone-600 text-xs italic">Aucune note.</p>
-                      </div>
+                    ) : (
+                      <>
+                        <div
+                          className="flex items-center gap-3 p-4 cursor-pointer hover:bg-stone-800/50 transition-colors"
+                          onClick={() => setExpandedFaction(expandedFaction === i ? null : i)}
+                        >
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${repDotColor}`} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-white text-sm font-medium">{faction.name}</p>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              {faction.description && <p className="text-stone-500 text-xs truncate">{faction.description}</p>}
+                              {factionNpcs.length > 0 && factionNpcs.map((n, ni) => (
+                                <span key={ni} className="text-xs text-violet-400/70 bg-violet-900/20 border border-violet-800/30 rounded px-1.5 py-0.5">{n.name}</span>
+                              ))}
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className={`text-xs font-medium ${repColor}`}>{repLabel}</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={e => { e.stopPropagation(); handleUpdateFactionReputation(i, -1) }}
+                                disabled={rep <= -5}
+                                className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-sm font-bold transition-colors disabled:opacity-30 flex items-center justify-center"
+                              >−</button>
+                              <span className="text-stone-300 text-xs w-5 text-center font-mono">{rep > 0 ? `+${rep}` : rep}</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); handleUpdateFactionReputation(i, +1) }}
+                                disabled={rep >= 5}
+                                className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-sm font-bold transition-colors disabled:opacity-30 flex items-center justify-center"
+                              >+</button>
+                            </div>
+                            <button
+                              onClick={e => { e.stopPropagation(); setEditFactionDraft({ ...faction }); setEditingFactionIdx(i); setExpandedFaction(null) }}
+                              className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
+                              title="Modifier cette faction"
+                            >✎</button>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDeleteFaction(i) }}
+                              className="text-stone-600 hover:text-red-400 text-lg leading-none transition-colors"
+                            >×</button>
+                          </div>
+                        </div>
+                        {/* Reputation bar */}
+                        <div className="px-4 pb-1">
+                          <div className="h-1 bg-stone-800 rounded-full overflow-hidden">
+                            <div className={`h-full rounded-full transition-all ${repDotColor}`} style={{ width: `${((rep + 5) / 10) * 100}%` }} />
+                          </div>
+                        </div>
+                        {expandedFaction === i && (
+                          <div className="px-4 pb-4 pt-2 border-t border-stone-800">
+                            {faction.notes
+                              ? <MarkdownText className="text-stone-400 text-sm">{faction.notes}</MarkdownText>
+                              : <p className="text-stone-600 text-xs italic">Aucune note.</p>
+                            }
+                          </div>
+                        )}
+                      </>
                     )}
                   </div>
                 )
