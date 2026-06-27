@@ -24,7 +24,7 @@ import {
   type MonsterAttack,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, type Character } from '../api/characters'
+import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, updateExhaustion, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -153,6 +153,9 @@ export function CampaignPage() {
   const [monsterDraft, setMonsterDraft] = useState<CustomMonster>(emptyMonsterDraft())
   const [addingMonster, setAddingMonster] = useState(false)
   const [attackDraft, setAttackDraft] = useState<MonsterAttack>(emptyAttackDraft())
+  const [editingMonsterIdx, setEditingMonsterIdx] = useState<number | null>(null)
+  const [editMonsterDraft, setEditMonsterDraft] = useState<CustomMonster>(emptyMonsterDraft())
+  const [editAttackDraft, setEditAttackDraft] = useState<MonsterAttack>(emptyAttackDraft())
 
   // Factions
   const emptyFactionDraft = (): Faction => ({ name: '', description: '', reputation: 0, notes: '' })
@@ -841,6 +844,24 @@ export function CampaignPage() {
     const next = (campaign.custom_monsters ?? []).filter((_, i) => i !== index)
     const updated = await updateCampaign(campaign.id, { custom_monsters: next })
     setCampaign(updated)
+    if (editingMonsterIdx === index) setEditingMonsterIdx(null)
+  }
+
+  async function handleUpdateCustomMonster(index: number) {
+    if (!campaign || !editMonsterDraft.name.trim()) return
+    const xp = CR_XP[editMonsterDraft.cr] ?? 0
+    const next = (campaign.custom_monsters ?? []).map((m, i) => i === index ? { ...editMonsterDraft, name: editMonsterDraft.name.trim(), xp } : m)
+    const updated = await updateCampaign(campaign.id, { custom_monsters: next })
+    setCampaign(updated)
+    setEditingMonsterIdx(null)
+  }
+
+  async function handleChangeExhaustion(charId: number, delta: number) {
+    const char = characters.find(c => c.id === charId)
+    if (!char) return
+    const next = Math.max(0, Math.min(6, char.state.exhaustion_level + delta))
+    const updated = await updateExhaustion(charId, next)
+    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
   }
 
   function handleExportCampaign() {
@@ -1440,12 +1461,16 @@ export function CampaignPage() {
                           </p>
                         </div>
 
-                        {/* HP */}
-                        <div className="w-40 shrink-0">
+                        {/* HP — cliquable pour soins/dégâts rapides */}
+                        <div className="w-40 shrink-0" onClick={e => e.preventDefault()}>
                           <div className="flex items-center justify-between mb-1">
-                            <span className={`text-sm font-bold ${isDying ? 'text-red-400' : 'text-white'}`}>
+                            <button
+                              onClick={e => { e.preventDefault(); setHpEditCharId(hpEditCharId === c.id ? null : c.id); setHpDeltaValue(5) }}
+                              className={`text-sm font-bold transition-colors ${isDying ? 'text-red-400 hover:text-red-300' : 'text-white hover:text-amber-300'}`}
+                              title="Cliquer pour modifier les PV"
+                            >
                               {c.combat.current_hp}
-                            </span>
+                            </button>
                             <span className="text-stone-500 text-xs">/ {c.combat.max_hp}</span>
                             {c.combat.temporary_hp > 0 && (
                               <span className="text-sky-400 text-xs">+{c.combat.temporary_hp}</span>
@@ -1457,6 +1482,26 @@ export function CampaignPage() {
                               style={{ width: `${hpPct}%` }}
                             />
                           </div>
+                          {hpEditCharId === c.id && (
+                            <div className="mt-1.5 flex items-center gap-1">
+                              <input
+                                type="number"
+                                value={hpDeltaValue}
+                                onChange={e => setHpDeltaValue(Math.max(1, parseInt(e.target.value) || 1))}
+                                min={1}
+                                className="w-12 bg-stone-800 border border-stone-700 rounded px-1.5 py-0.5 text-white text-xs text-center focus:outline-none"
+                                onClick={e => e.preventDefault()}
+                              />
+                              <button
+                                onClick={e => { e.preventDefault(); handleQuickHp(c.id, hpDeltaValue, 'heal') }}
+                                className="flex-1 bg-emerald-900/60 hover:bg-emerald-900/80 border border-emerald-800/50 text-emerald-400 text-xs font-bold rounded py-0.5 transition-colors"
+                              >+</button>
+                              <button
+                                onClick={e => { e.preventDefault(); handleQuickHp(c.id, hpDeltaValue, 'damage') }}
+                                className="flex-1 bg-red-900/40 hover:bg-red-900/60 border border-red-800/40 text-red-400 text-xs font-bold rounded py-0.5 transition-colors"
+                              >−</button>
+                            </div>
+                          )}
                         </div>
 
                         {/* Death saves */}
@@ -1511,15 +1556,29 @@ export function CampaignPage() {
                               ◈ {c.state.concentrating_on}
                             </span>
                           )}
-                          {c.state.exhaustion_level > 0 && (
-                            <span className={`text-xs rounded px-1.5 py-0.5 border ${
-                              c.state.exhaustion_level <= 2 ? 'bg-amber-900/40 border-amber-700/50 text-amber-400' :
-                              c.state.exhaustion_level <= 4 ? 'bg-orange-900/40 border-orange-700/50 text-orange-400' :
-                              'bg-red-900/40 border-red-700/50 text-red-400'
-                            }`}>
-                              Épuisement {c.state.exhaustion_level}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1" onClick={e => e.preventDefault()}>
+                            {c.state.exhaustion_level > 0 && (
+                              <span className={`text-xs rounded px-1.5 py-0.5 border ${
+                                c.state.exhaustion_level <= 2 ? 'bg-amber-900/40 border-amber-700/50 text-amber-400' :
+                                c.state.exhaustion_level <= 4 ? 'bg-orange-900/40 border-orange-700/50 text-orange-400' :
+                                'bg-red-900/40 border-red-700/50 text-red-400'
+                              }`}>
+                                Épuis. {c.state.exhaustion_level}
+                              </span>
+                            )}
+                            <button
+                              onClick={e => { e.preventDefault(); handleChangeExhaustion(c.id, -1) }}
+                              disabled={c.state.exhaustion_level <= 0}
+                              title="Réduire l'épuisement"
+                              className="text-stone-600 hover:text-stone-400 text-xs disabled:opacity-20 transition-colors"
+                            >−</button>
+                            <button
+                              onClick={e => { e.preventDefault(); handleChangeExhaustion(c.id, +1) }}
+                              disabled={c.state.exhaustion_level >= 6}
+                              title="Augmenter l'épuisement"
+                              className="text-stone-600 hover:text-amber-400 text-xs disabled:opacity-20 transition-colors"
+                            >+</button>
+                          </div>
                           {c.spellcasting.ability && Object.entries(c.spellcasting.slots)
                             .filter(([, s]) => s.max > 0)
                             .sort(([a], [b]) => Number(a) - Number(b))
@@ -3089,36 +3148,83 @@ export function CampaignPage() {
           {(campaign.custom_monsters ?? []).length > 0 ? (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(campaign.custom_monsters ?? []).map((m, i) => (
-                <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4 flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-white text-sm font-medium">{m.name}</p>
-                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
-                      <span className="text-stone-500 text-xs">CR {m.cr}</span>
-                      <span className="text-stone-500 text-xs">CA {m.ac}</span>
-                      <span className="text-stone-500 text-xs">{m.hp_avg} PV</span>
-                      <span className="text-stone-500 text-xs">Init {m.initiative_mod >= 0 ? '+' : ''}{m.initiative_mod}</span>
-                      <span className="text-amber-600/80 text-xs">{m.xp} XP</span>
-                    </div>
-                    {m.speed != null && <span className="text-stone-500 text-xs">Vit. {m.speed} m</span>}
-                    {m.notes && <p className="text-stone-500 text-xs mt-1 italic">{m.notes}</p>}
-                    {(m.attacks ?? []).length > 0 && (
-                      <div className="mt-2 space-y-0.5">
-                        {(m.attacks ?? []).map((atk, ai) => (
-                          <p key={ai} className="text-xs text-stone-400">
-                            <span className="font-medium">{atk.name}</span>
-                            {' '}<span className="text-amber-500/80">{atk.bonus}</span>
-                            {' → '}<span className="text-red-400/80">{atk.damage}</span>
-                          </p>
-                        ))}
+                <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+                  {editingMonsterIdx === i ? (
+                    <div className="p-4 space-y-3">
+                      <div className="grid grid-cols-2 gap-2">
+                        <input autoFocus type="text" placeholder="Nom *" value={editMonsterDraft.name} onChange={e => setEditMonsterDraft(d => ({ ...d, name: e.target.value }))}
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500" />
+                        <select value={editMonsterDraft.cr} onChange={e => setEditMonsterDraft(d => ({ ...d, cr: e.target.value }))}
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-rose-500">
+                          {['0','1/8','1/4','1/2','1','2','3','4','5','6','7','8','9','10','11','12','13','14','15','16','17','18','19','20'].map(cr => <option key={cr} value={cr}>CR {cr}</option>)}
+                        </select>
                       </div>
-                    )}
-                  </div>
-                  <button
-                    onClick={() => handleDeleteCustomMonster(i)}
-                    className="text-stone-600 hover:text-red-400 text-lg leading-none shrink-0 transition-colors"
-                  >
-                    ×
-                  </button>
+                      <div className="grid grid-cols-4 gap-2">
+                        <div><label className="text-stone-600 text-[10px] block mb-0.5">CA</label><input type="number" value={editMonsterDraft.ac} onChange={e => setEditMonsterDraft(d => ({ ...d, ac: +e.target.value }))} className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                        <div><label className="text-stone-600 text-[10px] block mb-0.5">PV moy.</label><input type="number" value={editMonsterDraft.hp_avg} onChange={e => setEditMonsterDraft(d => ({ ...d, hp_avg: +e.target.value }))} className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                        <div><label className="text-stone-600 text-[10px] block mb-0.5">Init. mod</label><input type="number" value={editMonsterDraft.initiative_mod} onChange={e => setEditMonsterDraft(d => ({ ...d, initiative_mod: +e.target.value }))} className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                        <div><label className="text-stone-600 text-[10px] block mb-0.5">Vitesse</label><input type="number" value={editMonsterDraft.speed ?? ''} onChange={e => setEditMonsterDraft(d => ({ ...d, speed: e.target.value ? +e.target.value : undefined }))} placeholder="—" className="w-full bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" /></div>
+                      </div>
+                      <input type="text" placeholder="Notes (immunités, capacités…)" value={editMonsterDraft.notes ?? ''} onChange={e => setEditMonsterDraft(d => ({ ...d, notes: e.target.value }))}
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-rose-500" />
+                      <div>
+                        <p className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-2">Attaques</p>
+                        {(editMonsterDraft.attacks ?? []).map((atk, ai) => (
+                          <div key={ai} className="flex items-center gap-2 mb-1.5 bg-stone-800/60 rounded-lg px-3 py-1.5">
+                            <span className="text-stone-200 text-sm flex-1 truncate">{atk.name}</span>
+                            <span className="text-amber-300 text-xs font-mono">{atk.bonus}</span>
+                            <span className="text-stone-500 text-xs">→</span>
+                            <span className="text-red-300 text-xs font-mono">{atk.damage}</span>
+                            <button onClick={() => setEditMonsterDraft(d => ({ ...d, attacks: (d.attacks ?? []).filter((_, j) => j !== ai) }))} className="text-stone-600 hover:text-red-400 text-sm transition-colors">×</button>
+                          </div>
+                        ))}
+                        <div className="grid grid-cols-3 gap-2 mt-1">
+                          <input type="text" placeholder="Nom" value={editAttackDraft.name} onChange={e => setEditAttackDraft(d => ({ ...d, name: e.target.value }))} className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-rose-500" />
+                          <input type="text" placeholder="+5 au toucher" value={editAttackDraft.bonus} onChange={e => setEditAttackDraft(d => ({ ...d, bonus: e.target.value }))} className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-rose-500" />
+                          <input type="text" placeholder="1d6+3" value={editAttackDraft.damage} onChange={e => setEditAttackDraft(d => ({ ...d, damage: e.target.value }))}
+                            onKeyDown={e => { if (e.key === 'Enter' && editAttackDraft.name.trim() && editAttackDraft.damage.trim()) { setEditMonsterDraft(d => ({ ...d, attacks: [...(d.attacks ?? []), { ...editAttackDraft }] })); setEditAttackDraft(emptyAttackDraft()) } }}
+                            className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-rose-500" />
+                        </div>
+                        {editAttackDraft.name.trim() && editAttackDraft.damage.trim() && (
+                          <button onClick={() => { setEditMonsterDraft(d => ({ ...d, attacks: [...(d.attacks ?? []), { ...editAttackDraft }] })); setEditAttackDraft(emptyAttackDraft()) }} className="text-rose-400 hover:text-rose-300 text-xs mt-1 transition-colors">+ Ajouter l'attaque</button>
+                        )}
+                      </div>
+                      <div className="flex gap-2 justify-end">
+                        <button onClick={() => setEditingMonsterIdx(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                        <button onClick={() => handleUpdateCustomMonster(i)} disabled={!editMonsterDraft.name.trim()} className="bg-rose-700 hover:bg-rose-600 disabled:opacity-50 text-white text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors">Sauvegarder</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="p-4 flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-white text-sm font-medium">{m.name}</p>
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                          <span className="text-stone-500 text-xs">CR {m.cr}</span>
+                          <span className="text-stone-500 text-xs">CA {m.ac}</span>
+                          <span className="text-stone-500 text-xs">{m.hp_avg} PV</span>
+                          <span className="text-stone-500 text-xs">Init {m.initiative_mod >= 0 ? '+' : ''}{m.initiative_mod}</span>
+                          <span className="text-amber-600/80 text-xs">{m.xp} XP</span>
+                        </div>
+                        {m.speed != null && <span className="text-stone-500 text-xs">Vit. {m.speed} m</span>}
+                        {m.notes && <p className="text-stone-500 text-xs mt-1 italic">{m.notes}</p>}
+                        {(m.attacks ?? []).length > 0 && (
+                          <div className="mt-2 space-y-0.5">
+                            {(m.attacks ?? []).map((atk, ai) => (
+                              <p key={ai} className="text-xs text-stone-400">
+                                <span className="font-medium">{atk.name}</span>
+                                {' '}<span className="text-amber-500/80">{atk.bonus}</span>
+                                {' → '}<span className="text-red-400/80">{atk.damage}</span>
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => { setEditMonsterDraft({ ...m, attacks: [...(m.attacks ?? [])] }); setEditAttackDraft(emptyAttackDraft()); setEditingMonsterIdx(i) }} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Modifier">✎</button>
+                        <button onClick={() => handleDeleteCustomMonster(i)} className="text-stone-600 hover:text-red-400 text-lg leading-none transition-colors">×</button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

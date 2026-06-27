@@ -514,6 +514,36 @@ export function SharedCampaignPage() {
           </section>
         )}
 
+        {/* Factions */}
+        {(campaign.factions ?? []).length > 0 && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Factions</h2>
+            <div className="space-y-2">
+              {(campaign.factions ?? []).map((faction, i) => {
+                const rep = faction.reputation
+                const repLabel = rep >= 4 ? 'Vénéré' : rep >= 2 ? 'Allié' : rep >= 0 ? 'Neutre' : rep >= -2 ? 'Suspect' : 'Ennemi'
+                const repColor = rep >= 2 ? 'text-emerald-400' : rep >= 0 ? 'text-stone-400' : rep >= -2 ? 'text-amber-400' : 'text-red-400'
+                const repDotColor = rep >= 2 ? 'bg-emerald-500' : rep >= 0 ? 'bg-stone-500' : rep >= -2 ? 'bg-amber-500' : 'bg-red-500'
+                return (
+                  <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+                    <div className="flex items-center gap-3">
+                      <div className={`w-2 h-2 rounded-full shrink-0 ${repDotColor}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm font-medium">{faction.name}</p>
+                        {faction.description && <p className="text-stone-500 text-xs truncate">{faction.description}</p>}
+                      </div>
+                      <span className={`text-xs font-medium shrink-0 ${repColor}`}>{repLabel}</span>
+                    </div>
+                    <div className="mt-2 h-1 bg-stone-800 rounded-full overflow-hidden">
+                      <div className={`h-full rounded-full ${repDotColor}`} style={{ width: `${((rep + 5) / 10) * 100}%` }} />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </section>
+        )}
+
         {characters.length === 0 && combatants.length === 0 ? (
           <div className="text-center py-20">
             <p className="text-stone-500 text-sm">Aucun personnage dans cette campagne.</p>
