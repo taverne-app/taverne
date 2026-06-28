@@ -10,6 +10,7 @@ import {
   updateCombatantInitiative,
   updateCombatantConditions,
   updateCombatantFaction,
+  updateCombatantName,
   deleteCombatant,
   type Combatant,
   type CombatantFaction,
@@ -585,6 +586,8 @@ export function CombatPage() {
 
   // Monster stats popup
   const [monsterPopup, setMonsterPopup] = useState<CustomMonster | null>(null)
+  const [renamingCombatantId, setRenamingCombatantId] = useState<number | null>(null)
+  const [renameDraft, setRenameDraft] = useState('')
 
   function handleDmRoll() {
     const sides = dmDiceSides
@@ -969,6 +972,13 @@ export function CombatPage() {
     }
     const updated = await updateCombatantConditions(campaignId, id, nextConditions, nextDurations)
     setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+  }
+
+  async function handleRenameCombatant(id: number) {
+    if (!campaignId || !renameDraft.trim()) return
+    const updated = await updateCombatantName(campaignId, id, renameDraft.trim())
+    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+    setRenamingCombatantId(null)
   }
 
   async function handleCycleFaction(id: number) {
@@ -2510,16 +2520,33 @@ export function CombatPage() {
                       {/* Name */}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
-                          <button
-                            onClick={() => {
-                              const m = (campaign?.custom_monsters ?? []).find(m => m.name === cb.name)
-                              if (m) setMonsterPopup(m)
-                            }}
-                            title={(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'Voir les stats' : undefined}
-                            className={`font-semibold truncate text-left ${(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'hover:underline cursor-pointer' : 'cursor-default'} ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}
-                          >
-                            {cb.name}
-                          </button>
+                          {renamingCombatantId === cb.id ? (
+                            <form
+                              onSubmit={e => { e.preventDefault(); handleRenameCombatant(cb.id) }}
+                              className="flex items-center gap-1 min-w-0"
+                            >
+                              <input
+                                autoFocus
+                                value={renameDraft}
+                                onChange={e => setRenameDraft(e.target.value)}
+                                onBlur={() => { if (renameDraft.trim()) handleRenameCombatant(cb.id); else setRenamingCombatantId(null) }}
+                                onKeyDown={e => { if (e.key === 'Escape') setRenamingCombatantId(null) }}
+                                className="bg-stone-700 border border-stone-500 rounded px-2 py-0.5 text-white text-sm font-semibold focus:outline-none focus:border-amber-500 w-36"
+                              />
+                            </form>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                const m = (campaign?.custom_monsters ?? []).find(m => m.name === cb.name)
+                                if (m) setMonsterPopup(m)
+                              }}
+                              onDoubleClick={() => { setRenamingCombatantId(cb.id); setRenameDraft(cb.name) }}
+                              title={(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'Voir les stats — double-clic pour renommer' : 'Double-clic pour renommer'}
+                              className={`font-semibold truncate text-left ${(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'hover:underline cursor-pointer' : 'cursor-default'} ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}
+                            >
+                              {cb.name}
+                            </button>
+                          )}
                           <button
                             onClick={() => handleCycleFaction(cb.id)}
                             title="Changer la faction"

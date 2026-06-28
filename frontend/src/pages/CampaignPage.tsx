@@ -105,6 +105,7 @@ export function CampaignPage() {
   const [editNpcDraft, setEditNpcDraft]     = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
   const [npcStatusFilter, setNpcStatusFilter] = useState<'all' | Npc['status']>('all')
   const [npcFactionFilter, setNpcFactionFilter] = useState<string>('all')
+  const [npcSort, setNpcSort] = useState<'default' | 'name' | 'status' | 'faction'>('default')
 
   // Calendrier
   const [calendarDraft, setCalendarDraft] = useState<Partial<GameCalendar>>({})
@@ -145,6 +146,7 @@ export function CampaignPage() {
   const [editingLocationIdx, setEditingLocationIdx] = useState<number | null>(null)
   const [editLocationDraft, setEditLocationDraft]   = useState<Location>(emptyLocationDraft())
   const [locationStatusFilter, setLocationStatusFilter] = useState<'all' | Location['status']>('all')
+  const [locationSearch, setLocationSearch] = useState('')
 
   // Préparation de session
   const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
@@ -2252,6 +2254,17 @@ export function CampaignPage() {
               PNJ rencontrés ({(campaign.npcs ?? []).length})
             </h2>
             <div className="flex items-center gap-3">
+              <select
+                value={npcSort}
+                onChange={e => setNpcSort(e.target.value as typeof npcSort)}
+                className="text-xs bg-stone-900 border border-stone-800 text-stone-500 rounded px-2 py-1 focus:outline-none transition-colors"
+                title="Trier les PNJ"
+              >
+                <option value="default">Ordre d'ajout</option>
+                <option value="name">Nom A→Z</option>
+                <option value="status">Statut</option>
+                <option value="faction">Faction</option>
+              </select>
               <button
                 onClick={handleGenerateNpc}
                 className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
@@ -2445,6 +2458,12 @@ export function CampaignPage() {
                   .map((npc, i) => ({ npc, i }))
                   .filter(({ npc }) => npcStatusFilter === 'all' || npc.status === npcStatusFilter)
                   .filter(({ npc }) => npcFactionFilter === 'all' || npc.faction === npcFactionFilter)
+                  .sort((a, b) => {
+                    if (npcSort === 'name') return a.npc.name.localeCompare(b.npc.name, 'fr')
+                    if (npcSort === 'status') { const order = ['allié', 'neutre', 'inconnu', 'ennemi']; return order.indexOf(a.npc.status) - order.indexOf(b.npc.status) }
+                    if (npcSort === 'faction') return (a.npc.faction ?? '').localeCompare(b.npc.faction ?? '', 'fr')
+                    return 0
+                  })
                   .map(({ npc, i }) => {
                     const statusColor = npc.status === 'allié' ? 'text-emerald-400' : npc.status === 'ennemi' ? 'text-red-400' : npc.status === 'neutre' ? 'text-amber-400' : 'text-stone-400'
                     const statusIcon = npc.status === 'allié' ? '🟢' : npc.status === 'ennemi' ? '🔴' : npc.status === 'neutre' ? '🟡' : '❓'
@@ -2853,7 +2872,15 @@ export function CampaignPage() {
           )}
 
           {(campaign?.locations ?? []).length > 1 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            <div className="space-y-2 mb-3">
+              <input
+                type="text"
+                value={locationSearch}
+                onChange={e => setLocationSearch(e.target.value)}
+                placeholder="Rechercher un lieu…"
+                className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+              />
+            <div className="flex flex-wrap gap-1.5">
               {(['all', 'inconnu', 'connu', 'exploré'] as const).map(s => {
                 const count = s === 'all'
                   ? (campaign?.locations ?? []).length
@@ -2875,6 +2902,7 @@ export function CampaignPage() {
                 )
               })}
             </div>
+            </div>
           )}
 
           {(campaign?.locations ?? []).length === 0 && !addingLocation ? (
@@ -2888,7 +2916,7 @@ export function CampaignPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {(campaign?.locations ?? []).map((loc, i) => ({ loc, i })).filter(({ loc }) => locationStatusFilter === 'all' || loc.status === locationStatusFilter).map(({ loc, i }) => {
+              {(campaign?.locations ?? []).map((loc, i) => ({ loc, i })).filter(({ loc }) => (locationStatusFilter === 'all' || loc.status === locationStatusFilter) && (!locationSearch || loc.name.toLowerCase().includes(locationSearch.toLowerCase()))).map(({ loc, i }) => {
                 const typeIcon = loc.type === 'ville' ? '🏙' : loc.type === 'donjon' ? '⛏' : loc.type === 'forêt' ? '🌲' : loc.type === 'taverne' ? '🍺' : loc.type === 'temple' ? '⛪' : loc.type === 'château' ? '🏰' : '📍'
                 const statusColor = loc.status === 'exploré' ? 'text-emerald-400' : loc.status === 'connu' ? 'text-amber-400' : 'text-stone-500'
                 const rep = loc.reputation ?? 'neutre'

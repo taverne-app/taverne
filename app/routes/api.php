@@ -37,6 +37,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('combatants/{combatant}/initiative', [CombatantController::class, 'updateInitiative']);
         Route::patch('combatants/{combatant}/conditions', [CombatantController::class, 'updateConditions']);
         Route::patch('combatants/{combatant}/faction',    [CombatantController::class, 'updateFaction']);
+        Route::patch('combatants/{combatant}/name',      [CombatantController::class, 'updateName']);
     });
 
     // Personnages

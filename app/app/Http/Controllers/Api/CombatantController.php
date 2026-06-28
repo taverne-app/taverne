@@ -108,6 +108,21 @@ class CombatantController extends Controller
         return new CombatantResource($fresh);
     }
 
+    public function updateName(Request $request, Campaign $campaign, Combatant $combatant): CombatantResource
+    {
+        $this->authorize($request, $campaign);
+        abort_if($combatant->campaign_id !== $campaign->id, 403);
+
+        $request->validate(['name' => ['required', 'string', 'max:100']]);
+
+        $combatant->update(['name' => $request->input('name')]);
+
+        $fresh = $combatant->fresh();
+        CombatantUpdated::dispatch($fresh);
+
+        return new CombatantResource($fresh);
+    }
+
     public function updateFaction(Request $request, Campaign $campaign, Combatant $combatant): CombatantResource
     {
         $this->authorize($request, $campaign);

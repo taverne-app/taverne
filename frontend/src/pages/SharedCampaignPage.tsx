@@ -269,6 +269,7 @@ export function SharedCampaignPage() {
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
+  const [expandedFactionIdx, setExpandedFactionIdx] = useState<number | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -626,6 +627,21 @@ export function SharedCampaignPage() {
                     <div className="mt-2 h-1 bg-stone-800 rounded-full overflow-hidden">
                       <div className={`h-full rounded-full ${repDotColor}`} style={{ width: `${((rep + 5) / 10) * 100}%` }} />
                     </div>
+                    {faction.notes && (
+                      <>
+                        <button
+                          onClick={() => setExpandedFactionIdx(expandedFactionIdx === i ? null : i)}
+                          className="text-stone-600 hover:text-stone-400 text-xs mt-2 transition-colors"
+                        >
+                          {expandedFactionIdx === i ? '▲ Masquer' : '▼ Notes'}
+                        </button>
+                        {expandedFactionIdx === i && (
+                          <div className="mt-2 pt-2 border-t border-stone-800">
+                            <MarkdownText className="text-stone-400 text-xs">{faction.notes}</MarkdownText>
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 )
               })}
