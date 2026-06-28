@@ -106,6 +106,7 @@ export function CampaignPage() {
   const [npcStatusFilter, setNpcStatusFilter] = useState<'all' | Npc['status']>('all')
   const [npcFactionFilter, setNpcFactionFilter] = useState<string>('all')
   const [npcSort, setNpcSort] = useState<'default' | 'name' | 'status' | 'faction'>('default')
+  const [npcSearch, setNpcSearch] = useState('')
 
   // Calendrier
   const [calendarDraft, setCalendarDraft] = useState<Partial<GameCalendar>>({})
@@ -147,6 +148,7 @@ export function CampaignPage() {
   const [editLocationDraft, setEditLocationDraft]   = useState<Location>(emptyLocationDraft())
   const [locationStatusFilter, setLocationStatusFilter] = useState<'all' | Location['status']>('all')
   const [locationSearch, setLocationSearch] = useState('')
+  const [locationSort, setLocationSort] = useState<'default' | 'name' | 'type' | 'status'>('default')
 
   // Préparation de session
   const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
@@ -193,6 +195,10 @@ export function CampaignPage() {
   const [tableResults, setTableResults] = useState<Record<number, string>>({})
   const [editingTableIdx, setEditingTableIdx] = useState<number | null>(null)
   const [entryDraft, setEntryDraft] = useState<RandomTableEntry>({ weight: 1, text: '' })
+  const [renamingTableIdx, setRenamingTableIdx] = useState<number | null>(null)
+  const [renamingTableDraft, setRenamingTableDraft] = useState('')
+  const [editingEntryKey, setEditingEntryKey] = useState<string | null>(null)
+  const [editEntryDraft, setEditEntryDraft] = useState<RandomTableEntry>({ weight: 1, text: '' })
 
   // Scènes de préparation
   const emptyScene = (): PrepScene => ({
@@ -742,6 +748,26 @@ export function CampaignPage() {
     )
     const updated = await updateCampaign(campaign.id, { random_tables: next })
     setCampaign(updated)
+  }
+
+  async function handleUpdateTableEntry(tableIdx: number, entryIdx: number, entry: RandomTableEntry) {
+    if (!campaign || !entry.text.trim()) { setEditingEntryKey(null); return }
+    const tables = campaign.random_tables ?? []
+    const next = tables.map((t, i) =>
+      i === tableIdx ? { ...t, entries: t.entries.map((e, j) => j === entryIdx ? { ...entry, text: entry.text.trim() } : e) } : t
+    )
+    const updated = await updateCampaign(campaign.id, { random_tables: next })
+    setCampaign(updated)
+    setEditingEntryKey(null)
+  }
+
+  async function handleRenameTable(tableIdx: number, name: string) {
+    if (!campaign || !name.trim()) { setRenamingTableIdx(null); return }
+    const tables = campaign.random_tables ?? []
+    const next = tables.map((t, i) => i === tableIdx ? { ...t, name: name.trim() } : t)
+    const updated = await updateCampaign(campaign.id, { random_tables: next })
+    setCampaign(updated)
+    setRenamingTableIdx(null)
   }
 
   function handleRollTable(tableIdx: number, table: RandomTable) {
@@ -2401,6 +2427,17 @@ export function CampaignPage() {
             <p className="text-stone-600 text-sm text-center py-6">Aucun PNJ enregistré. Ajoutez les personnages importants rencontrés par le groupe.</p>
           ) : (
             <>
+              {/* Recherche par nom */}
+              {(campaign.npcs ?? []).length > 1 && (
+                <input
+                  type="text"
+                  value={npcSearch}
+                  onChange={e => setNpcSearch(e.target.value)}
+                  placeholder="Rechercher un PNJ…"
+                  className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors mb-2"
+                />
+              )}
+
               {/* Filtre par statut */}
               {(campaign.npcs ?? []).length > 1 && (
                 <div className="flex flex-wrap gap-1.5 mb-2">
@@ -2458,6 +2495,7 @@ export function CampaignPage() {
                   .map((npc, i) => ({ npc, i }))
                   .filter(({ npc }) => npcStatusFilter === 'all' || npc.status === npcStatusFilter)
                   .filter(({ npc }) => npcFactionFilter === 'all' || npc.faction === npcFactionFilter)
+                  .filter(({ npc }) => !npcSearch || npc.name.toLowerCase().includes(npcSearch.toLowerCase()) || (npc.role ?? '').toLowerCase().includes(npcSearch.toLowerCase()))
                   .sort((a, b) => {
                     if (npcSort === 'name') return a.npc.name.localeCompare(b.npc.name, 'fr')
                     if (npcSort === 'status') { const order = ['allié', 'neutre', 'inconnu', 'ennemi']; return order.indexOf(a.npc.status) - order.indexOf(b.npc.status) }
@@ -2799,12 +2837,25 @@ export function CampaignPage() {
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Lieux ({(campaign?.locations ?? []).length})
             </h2>
-            <button
-              onClick={() => { setAddingLocation(v => !v); setLocationDraft(emptyLocationDraft()) }}
-              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-            >
-              {addingLocation ? 'Annuler' : '+ Ajouter'}
-            </button>
+            <div className="flex items-center gap-3">
+              <select
+                value={locationSort}
+                onChange={e => setLocationSort(e.target.value as typeof locationSort)}
+                className="text-xs bg-stone-900 border border-stone-800 text-stone-500 rounded px-2 py-1 focus:outline-none transition-colors"
+                title="Trier les lieux"
+              >
+                <option value="default">Ordre d'ajout</option>
+                <option value="name">Nom A→Z</option>
+                <option value="type">Type</option>
+                <option value="status">Statut</option>
+              </select>
+              <button
+                onClick={() => { setAddingLocation(v => !v); setLocationDraft(emptyLocationDraft()) }}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+              >
+                {addingLocation ? 'Annuler' : '+ Ajouter'}
+              </button>
+            </div>
           </div>
 
           {addingLocation && (
@@ -2916,7 +2967,12 @@ export function CampaignPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {(campaign?.locations ?? []).map((loc, i) => ({ loc, i })).filter(({ loc }) => (locationStatusFilter === 'all' || loc.status === locationStatusFilter) && (!locationSearch || loc.name.toLowerCase().includes(locationSearch.toLowerCase()))).map(({ loc, i }) => {
+              {(campaign?.locations ?? []).map((loc, i) => ({ loc, i })).filter(({ loc }) => (locationStatusFilter === 'all' || loc.status === locationStatusFilter) && (!locationSearch || loc.name.toLowerCase().includes(locationSearch.toLowerCase()))).sort((a, b) => {
+                if (locationSort === 'name') return a.loc.name.localeCompare(b.loc.name, 'fr')
+                if (locationSort === 'type') return a.loc.type.localeCompare(b.loc.type, 'fr')
+                if (locationSort === 'status') { const order = ['exploré', 'connu', 'inconnu']; return order.indexOf(a.loc.status) - order.indexOf(b.loc.status) }
+                return 0
+              }).map(({ loc, i }) => {
                 const typeIcon = loc.type === 'ville' ? '🏙' : loc.type === 'donjon' ? '⛏' : loc.type === 'forêt' ? '🌲' : loc.type === 'taverne' ? '🍺' : loc.type === 'temple' ? '⛪' : loc.type === 'château' ? '🏰' : '📍'
                 const statusColor = loc.status === 'exploré' ? 'text-emerald-400' : loc.status === 'connu' ? 'text-amber-400' : 'text-stone-500'
                 const rep = loc.reputation ?? 'neutre'
@@ -4285,7 +4341,23 @@ export function CampaignPage() {
                 <div key={tIdx} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <span className="text-white text-sm font-medium truncate">{table.name}</span>
+                      {renamingTableIdx === tIdx ? (
+                        <input
+                          autoFocus
+                          type="text"
+                          value={renamingTableDraft}
+                          onChange={e => setRenamingTableDraft(e.target.value)}
+                          onBlur={() => handleRenameTable(tIdx, renamingTableDraft)}
+                          onKeyDown={e => { if (e.key === 'Enter') handleRenameTable(tIdx, renamingTableDraft); if (e.key === 'Escape') setRenamingTableIdx(null) }}
+                          className="bg-stone-800 border border-stone-600 rounded px-2 py-0.5 text-white text-sm focus:outline-none focus:border-amber-500 min-w-0 max-w-xs"
+                        />
+                      ) : (
+                        <span
+                          className="text-white text-sm font-medium truncate cursor-pointer hover:text-amber-300 transition-colors"
+                          onDoubleClick={() => { setRenamingTableIdx(tIdx); setRenamingTableDraft(table.name) }}
+                          title="Double-cliquer pour renommer"
+                        >{table.name}</span>
+                      )}
                       <span className="text-stone-600 text-xs shrink-0">{table.entries.length} entrée{table.entries.length !== 1 ? 's' : ''}</span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -4313,16 +4385,45 @@ export function CampaignPage() {
                   </div>
                   {editingTableIdx === tIdx && (
                     <div className="border-t border-stone-800 px-4 pb-4 pt-3 space-y-2">
-                      {table.entries.map((entry, eIdx) => (
-                        <div key={eIdx} className="flex items-center gap-2 text-sm">
-                          <span className="text-stone-600 text-xs w-6 text-right shrink-0">{entry.weight}</span>
-                          <span className="text-stone-300 flex-1">{entry.text}</span>
-                          <button
-                            onClick={() => handleDeleteTableEntry(tIdx, eIdx)}
-                            className="text-stone-600 hover:text-red-400 text-sm transition-colors shrink-0"
-                          >×</button>
-                        </div>
-                      ))}
+                      {table.entries.map((entry, eIdx) => {
+                        const eKey = `${tIdx}-${eIdx}`
+                        if (editingEntryKey === eKey) {
+                          return (
+                            <div key={eIdx} className="flex items-center gap-2 text-sm">
+                              <input
+                                type="number"
+                                value={editEntryDraft.weight}
+                                onChange={e => setEditEntryDraft(d => ({ ...d, weight: Math.max(1, Number(e.target.value)) }))}
+                                min={1}
+                                className="w-14 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-200 text-sm text-center focus:outline-none focus:border-amber-500"
+                              />
+                              <input
+                                autoFocus
+                                type="text"
+                                value={editEntryDraft.text}
+                                onChange={e => setEditEntryDraft(d => ({ ...d, text: e.target.value }))}
+                                onKeyDown={e => { if (e.key === 'Enter') handleUpdateTableEntry(tIdx, eIdx, editEntryDraft); if (e.key === 'Escape') setEditingEntryKey(null) }}
+                                onBlur={() => handleUpdateTableEntry(tIdx, eIdx, editEntryDraft)}
+                                className="flex-1 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-white text-sm focus:outline-none focus:border-amber-500"
+                              />
+                              <button onClick={() => setEditingEntryKey(null)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors shrink-0">✕</button>
+                            </div>
+                          )
+                        }
+                        return (
+                          <div key={eIdx} className="flex items-center gap-2 text-sm group">
+                            <span className="text-stone-600 text-xs w-6 text-right shrink-0">{entry.weight}</span>
+                            <span
+                              className="text-stone-300 flex-1 cursor-pointer hover:text-white transition-colors"
+                              onClick={() => { setEditingEntryKey(eKey); setEditEntryDraft({ ...entry }) }}
+                            >{entry.text}</span>
+                            <button
+                              onClick={() => handleDeleteTableEntry(tIdx, eIdx)}
+                              className="text-stone-600 hover:text-red-400 text-sm transition-colors shrink-0 opacity-0 group-hover:opacity-100"
+                            >×</button>
+                          </div>
+                        )
+                      })}
                       <div className="flex items-center gap-2 mt-2">
                         <input
                           type="number"
