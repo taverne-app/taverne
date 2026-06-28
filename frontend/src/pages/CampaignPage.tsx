@@ -164,6 +164,8 @@ export function CampaignPage() {
   const [editAttackDraft, setEditAttackDraft] = useState<MonsterAttack>(emptyAttackDraft())
   const [combatMonsterIdx, setCombatMonsterIdx] = useState<number | null>(null)
   const [combatMonsterCount, setCombatMonsterCount] = useState(1)
+  const [monsterSearch, setMonsterSearch] = useState('')
+  const [monsterCrFilter, setMonsterCrFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all')
 
   // Factions
   const emptyFactionDraft = (): Faction => ({ name: '', description: '', reputation: 0, notes: '' })
@@ -537,6 +539,16 @@ export function CampaignPage() {
     const updated = await updateCampaign(campaign.id, { locations: next })
     setCampaign(updated)
     setEditingLocationIdx(null)
+  }
+
+  async function handleDuplicateLocation(index: number) {
+    if (!campaign) return
+    const src = (campaign.locations ?? [])[index]
+    if (!src) return
+    const copy: Location = { ...src, name: `${src.name} (copie)` }
+    const next = [...(campaign.locations ?? []), copy]
+    const updated = await updateCampaign(campaign.id, { locations: next })
+    setCampaign(updated)
   }
 
   async function handleToggleInspiration(charId: number, current: boolean) {
@@ -998,6 +1010,30 @@ export function CampaignPage() {
     const next = Math.max(0, Math.min(6, char.state.exhaustion_level + delta))
     const updated = await updateExhaustion(charId, next)
     setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
+  }
+
+  function handleExportJournal() {
+    if (!campaign || sessions.length === 0) return
+    const sorted = [...sessions].sort((a, b) => (a.session_date ?? a.created_at).localeCompare(b.session_date ?? b.created_at))
+    const lines: string[] = [`# Journal — ${campaign.name}`, '']
+    for (const s of sorted) {
+      const date = s.session_date
+        ? new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
+        : null
+      lines.push(`## ${s.title}${date ? ` — ${date}` : ''}`)
+      if (s.xp_awarded != null) lines.push(`> +${s.xp_awarded.toLocaleString('fr-FR')} XP`)
+      if (s.loot_notes) lines.push(`> 🎁 ${s.loot_notes}`)
+      if (s.xp_awarded != null || s.loot_notes) lines.push('')
+      if (s.notes) { lines.push(s.notes); lines.push('') }
+      lines.push('---', '')
+    }
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${campaign.name.replace(/[^a-z0-9]/gi, '_')}_journal.md`
+    a.click()
+    URL.revokeObjectURL(url)
   }
 
   function handleExportCampaign() {
@@ -1505,6 +1541,15 @@ export function CampaignPage() {
                 >
                   ↓ Export
                 </button>
+                {sessions.length > 0 && (
+                  <button
+                    onClick={handleExportJournal}
+                    title="Exporter le journal de session en Markdown"
+                    className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
+                  >
+                    ↓ Journal
+                  </button>
+                )}
                 <label
                   title="Importer une campagne depuis un JSON"
                   className="text-stone-500 hover:text-stone-300 text-sm transition-colors cursor-pointer"
@@ -2925,6 +2970,11 @@ export function CampaignPage() {
                           </div>
                           <div className="flex items-center gap-2 shrink-0">
                             <button
+                              onClick={() => handleDuplicateLocation(i)}
+                              className="text-stone-600 hover:text-sky-400 text-xs transition-colors"
+                              title="Dupliquer ce lieu"
+                            >⎘</button>
+                            <button
                               onClick={() => { setEditLocationDraft({ ...loc }); setEditingLocationIdx(i); setExpandedLocation(null) }}
                               className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
                               title="Modifier ce lieu"
@@ -3078,14 +3128,21 @@ export function CampaignPage() {
               {/* Notes de préparation */}
               <div>
                 <label className="text-stone-500 text-xs block mb-1">Notes de préparation</label>
-                <textarea
-                  placeholder={"Objectifs de la session, secrets à révéler, rebondissements…"}
-                  value={sessionPrepDraft.notes}
-                  onChange={e => setSessionPrepDraft(d => ({ ...d, notes: e.target.value }))}
-                  disabled={!editingSessionPrep}
-                  rows={4}
-                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors resize-y disabled:opacity-60"
-                />
+                {editingSessionPrep ? (
+                  <textarea
+                    placeholder="Objectifs de la session, secrets à révéler, rebondissements…"
+                    value={sessionPrepDraft.notes}
+                    onChange={e => setSessionPrepDraft(d => ({ ...d, notes: e.target.value }))}
+                    rows={4}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors resize-y"
+                  />
+                ) : sessionPrepDraft.notes ? (
+                  <div className="bg-stone-800/50 border border-stone-700/50 rounded-lg px-3 py-2">
+                    <MarkdownText className="text-stone-300 text-sm">{sessionPrepDraft.notes}</MarkdownText>
+                  </div>
+                ) : (
+                  <p className="text-stone-600 text-xs italic">Aucune note.</p>
+                )}
               </div>
 
               {editingSessionPrep && (
@@ -3564,9 +3621,45 @@ export function CampaignPage() {
             </div>
           )}
 
-          {(campaign.custom_monsters ?? []).length > 0 ? (
+          {(campaign.custom_monsters ?? []).length > 0 && (
+            <div className="mb-3 space-y-2">
+              <input
+                type="text"
+                value={monsterSearch}
+                onChange={e => setMonsterSearch(e.target.value)}
+                placeholder="Rechercher un monstre…"
+                className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+              />
+              <div className="flex gap-1.5 flex-wrap">
+                {(['all', 'low', 'mid', 'high'] as const).map(f => {
+                  const labels = { all: 'Tous', low: 'CR 0–4', mid: 'CR 5–10', high: 'CR 11+' }
+                  return (
+                    <button key={f} onClick={() => setMonsterCrFilter(f)} className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${monsterCrFilter === f ? 'bg-rose-900/60 border-rose-700 text-rose-300' : 'bg-stone-900 border-stone-700 text-stone-500 hover:text-stone-300'}`}>
+                      {labels[f]}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {(campaign.custom_monsters ?? []).length > 0 ? (() => {
+            const crNum = (cr: string) => cr === '1/8' ? 0.125 : cr === '1/4' ? 0.25 : cr === '1/2' ? 0.5 : parseFloat(cr) || 0
+            const filtered = (campaign.custom_monsters ?? [])
+              .map((m, i) => ({ m, i }))
+              .filter(({ m }) => {
+                if (monsterSearch && !m.name.toLowerCase().includes(monsterSearch.toLowerCase())) return false
+                if (monsterCrFilter === 'low' && crNum(m.cr) > 4) return false
+                if (monsterCrFilter === 'mid' && (crNum(m.cr) < 5 || crNum(m.cr) > 10)) return false
+                if (monsterCrFilter === 'high' && crNum(m.cr) < 11) return false
+                return true
+              })
+            if (filtered.length === 0) return (
+              <p className="text-stone-600 text-sm text-center py-6">Aucun monstre ne correspond aux filtres.</p>
+            )
+            return (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(campaign.custom_monsters ?? []).map((m, i) => (
+              {filtered.map(({ m, i }) => (
                 <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
                   {editingMonsterIdx === i ? (
                     <div className="p-4 space-y-3">
@@ -3671,7 +3764,8 @@ export function CampaignPage() {
                 </div>
               ))}
             </div>
-          ) : (
+            )
+          })() : (
             !addingMonster && (
               <p className="text-stone-600 text-sm text-center py-4">Aucun monstre personnalisé. Créez-en pour les utiliser dans les rencontres.</p>
             )
