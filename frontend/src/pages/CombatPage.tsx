@@ -474,6 +474,11 @@ export function CombatPage() {
   // Random encounter generator
   const [generateDifficulty, setGenerateDifficulty] = useState<'facile' | 'moyen' | 'difficile' | 'mortelle'>('moyen')
   const [showGeneratePanel, setShowGeneratePanel] = useState(false)
+  const [showNotepad, setShowNotepad] = useState(false)
+  const [combatNotes, setCombatNotes] = useState(() => {
+    if (typeof window === 'undefined') return ''
+    try { return localStorage.getItem(`taverne-combat-notes-${campaignId ?? 'default'}`) ?? '' } catch { return '' }
+  })
 
   // Manual initiative reordering
   const [manualOrder, setManualOrder] = useState<string[] | null>(null)
@@ -1937,6 +1942,12 @@ export function CombatPage() {
                   ⛺ Repos
                 </button>
               )}
+              <button
+                onClick={() => setShowNotepad(v => !v)}
+                className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${showNotepad ? 'bg-stone-700/40 border-stone-600 text-stone-300' : 'text-stone-500 hover:text-stone-300 border-transparent'}`}
+              >
+                📝 Notes
+              </button>
               <button
                 onClick={handleReset}
                 className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
@@ -3525,6 +3536,26 @@ export function CombatPage() {
                 </span>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Notepad */}
+        {showNotepad && (
+          <div className="bg-stone-900 border border-stone-700/60 rounded-xl p-4 space-y-2">
+            <div className="flex items-center justify-between">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">📝 Notes de combat</h2>
+              <button onClick={() => setShowNotepad(false)} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
+            </div>
+            <textarea
+              value={combatNotes}
+              onChange={e => {
+                setCombatNotes(e.target.value)
+                try { localStorage.setItem(`taverne-combat-notes-${campaignId ?? 'default'}`, e.target.value) } catch { /* noop */ }
+              }}
+              placeholder="Conditions spéciales, objectifs de rencontre, règles maison…"
+              rows={5}
+              className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-500 transition-colors resize-y font-mono"
+            />
           </div>
         )}
 

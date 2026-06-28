@@ -598,6 +598,7 @@ export function CharacterPage() {
   const [editingSpellNotesIdx, setEditingSpellNotesIdx] = useState<number | null>(null)
   const [spellNotesEdit, setSpellNotesEdit] = useState('')
   const [spellFilter, setSpellFilter] = useState<'all' | 'prepared'>('all')
+  const [spellSearch, setSpellSearch] = useState('')
   const [castFeedback, setCastFeedback] = useState<{ name: string; slotLevel: number } | null>(null)
   const [showSpellBrowser, setShowSpellBrowser] = useState(false)
   const [showCompendium, setShowCompendium] = useState(false)
@@ -1074,6 +1075,7 @@ export function CharacterPage() {
   const [addingItem, setAddingItem] = useState(false)
   const [itemDraft, setItemDraft]   = useState<ItemDraft>(emptyItemDraft)
   const [inventorySearch, setInventorySearch] = useState('')
+  const [inventoryFilter, setInventoryFilter] = useState<'all' | 'equipped' | 'magical' | 'attuned'>('all')
   const [showItemCompendium, setShowItemCompendium] = useState(false)
   const [compendiumSearch, setCompendiumSearch]     = useState('')
   const [compendiumRarity, setCompendiumRarity]     = useState<ItemRarity | 'toutes'>('toutes')
@@ -1137,6 +1139,15 @@ export function CharacterPage() {
     const next = character.inventory.items.map((it, i) =>
       i === index ? { ...it, attuned: !it.attuned } : it,
     )
+    const updated = await withSave(() => updateInventory(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleDuplicateItem(index: number) {
+    if (!character) return
+    const src = character.inventory.items[index]
+    const copy = { ...src, equipped: false, attuned: false }
+    const next = [...character.inventory.items, copy]
     const updated = await withSave(() => updateInventory(character.id, next))
     if (updated) setCharacter(updated)
   }
@@ -2891,6 +2902,23 @@ export function CharacterPage() {
             </div>
           </div>
 
+          {/* Inventory filter pills */}
+          {character.inventory.items.length > 1 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {(['all', 'equipped', 'magical', 'attuned'] as const).map(f => {
+                const items = character.inventory.items
+                const count = f === 'all' ? items.length : f === 'equipped' ? items.filter(it => it.equipped).length : f === 'magical' ? items.filter(it => it.magical).length : items.filter(it => it.attuned).length
+                if (f !== 'all' && count === 0) return null
+                const label = f === 'all' ? `Tous (${count})` : f === 'equipped' ? `⬤ Équipé (${count})` : f === 'magical' ? `✦ Magique (${count})` : `◈ Accordé (${count})`
+                return (
+                  <button key={f} onClick={() => setInventoryFilter(f)} className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${inventoryFilter === f ? 'bg-amber-900/60 border-amber-600/60 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}>
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {/* Add item form */}
           {addingItem && (
             <div className="flex flex-wrap gap-2 mb-4 pb-4 border-b border-stone-800">
@@ -2951,6 +2979,7 @@ export function CharacterPage() {
               {character.inventory.items
                 .map((item, i) => ({ item, i }))
                 .filter(({ item }) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
+                .filter(({ item }) => inventoryFilter === 'all' || (inventoryFilter === 'equipped' && item.equipped) || (inventoryFilter === 'magical' && item.magical) || (inventoryFilter === 'attuned' && item.attuned))
                 .map(({ item, i }) => (
                 <div key={i} className="flex items-center gap-3 py-2.5">
                   {/* Equipped toggle */}
@@ -3037,6 +3066,14 @@ export function CharacterPage() {
                   {item.notes && (
                     <span className="text-stone-500 text-xs italic truncate max-w-[120px] hidden sm:block" title={item.notes}>{item.notes}</span>
                   )}
+
+                  {/* Duplicate */}
+                  <button
+                    onClick={() => handleDuplicateItem(i)}
+                    disabled={saving}
+                    className="text-stone-700 hover:text-sky-400 transition-colors disabled:cursor-not-allowed text-xs shrink-0"
+                    title="Dupliquer"
+                  >⎘</button>
 
                   {/* Delete */}
                   <button
@@ -3294,6 +3331,15 @@ export function CharacterPage() {
               })()}
             </div>
             <div className="flex items-center gap-2">
+              {character.spellcasting.spells.length > 4 && (
+                <input
+                  type="text"
+                  value={spellSearch}
+                  onChange={e => setSpellSearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-28 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-violet-500 transition-colors placeholder:text-stone-600"
+                />
+              )}
               <button
                 onClick={() => setShowCompendium(true)}
                 className="text-xs rounded-lg px-2 py-0.5 border bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
@@ -3469,7 +3515,7 @@ export function CharacterPage() {
               {[0,1,2,3,4,5,6,7,8,9].map(lvl => {
                 const spells = character.spellcasting.spells
                   .map((s, i) => ({ ...s, _idx: i }))
-                  .filter(s => s.level === lvl && (spellFilter === 'all' || s.prepared))
+                  .filter(s => s.level === lvl && (spellFilter === 'all' || s.prepared) && (!spellSearch || s.name.toLowerCase().includes(spellSearch.toLowerCase())))
                 if (spells.length === 0) return null
                 return (
                   <div key={lvl}>
