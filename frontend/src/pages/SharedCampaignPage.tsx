@@ -416,6 +416,31 @@ export function SharedCampaignPage() {
           </section>
         )}
 
+        {/* Jalons de campagne */}
+        {(campaign.campaign_milestones ?? []).length > 0 && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Chronologie</h2>
+            <div className="bg-stone-900 border border-stone-800 rounded-xl divide-y divide-stone-800">
+              {(campaign.campaign_milestones ?? [])
+                .slice()
+                .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
+                .map((m, i) => {
+                  const icons: Record<string, string> = { discovery: '🔍', death: '💀', arc: '🏆', combat: '⚔', other: '⭐' }
+                  return (
+                    <div key={i} className="flex items-start gap-3 px-4 py-3">
+                      <span className="text-base shrink-0 mt-0.5">{icons[m.type] ?? '⭐'}</span>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-stone-200 text-sm font-medium">{m.title}</p>
+                        {m.date && <p className="text-stone-500 text-xs mt-0.5">{m.date}</p>}
+                        {m.notes && <MarkdownText className="text-stone-400 text-xs mt-1">{m.notes}</MarkdownText>}
+                      </div>
+                    </div>
+                  )
+                })}
+            </div>
+          </section>
+        )}
+
         {/* Carte de campagne */}
         {campaign.campaign_map?.image_url && (
           <section>

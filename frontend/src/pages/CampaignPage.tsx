@@ -784,6 +784,17 @@ export function CampaignPage() {
     if (expandedScene === sceneId) setExpandedScene(null)
   }
 
+  async function handleDuplicateScene(sceneId: string) {
+    if (!campaign?.session_prep) return
+    const src = campaign.session_prep.scenes.find(s => s.id === sceneId)
+    if (!src) return
+    const copy = { ...src, id: crypto.randomUUID(), title: `${src.title} (copie)`, done: false }
+    const next: SessionPrep = { ...campaign.session_prep, scenes: [...campaign.session_prep.scenes, copy] }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+  }
+
   async function handleUpdateScene(sceneId: string) {
     if (!campaign?.session_prep || !editSceneDraft.title.trim()) return
     const next: SessionPrep = {
@@ -1042,7 +1053,7 @@ export function CampaignPage() {
       })
       if (Array.isArray(data.sessions)) {
         for (const s of data.sessions) {
-          await createSession(newCampaign.id, { title: s.title, session_date: s.session_date, notes: s.notes })
+          await createSession(newCampaign.id, { title: s.title, session_date: s.session_date, notes: s.notes, xp_awarded: s.xp_awarded ?? null, loot_notes: s.loot_notes ?? null })
         }
       }
       navigate(`/campaigns/${newCampaign.id}`)
@@ -1244,7 +1255,14 @@ export function CampaignPage() {
                       return (
                         <div key={c.id} className="bg-stone-800 rounded-lg p-3">
                           <div className="flex items-center justify-between mb-1">
-                            <span className="text-stone-200 text-xs font-medium truncate max-w-[60%]">{c.name}</span>
+                            <div className="flex items-center gap-1 min-w-0">
+                              <button
+                                onClick={() => handleToggleInspiration(c.id, c.combat.inspiration)}
+                                title={c.combat.inspiration ? "Retirer l'inspiration" : "Accorder l'inspiration"}
+                                className={`shrink-0 text-xs transition-colors ${c.combat.inspiration ? 'text-amber-400 hover:text-amber-300' : 'text-stone-700 hover:text-amber-500'}`}
+                              >✦</button>
+                              <span className="text-stone-200 text-xs font-medium truncate">{c.name}</span>
+                            </div>
                             <button
                               onClick={() => { setHpEditCharId(editing ? null : c.id); setHpDeltaValue(5) }}
                               className={`text-xs tabular-nums transition-colors ${curHp <= 0 ? 'text-red-400' : editing ? 'text-amber-400' : 'text-stone-400 hover:text-white'}`}
@@ -3199,6 +3217,11 @@ export function CampaignPage() {
                                 </button>
                                 <p className={`text-sm font-medium flex-1 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
                                 {scene.location_name && <span className="text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDuplicateScene(scene.id) }}
+                                  className="text-stone-600 hover:text-sky-400 text-xs leading-none shrink-0 transition-colors"
+                                  title="Dupliquer"
+                                >⎘</button>
                                 <button
                                   onClick={e => { e.stopPropagation(); setEditingSceneId(scene.id); setEditSceneDraft({ ...scene }); setExpandedScene(null) }}
                                   className="text-stone-600 hover:text-sky-400 text-sm leading-none shrink-0 transition-colors"
