@@ -125,6 +125,7 @@ export function CampaignPage() {
   const [expandedQuest, setExpandedQuest] = useState<string | null>(null)
   const [editingQuestId, setEditingQuestId] = useState<string | null>(null)
   const [editQuestDraft, setEditQuestDraft] = useState<Omit<Quest, 'id'>>(emptyQuestDraft())
+  const [questStatusFilter, setQuestStatusFilter] = useState<'all' | Quest['status']>('all')
 
   // Trésor partagé
   const emptyTreasureDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
@@ -141,6 +142,7 @@ export function CampaignPage() {
   const [expandedLocation, setExpandedLocation] = useState<number | null>(null)
   const [editingLocationIdx, setEditingLocationIdx] = useState<number | null>(null)
   const [editLocationDraft, setEditLocationDraft]   = useState<Location>(emptyLocationDraft())
+  const [locationStatusFilter, setLocationStatusFilter] = useState<'all' | Location['status']>('all')
 
   // Préparation de session
   const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
@@ -209,6 +211,8 @@ export function CampaignPage() {
   const [mapAddingPin, setMapAddingPin] = useState(false)
   const [pinLabelDraft, setPinLabelDraft] = useState('')
   const [pinColorDraft, setPinColorDraft] = useState<MapPin['color']>('amber')
+  const [editingPinId, setEditingPinId] = useState<string | null>(null)
+  const [editPinDraft, setEditPinDraft] = useState<Pick<MapPin, 'label' | 'color' | 'location_name'>>({ label: '', color: 'amber', location_name: '' })
 
   // Tableau de bord
   const [showDashboard, setShowDashboard] = useState(true)
@@ -792,6 +796,19 @@ export function CampaignPage() {
     setCampaign(updated)
   }
 
+  async function handleUpdatePin(pinId: string) {
+    if (!campaign?.campaign_map || !editPinDraft.label.trim()) return
+    const next: CampaignMap = {
+      ...campaign.campaign_map,
+      pins: campaign.campaign_map.pins.map(p =>
+        p.id === pinId ? { ...p, label: editPinDraft.label.trim(), color: editPinDraft.color, location_name: editPinDraft.location_name || undefined } : p
+      ),
+    }
+    const updated = await updateCampaign(campaign.id, { campaign_map: next })
+    setCampaign(updated)
+    setEditingPinId(null)
+  }
+
   async function handleAddMilestone() {
     if (!campaign || !milestoneDraft.title.trim()) return
     const milestone: Milestone = { ...milestoneDraft, id: crypto.randomUUID(), title: milestoneDraft.title.trim() }
@@ -907,7 +924,7 @@ export function CampaignPage() {
   function handleExportCampaign() {
     if (!campaign) return
     const data = {
-      _version: 1,
+      _version: 2,
       name: campaign.name,
       description: campaign.description,
       dm_notes: campaign.dm_notes,
@@ -920,6 +937,9 @@ export function CampaignPage() {
       random_tables: campaign.random_tables,
       game_calendar: campaign.game_calendar,
       session_prep: campaign.session_prep,
+      campaign_milestones: campaign.campaign_milestones,
+      quests: campaign.quests,
+      campaign_map: campaign.campaign_map,
       sessions: sessions,
     }
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
@@ -2546,6 +2566,31 @@ export function CampaignPage() {
             </div>
           )}
 
+          {(campaign?.locations ?? []).length > 1 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {(['all', 'inconnu', 'connu', 'exploré'] as const).map(s => {
+                const count = s === 'all'
+                  ? (campaign?.locations ?? []).length
+                  : (campaign?.locations ?? []).filter(l => l.status === s).length
+                if (s !== 'all' && count === 0) return null
+                const label = s === 'all' ? `Tous (${count})` : `${s === 'exploré' ? '✓' : s === 'connu' ? '◎' : '❓'} ${s[0].toUpperCase() + s.slice(1)} (${count})`
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setLocationStatusFilter(s)}
+                    className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                      locationStatusFilter === s
+                        ? 'bg-amber-900/60 border-amber-600/60 text-amber-300'
+                        : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                    }`}
+                  >
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {(campaign?.locations ?? []).length === 0 && !addingLocation ? (
             <div className="bg-stone-900 border border-stone-800 rounded-xl p-8 text-center">
               <p className="text-stone-500 text-sm">
@@ -2557,7 +2602,7 @@ export function CampaignPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {(campaign?.locations ?? []).map((loc, i) => {
+              {(campaign?.locations ?? []).map((loc, i) => ({ loc, i })).filter(({ loc }) => locationStatusFilter === 'all' || loc.status === locationStatusFilter).map(({ loc, i }) => {
                 const typeIcon = loc.type === 'ville' ? '🏙' : loc.type === 'donjon' ? '⛏' : loc.type === 'forêt' ? '🌲' : loc.type === 'taverne' ? '🍺' : loc.type === 'temple' ? '⛪' : loc.type === 'château' ? '🏰' : '📍'
                 const statusColor = loc.status === 'exploré' ? 'text-emerald-400' : loc.status === 'connu' ? 'text-amber-400' : 'text-stone-500'
                 const rep = loc.reputation ?? 'neutre'
@@ -3101,33 +3146,62 @@ export function CampaignPage() {
                   className="w-full object-contain max-h-[500px] pointer-events-none"
                   onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
                 />
-                {(campaign.campaign_map.pins ?? []).map(pin => (
+                {(campaign.campaign_map.pins ?? []).map(pin => {
+                  const pinBg = pin.color === 'amber' ? 'bg-amber-600' : pin.color === 'red' ? 'bg-red-600' : pin.color === 'blue' ? 'bg-blue-600' : pin.color === 'green' ? 'bg-emerald-600' : pin.color === 'purple' ? 'bg-purple-600' : 'bg-sky-600'
+                  const pinLine = pin.color === 'amber' ? 'bg-amber-500' : pin.color === 'red' ? 'bg-red-500' : pin.color === 'blue' ? 'bg-blue-500' : pin.color === 'green' ? 'bg-emerald-500' : pin.color === 'purple' ? 'bg-purple-500' : 'bg-sky-500'
+                  const colorOptions: MapPin['color'][] = ['amber', 'red', 'blue', 'green', 'purple', 'sky']
+                  const colorBg: Record<MapPin['color'], string> = { amber: 'bg-amber-500', red: 'bg-red-500', blue: 'bg-blue-500', green: 'bg-emerald-500', purple: 'bg-purple-500', sky: 'bg-sky-500' }
+                  return (
                   <div
                     key={pin.id}
                     className="absolute group"
                     style={{ left: `${pin.x}%`, top: `${pin.y}%`, transform: 'translate(-50%, -100%)' }}
                     onClick={e => e.stopPropagation()}
                   >
-                    <div className={`relative flex items-center gap-1 text-white text-xs font-semibold px-2 py-1 rounded-lg shadow-lg whitespace-nowrap ${
-                      pin.color === 'amber' ? 'bg-amber-600' : pin.color === 'red' ? 'bg-red-600' :
-                      pin.color === 'blue' ? 'bg-blue-600' : pin.color === 'green' ? 'bg-emerald-600' :
-                      pin.color === 'purple' ? 'bg-purple-600' : 'bg-sky-600'
-                    }`}>
-                      📍 {pin.label}
-                      <button
-                        onClick={() => handleDeletePin(pin.id)}
-                        className="ml-1 text-white/60 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity leading-none"
-                      >
-                        ×
-                      </button>
-                    </div>
-                    <div className={`absolute left-1/2 -translate-x-1/2 top-full w-0.5 h-2 ${
-                      pin.color === 'amber' ? 'bg-amber-500' : pin.color === 'red' ? 'bg-red-500' :
-                      pin.color === 'blue' ? 'bg-blue-500' : pin.color === 'green' ? 'bg-emerald-500' :
-                      pin.color === 'purple' ? 'bg-purple-500' : 'bg-sky-500'
-                    }`} />
+                    {editingPinId === pin.id ? (
+                      <div className="bg-stone-900 border border-stone-700 rounded-xl p-2.5 shadow-xl space-y-2 min-w-[180px]" style={{ transform: 'translateY(-8px)' }}>
+                        <input
+                          type="text"
+                          value={editPinDraft.label}
+                          onChange={e => setEditPinDraft(d => ({ ...d, label: e.target.value }))}
+                          autoFocus
+                          placeholder="Label *"
+                          className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-amber-500"
+                        />
+                        <div className="flex gap-1.5">
+                          {colorOptions.map(c => (
+                            <button
+                              key={c}
+                              onClick={() => setEditPinDraft(d => ({ ...d, color: c }))}
+                              className={`w-4 h-4 rounded-full ${colorBg[c]} border-2 transition-transform ${editPinDraft.color === c ? 'border-white scale-125' : 'border-transparent opacity-60 hover:opacity-100'}`}
+                            />
+                          ))}
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <button onClick={() => setEditingPinId(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                          <button onClick={() => handleUpdatePin(pin.id)} disabled={!editPinDraft.label.trim()} className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40">OK</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className={`relative flex items-center gap-1 text-white text-xs font-semibold px-2 py-1 rounded-lg shadow-lg whitespace-nowrap ${pinBg}`}>
+                          📍 {pin.label}
+                          <button
+                            onClick={() => { setEditingPinId(pin.id); setEditPinDraft({ label: pin.label, color: pin.color, location_name: pin.location_name ?? '' }) }}
+                            className="ml-1 text-white/60 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity leading-none text-[10px]"
+                            title="Modifier"
+                          >✎</button>
+                          <button
+                            onClick={() => handleDeletePin(pin.id)}
+                            className="text-white/60 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity leading-none"
+                          >×</button>
+                        </div>
+                        <div className={`absolute left-1/2 -translate-x-1/2 top-full w-0.5 h-2 ${pinLine}`} />
+                      </>
+                    )}
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ) : (
@@ -3597,9 +3671,36 @@ export function CampaignPage() {
             </div>
           )}
 
+          {(campaign.quests ?? []).length > 1 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {(['all', 'active', 'dormant', 'completed', 'failed'] as const).map(s => {
+                const count = s === 'all'
+                  ? (campaign.quests ?? []).length
+                  : (campaign.quests ?? []).filter(q => q.status === s).length
+                if (s !== 'all' && count === 0) return null
+                const icons: Record<string, string> = { all: '', active: '🟡', dormant: '⚪', completed: '🟢', failed: '🔴' }
+                const labels: Record<string, string> = { all: 'Toutes', active: 'Actives', dormant: 'En attente', completed: 'Terminées', failed: 'Échouées' }
+                return (
+                  <button
+                    key={s}
+                    onClick={() => setQuestStatusFilter(s)}
+                    className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                      questStatusFilter === s
+                        ? 'bg-amber-900/60 border-amber-600/60 text-amber-300'
+                        : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                    }`}
+                  >
+                    {icons[s] ? `${icons[s]} ` : ''}{labels[s]} ({count})
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {(campaign.quests ?? []).length > 0 ? (
             <div className="space-y-2">
               {(['active', 'dormant', 'completed', 'failed'] as Quest['status'][]).map(status => {
+                if (questStatusFilter !== 'all' && questStatusFilter !== status) return null
                 const quests = (campaign.quests ?? []).filter(q => q.status === status)
                 if (quests.length === 0) return null
                 const statusLabel: Record<Quest['status'], string> = { active: '🟡 Actives', dormant: '⚪ En attente', completed: '🟢 Terminées', failed: '🔴 Échouées' }
