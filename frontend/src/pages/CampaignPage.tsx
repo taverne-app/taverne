@@ -130,6 +130,7 @@ export function CampaignPage() {
   const [editingQuestId, setEditingQuestId] = useState<string | null>(null)
   const [editQuestDraft, setEditQuestDraft] = useState<Omit<Quest, 'id'>>(emptyQuestDraft())
   const [questStatusFilter, setQuestStatusFilter] = useState<'all' | Quest['status']>('all')
+  const [questSearch, setQuestSearch] = useState('')
 
   // Trésor partagé
   const emptyTreasureDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
@@ -218,6 +219,7 @@ export function CampaignPage() {
   const [milestoneDraft, setMilestoneDraft] = useState<Omit<Milestone, 'id'>>(emptyMilestone())
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null)
   const [editMilestoneDraft, setEditMilestoneDraft] = useState<Omit<Milestone, 'id'>>(emptyMilestone())
+  const [milestoneTypeFilter, setMilestoneTypeFilter] = useState<'all' | Milestone['type']>('all')
 
   // Carte de campagne
   const [mapUrlDraft, setMapUrlDraft] = useState('')
@@ -436,6 +438,16 @@ export function CampaignPage() {
   async function handleToggleQuestStatus(questId: string, status: Quest['status']) {
     if (!campaign) return
     const next = (campaign.quests ?? []).map(q => q.id === questId ? { ...q, status } : q)
+    const updated = await updateCampaign(campaign.id, { quests: next })
+    setCampaign(updated)
+  }
+
+  async function handleDuplicateQuest(questId: string) {
+    if (!campaign) return
+    const src = (campaign.quests ?? []).find(q => q.id === questId)
+    if (!src) return
+    const copy: Quest = { ...src, id: crypto.randomUUID(), title: `${src.title} (copie)` }
+    const next = [...(campaign.quests ?? []), copy]
     const updated = await updateCampaign(campaign.id, { quests: next })
     setCampaign(updated)
   }
@@ -4146,6 +4158,16 @@ export function CampaignPage() {
           )}
 
           {(campaign.quests ?? []).length > 1 && (
+            <input
+              type="text"
+              value={questSearch}
+              onChange={e => setQuestSearch(e.target.value)}
+              placeholder="Rechercher une quête…"
+              className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors mb-2"
+            />
+          )}
+
+          {(campaign.quests ?? []).length > 1 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
               {(['all', 'active', 'dormant', 'completed', 'failed'] as const).map(s => {
                 const count = s === 'all'
@@ -4175,7 +4197,7 @@ export function CampaignPage() {
             <div className="space-y-2">
               {(['active', 'dormant', 'completed', 'failed'] as Quest['status'][]).map(status => {
                 if (questStatusFilter !== 'all' && questStatusFilter !== status) return null
-                const quests = (campaign.quests ?? []).filter(q => q.status === status)
+                const quests = (campaign.quests ?? []).filter(q => q.status === status && (!questSearch || q.title.toLowerCase().includes(questSearch.toLowerCase()) || (q.giver ?? '').toLowerCase().includes(questSearch.toLowerCase())))
                 if (quests.length === 0) return null
                 const statusLabel: Record<Quest['status'], string> = { active: '🟡 Actives', dormant: '⚪ En attente', completed: '🟢 Terminées', failed: '🔴 Échouées' }
                 return (
@@ -4260,6 +4282,11 @@ export function CampaignPage() {
                                     <option value="completed">🟢 Terminée</option>
                                     <option value="failed">🔴 Échouée</option>
                                   </select>
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleDuplicateQuest(quest.id) }}
+                                    className="text-stone-600 hover:text-sky-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
+                                    title="Dupliquer cette quête"
+                                  >⎘</button>
                                   <button
                                     onClick={e => { e.stopPropagation(); setEditQuestDraft({ title: quest.title, description: quest.description, status: quest.status, giver: quest.giver, notes: quest.notes }); setEditingQuestId(quest.id); setExpandedQuest(null) }}
                                     className="text-stone-600 hover:text-stone-400 text-xs transition-colors opacity-0 group-hover:opacity-100"
@@ -4618,17 +4645,39 @@ export function CampaignPage() {
               | { kind: 'session'; sortKey: string; data: CampaignSession }
               | { kind: 'milestone'; sortKey: string; data: Milestone }
             const milestones = campaign.campaign_milestones ?? []
-            const items: TimelineItem[] = [
+            const allItems: TimelineItem[] = [
               ...sessions.map(s => ({ kind: 'session' as const, sortKey: s.session_date ?? s.created_at ?? '', data: s })),
               ...milestones.map(m => ({ kind: 'milestone' as const, sortKey: m.date ?? '', data: m })),
             ].sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+            const items = milestoneTypeFilter === 'all'
+              ? allItems
+              : allItems.filter(item => item.kind === 'session' || item.data.type === milestoneTypeFilter)
             const sessionNums = new Map(sessions.map((s, si) => [s.id, si + 1]))
             const milestoneIcons: Record<Milestone['type'], string> = { discovery: '🔍', death: '💀', arc: '🏆', combat: '⚔', other: '⭐' }
             const milestoneColors: Record<Milestone['type'], string> = {
               discovery: 'bg-sky-500', death: 'bg-red-600', arc: 'bg-amber-500', combat: 'bg-orange-500', other: 'bg-violet-500',
             }
+            const milestoneLabels: Record<Milestone['type'], string> = { discovery: 'Découverte', death: 'Mort', arc: 'Arc', combat: 'Combat', other: 'Autre' }
+            const usedTypes = [...new Set(milestones.map(m => m.type))] as Milestone['type'][]
             return (
             <div className="space-y-0">
+              {milestones.length > 1 && usedTypes.length > 1 && (
+                <div className="flex flex-wrap gap-1.5 mb-3">
+                  {(['all', ...usedTypes] as ('all' | Milestone['type'])[]).map(t => (
+                    <button
+                      key={t}
+                      onClick={() => setMilestoneTypeFilter(t)}
+                      className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                        milestoneTypeFilter === t
+                          ? 'bg-sky-900/60 border-sky-600/60 text-sky-300'
+                          : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                      }`}
+                    >
+                      {t === 'all' ? 'Tous' : `${milestoneIcons[t]} ${milestoneLabels[t]}`}
+                    </button>
+                  ))}
+                </div>
+              )}
               {items.map((item, i) => (
                 <div key={item.kind === 'session' ? `s-${item.data.id}` : `m-${item.data.id}`} className="flex gap-3">
                   <div className="flex flex-col items-center shrink-0 w-5">

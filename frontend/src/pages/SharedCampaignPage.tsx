@@ -270,6 +270,7 @@ export function SharedCampaignPage() {
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [expandedFactionIdx, setExpandedFactionIdx] = useState<number | null>(null)
+  const [showAllSessions, setShowAllSessions] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -422,7 +423,7 @@ export function SharedCampaignPage() {
               Journal de session
             </h2>
             <div className="space-y-3">
-              {sessions.slice(0, 5).map(s => (
+              {(showAllSessions ? sessions : sessions.slice(0, 5)).map(s => (
                 <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
                   <div className="flex items-start justify-between gap-3 mb-1">
                     <h3 className="text-white font-semibold text-sm">{s.title}</h3>
@@ -450,6 +451,14 @@ export function SharedCampaignPage() {
                 </div>
               ))}
             </div>
+            {sessions.length > 5 && (
+              <button
+                onClick={() => setShowAllSessions(v => !v)}
+                className="mt-2 text-stone-500 hover:text-stone-300 text-xs transition-colors w-full text-center"
+              >
+                {showAllSessions ? '▲ Réduire' : `▼ Voir tout (${sessions.length} sessions)`}
+              </button>
+            )}
           </section>
         )}
 
