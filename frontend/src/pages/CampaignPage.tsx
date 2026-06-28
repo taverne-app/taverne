@@ -24,7 +24,7 @@ import {
   type MonsterAttack,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, updateExhaustion, type Character } from '../api/characters'
+import { listCharacters, longRest, shortRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, updateExhaustion, updateDeathSaves, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -87,7 +87,7 @@ export function CampaignPage() {
 
   // Group rest
   const [restingAll, setRestingAll] = useState(false)
-  const [restDone, setRestDone]     = useState<'long' | null>(null)
+  const [restDone, setRestDone]     = useState<'long' | 'short' | null>(null)
 
   // DM Screen
   const [showDmScreen, setShowDmScreen] = useState(false)
@@ -550,11 +550,36 @@ export function CampaignPage() {
     setEditingSessionPrep(false)
   }
 
-  async function handleQuickHp(charId: number, amount: number, type: 'damage' | 'heal') {
+  async function handleQuickHp(charId: number, amount: number, type: 'damage' | 'heal' | 'temporary') {
     if (amount <= 0) return
     const updated = await updateHp(charId, amount, type)
     setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
     setHpEditCharId(null)
+  }
+
+  async function handleToggleDeathSave(charId: number, kind: 'success' | 'failure', current: number) {
+    const char = characters.find(c => c.id === charId)
+    if (!char) return
+    const next = current >= 3 ? 0 : current + 1
+    const updated = await updateDeathSaves(
+      charId,
+      kind === 'success' ? next : char.state.death_saves_successes,
+      kind === 'failure' ? next : char.state.death_saves_failures,
+    )
+    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
+  }
+
+  async function handleGroupShortRest() {
+    if (restingAll || characters.length === 0) return
+    setRestingAll(true)
+    try {
+      const results = await Promise.all(characters.map(c => shortRest(c.id, 1)))
+      setCharacters(results.map(r => r.character))
+      setRestDone('short')
+      setTimeout(() => setRestDone(null), 4000)
+    } finally {
+      setRestingAll(false)
+    }
   }
 
   async function handleGroupLongRest() {
@@ -1199,25 +1224,33 @@ export function CampaignPage() {
                             </div>
                           )}
                           {editing && (
-                            <div className="mt-2 flex items-center gap-1">
-                              <input
-                                type="number"
-                                value={hpDeltaValue}
-                                onChange={e => setHpDeltaValue(Math.max(1, parseInt(e.target.value) || 1))}
-                                min={1}
-                                className="w-14 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-white text-xs text-center focus:outline-none"
-                              />
+                            <div className="mt-2 space-y-1">
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="number"
+                                  value={hpDeltaValue}
+                                  onChange={e => setHpDeltaValue(Math.max(1, parseInt(e.target.value) || 1))}
+                                  min={1}
+                                  className="w-14 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-white text-xs text-center focus:outline-none"
+                                />
+                                <button
+                                  onClick={() => handleQuickHp(c.id, hpDeltaValue, 'heal')}
+                                  className="flex-1 bg-emerald-900/60 hover:bg-emerald-900/80 border border-emerald-800/50 text-emerald-400 text-xs font-semibold rounded py-1 transition-colors"
+                                >
+                                  + Soin
+                                </button>
+                                <button
+                                  onClick={() => handleQuickHp(c.id, hpDeltaValue, 'damage')}
+                                  className="flex-1 bg-red-900/60 hover:bg-red-900/80 border border-red-800/50 text-red-400 text-xs font-semibold rounded py-1 transition-colors"
+                                >
+                                  − Dégât
+                                </button>
+                              </div>
                               <button
-                                onClick={() => handleQuickHp(c.id, hpDeltaValue, 'heal')}
-                                className="flex-1 bg-emerald-900/60 hover:bg-emerald-900/80 border border-emerald-800/50 text-emerald-400 text-xs font-semibold rounded py-1 transition-colors"
+                                onClick={() => handleQuickHp(c.id, hpDeltaValue, 'temporary')}
+                                className="w-full bg-sky-900/40 hover:bg-sky-900/60 border border-sky-800/50 text-sky-400 text-xs font-semibold rounded py-1 transition-colors"
                               >
-                                + Soin
-                              </button>
-                              <button
-                                onClick={() => handleQuickHp(c.id, hpDeltaValue, 'damage')}
-                                className="flex-1 bg-red-900/60 hover:bg-red-900/80 border border-red-800/50 text-red-400 text-xs font-semibold rounded py-1 transition-colors"
-                              >
-                                − Dégât
+                                + PV temporaires
                               </button>
                             </div>
                           )}
@@ -1488,6 +1521,14 @@ export function CampaignPage() {
                     {showDmScreen ? '⊞ Cartes' : '☰ Vue MJ'}
                   </button>
                   <button
+                    onClick={handleGroupShortRest}
+                    disabled={restingAll}
+                    className="text-stone-500 hover:text-sky-400 text-xs font-medium transition-colors disabled:opacity-40"
+                    title="Repos court — 1 dé de vie par personnage"
+                  >
+                    {restingAll ? '…' : restDone === 'short' ? '✓ Repos terminé' : '☀ Repos court'}
+                  </button>
+                  <button
                     onClick={handleGroupLongRest}
                     disabled={restingAll}
                     className="text-stone-500 hover:text-amber-400 text-xs font-medium transition-colors disabled:opacity-40 flex items-center gap-1"
@@ -1596,15 +1637,23 @@ export function CampaignPage() {
                           )}
                         </div>
 
-                        {/* Death saves */}
+                        {/* Death saves — cliquables */}
                         {isDying && (
-                          <div className="flex items-center gap-1 shrink-0">
+                          <div className="flex items-center gap-1 shrink-0" title="Cliquer pour ajouter un jet (cycle 0→3→0)">
                             {[1,2,3].map(n => (
-                              <div key={n} className={`w-3 h-3 rounded-full border ${n <= c.state.death_saves_successes ? 'bg-emerald-500 border-emerald-400' : 'border-stone-600'}`} />
+                              <button
+                                key={n}
+                                onClick={e => { e.preventDefault(); handleToggleDeathSave(c.id, 'success', c.state.death_saves_successes) }}
+                                className={`w-3.5 h-3.5 rounded-full border transition-colors ${n <= c.state.death_saves_successes ? 'bg-emerald-500 border-emerald-400 hover:bg-emerald-400' : 'border-stone-600 hover:border-emerald-500'}`}
+                              />
                             ))}
                             <span className="text-stone-600 text-xs mx-0.5">/</span>
                             {[1,2,3].map(n => (
-                              <div key={n} className={`w-3 h-3 rounded-full border ${n <= c.state.death_saves_failures ? 'bg-red-500 border-red-400' : 'border-stone-600'}`} />
+                              <button
+                                key={n}
+                                onClick={e => { e.preventDefault(); handleToggleDeathSave(c.id, 'failure', c.state.death_saves_failures) }}
+                                className={`w-3.5 h-3.5 rounded-full border transition-colors ${n <= c.state.death_saves_failures ? 'bg-red-500 border-red-400 hover:bg-red-400' : 'border-stone-600 hover:border-red-500'}`}
+                              />
                             ))}
                           </div>
                         )}
@@ -3200,6 +3249,13 @@ export function CampaignPage() {
                           placeholder="Label *"
                           className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-amber-500"
                         />
+                        <input
+                          type="text"
+                          value={editPinDraft.location_name ?? ''}
+                          onChange={e => setEditPinDraft(d => ({ ...d, location_name: e.target.value }))}
+                          placeholder="Lieu lié (optionnel)"
+                          className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-stone-300 text-xs focus:outline-none focus:border-amber-500"
+                        />
                         <div className="flex gap-1.5">
                           {colorOptions.map(c => (
                             <button
@@ -3228,6 +3284,11 @@ export function CampaignPage() {
                             className="text-white/60 hover:text-white opacity-0 group-hover:opacity-100 transition-opacity leading-none"
                           >×</button>
                         </div>
+                        {pin.location_name && (
+                          <div className="text-center mt-0.5">
+                            <span className="text-[10px] text-white/70 bg-stone-900/80 rounded px-1">{pin.location_name}</span>
+                          </div>
+                        )}
                         <div className={`absolute left-1/2 -translate-x-1/2 top-full w-0.5 h-2 ${pinLine}`} />
                       </>
                     )}
