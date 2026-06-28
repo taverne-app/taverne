@@ -121,6 +121,7 @@ export function CampaignPage() {
   const [editSessionDraft, setEditSessionDraft] = useState(emptySessionDraft())
   const [expandedSession, setExpandedSession] = useState<number | null>(null)
   const [sessionView, setSessionView] = useState<'list' | 'timeline'>('list')
+  const [sessionSearch, setSessionSearch] = useState('')
 
   // Quêtes
   const emptyQuestDraft = (): Omit<Quest, 'id'> => ({ title: '', description: '', status: 'active', giver: '', notes: '' })
@@ -179,6 +180,7 @@ export function CampaignPage() {
   const [expandedFaction, setExpandedFaction] = useState<number | null>(null)
   const [editingFactionIdx, setEditingFactionIdx] = useState<number | null>(null)
   const [editFactionDraft, setEditFactionDraft]   = useState<Faction>(emptyFactionDraft())
+  const [factionRepFilter, setFactionRepFilter] = useState<'all' | 'allied' | 'neutral' | 'enemy'>('all')
 
   // Générateur de PNJ
   const [generatedNpc, setGeneratedNpc] = useState<GeneratedNpc | null>(null)
@@ -200,6 +202,7 @@ export function CampaignPage() {
   const [renamingTableDraft, setRenamingTableDraft] = useState('')
   const [editingEntryKey, setEditingEntryKey] = useState<string | null>(null)
   const [editEntryDraft, setEditEntryDraft] = useState<RandomTableEntry>({ weight: 1, text: '' })
+  const [tableSearch, setTableSearch] = useState('')
 
   // Scènes de préparation
   const emptyScene = (): PrepScene => ({
@@ -1000,6 +1003,16 @@ export function CampaignPage() {
     const updated = await updateCampaign(campaign.id, { factions: next })
     setCampaign(updated)
     if (expandedFaction === index) setExpandedFaction(null)
+  }
+
+  async function handleDuplicateFaction(index: number) {
+    if (!campaign) return
+    const src = (campaign.factions ?? [])[index]
+    if (!src) return
+    const copy: Faction = { ...src, name: `${src.name} (copie)` }
+    const next = [...(campaign.factions ?? []), copy]
+    const updated = await updateCampaign(campaign.id, { factions: next })
+    setCampaign(updated)
   }
 
   async function handleAddCustomMonster() {
@@ -3981,9 +3994,25 @@ export function CampaignPage() {
             </div>
           )}
 
+          {(campaign.factions ?? []).length > 1 && (
+            <div className="flex flex-wrap gap-1.5 mb-3">
+              {(['all', 'allied', 'neutral', 'enemy'] as const).map(f => {
+                const facs = campaign.factions ?? []
+                const count = f === 'all' ? facs.length : f === 'allied' ? facs.filter(fa => fa.reputation >= 2).length : f === 'neutral' ? facs.filter(fa => fa.reputation >= -1 && fa.reputation < 2).length : facs.filter(fa => fa.reputation < -1).length
+                if (f !== 'all' && count === 0) return null
+                const label = f === 'all' ? `Toutes (${count})` : f === 'allied' ? `🟢 Alliées (${count})` : f === 'neutral' ? `🟡 Neutres (${count})` : `🔴 Ennemies (${count})`
+                return (
+                  <button key={f} onClick={() => setFactionRepFilter(f)} className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${factionRepFilter === f ? 'bg-amber-900/60 border-amber-600/60 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}>
+                    {label}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           {(campaign.factions ?? []).length > 0 ? (
             <div className="space-y-2">
-              {(campaign.factions ?? []).map((faction, i) => {
+              {(campaign.factions ?? []).map((faction, i) => ({ faction, i })).filter(({ faction }) => factionRepFilter === 'all' || (factionRepFilter === 'allied' && faction.reputation >= 2) || (factionRepFilter === 'neutral' && faction.reputation >= -1 && faction.reputation < 2) || (factionRepFilter === 'enemy' && faction.reputation < -1)).map(({ faction, i }) => {
                 const rep = faction.reputation
                 const repLabel = rep >= 4 ? 'Vénéré' : rep >= 2 ? 'Allié' : rep >= 0 ? 'Neutre' : rep >= -2 ? 'Suspect' : 'Ennemi'
                 const repColor = rep >= 2 ? 'text-emerald-400' : rep >= 0 ? 'text-stone-400' : rep >= -2 ? 'text-amber-400' : 'text-red-400'
@@ -4057,6 +4086,11 @@ export function CampaignPage() {
                                 className="w-6 h-6 rounded bg-stone-800 hover:bg-stone-700 text-stone-400 hover:text-white text-sm font-bold transition-colors disabled:opacity-30 flex items-center justify-center"
                               >+</button>
                             </div>
+                            <button
+                              onClick={e => { e.stopPropagation(); handleDuplicateFaction(i) }}
+                              className="text-stone-600 hover:text-sky-400 text-xs transition-colors"
+                              title="Dupliquer cette faction"
+                            >⎘</button>
                             <button
                               onClick={e => { e.stopPropagation(); setEditFactionDraft({ ...faction }); setEditingFactionIdx(i); setExpandedFaction(null) }}
                               className="text-stone-600 hover:text-stone-400 text-xs transition-colors"
@@ -4364,7 +4398,16 @@ export function CampaignPage() {
 
           {(campaign.random_tables ?? []).length > 0 ? (
             <div className="space-y-3">
-              {(campaign.random_tables ?? []).map((table, tIdx) => (
+              {(campaign.random_tables ?? []).length > 1 && (
+                <input
+                  type="text"
+                  value={tableSearch}
+                  onChange={e => setTableSearch(e.target.value)}
+                  placeholder="Rechercher une table…"
+                  className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+              )}
+              {(campaign.random_tables ?? []).map((table, tIdx) => ({ table, tIdx })).filter(({ table }) => !tableSearch || table.name.toLowerCase().includes(tableSearch.toLowerCase())).map(({ table, tIdx }) => (
                 <div key={tIdx} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
                   <div className="flex items-center justify-between px-4 py-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -4848,7 +4891,16 @@ export function CampaignPage() {
             </div>
           )})() : (
             <div className="space-y-2">
-              {sessions.map(s => (
+              {sessions.length > 3 && (
+                <input
+                  type="text"
+                  value={sessionSearch}
+                  onChange={e => setSessionSearch(e.target.value)}
+                  placeholder="Rechercher une session…"
+                  className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors mb-1"
+                />
+              )}
+              {sessions.filter(s => !sessionSearch || s.title.toLowerCase().includes(sessionSearch.toLowerCase()) || (s.session_date ?? '').includes(sessionSearch)).map(s => (
                 <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
                   {editingSession === s.id ? (
                     <div className="p-5 space-y-3">
