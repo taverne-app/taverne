@@ -514,6 +514,7 @@ export function CombatPage() {
   const [showCombatLog, setShowCombatLog] = useState(false)
   const [savingLog, setSavingLog] = useState(false)
   const [logSaved, setLogSaved] = useState(false)
+  const [logTypeFilter, setLogTypeFilter] = useState<'all' | CombatLogEntry['type']>('all')
   const logIdRef = useRef(0)
 
   function logEvent(type: CombatLogEntry['type'], text: string) {
@@ -3595,8 +3596,26 @@ export function CombatPage() {
               </div>
             </button>
             {showCombatLog && (
+              <>
+                {(() => {
+                  const presentTypes = [...new Set(combatLog.map(e => e.type))]
+                  const typeLabels: Record<string, string> = { turn: '⟳ Tours', roll: '🎲 Lancers', hp: '❤ PV', xp: '⬆ XP', join: '➕ Arrivées' }
+                  return presentTypes.length > 1 ? (
+                    <div className="flex flex-wrap gap-1.5 px-4 pt-3 pb-2">
+                      {(['all', ...presentTypes] as const).map(t => (
+                        <button
+                          key={t}
+                          onClick={() => setLogTypeFilter(t)}
+                          className={`text-xs px-2 py-0.5 rounded transition-colors ${logTypeFilter === t ? 'bg-stone-700 text-stone-100' : 'text-stone-500 hover:text-stone-300'}`}
+                        >
+                          {t === 'all' ? 'Tous' : typeLabels[t] ?? t}
+                        </button>
+                      ))}
+                    </div>
+                  ) : null
+                })()}
               <div className="divide-y divide-stone-800/50 max-h-72 overflow-y-auto">
-                {combatLog.map(entry => (
+                {combatLog.filter(e => logTypeFilter === 'all' || e.type === logTypeFilter).map(entry => (
                   <div key={entry.id} className="flex items-start gap-3 px-5 py-2">
                     <span className={`shrink-0 text-xs mt-0.5 ${
                       entry.type === 'turn' ? 'text-amber-500' :
@@ -3615,6 +3634,7 @@ export function CombatPage() {
                   </div>
                 ))}
               </div>
+              </>
             )}
           </div>
         )}

@@ -350,6 +350,75 @@ export function CharacterPage() {
     URL.revokeObjectURL(url)
   }
 
+  function handleExportMarkdown() {
+    if (!character) return
+    const lines: string[] = []
+    lines.push(`# ${character.name}`)
+    const parts = [`**Classe :** ${character.class} ${character.level}`]
+    if (character.race) parts.push(`**Race :** ${character.race}`)
+    if (character.background) parts.push(`**Historique :** ${character.background}`)
+    lines.push(parts.join(' · '))
+    lines.push('')
+
+    lines.push('## Points de vie')
+    lines.push(`PV ${character.current_hp} / ${character.max_hp}${character.temporary_hp ? ` (+${character.temporary_hp} tmp)` : ''}`)
+    lines.push('')
+
+    lines.push('## Caractéristiques')
+    for (const [key, abbr] of ABILITY_LABELS) {
+      const ab = character.abilities[key]
+      lines.push(`- **${abbr}** ${ab.score} (${sign(ab.modifier)})`)
+    }
+    lines.push('')
+
+    lines.push('## Jets de sauvegarde')
+    for (const [ability, label] of SAVE_LABELS) {
+      const save = character.saving_throws[ability]
+      lines.push(`- ${save.proficient ? '●' : '○'} **${label}** ${sign(save.modifier)}`)
+    }
+    lines.push('')
+
+    if (character.inventory.length > 0) {
+      lines.push('## Inventaire')
+      for (const item of character.inventory) {
+        const tags = [item.equipped && '⬤ équipé', item.magical && '✦ magique', item.attuned && '◈ accordé'].filter(Boolean).join(' ')
+        lines.push(`- ${item.name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}${tags ? ` — ${tags}` : ''}`)
+      }
+      lines.push('')
+    }
+
+    if (character.spells.length > 0) {
+      lines.push('## Sorts')
+      const byLevel = new Map<number, typeof character.spells>()
+      for (const s of character.spells) {
+        if (!byLevel.has(s.level)) byLevel.set(s.level, [])
+        byLevel.get(s.level)!.push(s)
+      }
+      for (const [lvl, spells] of [...byLevel.entries()].sort(([a], [b]) => a - b)) {
+        lines.push(`### ${SPELL_LEVEL_LABELS[lvl] ?? `Niveau ${lvl}`}`)
+        for (const s of spells) lines.push(`- ${s.prepared ? '✓' : '○'} ${s.name}`)
+      }
+      lines.push('')
+    }
+
+    if (character.features.length > 0) {
+      lines.push('## Capacités')
+      for (const f of character.features) {
+        lines.push(`### ${f.name}${f.source ? ` *(${f.source})*` : ''}`)
+        if (f.description) { lines.push(f.description); lines.push('') }
+      }
+    }
+
+    const md = lines.join('\n')
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${character.name.replace(/\s+/g, '_')}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleImportFile(file: File) {
     if (!character) return
     setImportStatus('loading')
@@ -1323,7 +1392,14 @@ export function CharacterPage() {
               className="text-stone-400 hover:text-stone-200 text-sm transition-colors hidden sm:block"
               title="Télécharger la fiche en JSON"
             >
-              ↓ Exporter
+              ↓ JSON
+            </button>
+            <button
+              onClick={handleExportMarkdown}
+              className="text-stone-400 hover:text-stone-200 text-sm transition-colors hidden sm:block"
+              title="Télécharger la fiche en Markdown"
+            >
+              ↓ Markdown
             </button>
             <button
               onClick={() => importRef.current?.click()}

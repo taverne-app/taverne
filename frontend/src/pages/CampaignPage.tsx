@@ -96,6 +96,7 @@ export function CampaignPage() {
   // Notes MJ
   const [dmNotesDraft, setDmNotesDraft] = useState('')
   const [savingNotes, setSavingNotes] = useState(false)
+  const [dmNotesPreview, setDmNotesPreview] = useState(false)
 
   // PNJs
   const [npcDraft, setNpcDraft] = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
@@ -122,6 +123,7 @@ export function CampaignPage() {
   const [expandedSession, setExpandedSession] = useState<number | null>(null)
   const [sessionView, setSessionView] = useState<'list' | 'timeline'>('list')
   const [sessionSearch, setSessionSearch] = useState('')
+  const [sessionSort, setSessionSort] = useState<'newest' | 'oldest' | 'title'>('newest')
 
   // Quêtes
   const emptyQuestDraft = (): Omit<Quest, 'id'> => ({ title: '', description: '', status: 'active', giver: '', notes: '' })
@@ -2229,16 +2231,32 @@ export function CampaignPage() {
               <h2 className="text-stone-300 text-sm font-semibold">Notes privées MJ</h2>
               <p className="text-stone-500 text-xs mt-0.5">Visibles uniquement par vous — non partagées</p>
             </div>
-            {savingNotes && <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />}
+            <div className="flex items-center gap-2">
+              {dmNotesDraft.trim() && (
+                <button
+                  onClick={() => setDmNotesPreview(v => !v)}
+                  className={`text-xs transition-colors ${dmNotesPreview ? 'text-amber-400' : 'text-stone-500 hover:text-stone-300'}`}
+                >
+                  {dmNotesPreview ? '✎ Éditer' : '👁 Aperçu'}
+                </button>
+              )}
+              {savingNotes && <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />}
+            </div>
           </div>
-          <textarea
-            value={dmNotesDraft}
-            onChange={e => setDmNotesDraft(e.target.value)}
-            onBlur={handleSaveDmNotes}
-            placeholder="Notes de préparation, secrets, PNJ, lieux, intrigues…"
-            rows={6}
-            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
-          />
+          {dmNotesPreview ? (
+            <div className="min-h-[6rem]">
+              <MarkdownText className="text-stone-200 text-sm">{dmNotesDraft}</MarkdownText>
+            </div>
+          ) : (
+            <textarea
+              value={dmNotesDraft}
+              onChange={e => setDmNotesDraft(e.target.value)}
+              onBlur={handleSaveDmNotes}
+              placeholder="Notes de préparation, secrets, PNJ, lieux, intrigues…"
+              rows={6}
+              className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+            />
+          )}
         </div>
 
         {/* Calendrier de campagne */}
@@ -4892,15 +4910,34 @@ export function CampaignPage() {
           )})() : (
             <div className="space-y-2">
               {sessions.length > 3 && (
-                <input
-                  type="text"
-                  value={sessionSearch}
-                  onChange={e => setSessionSearch(e.target.value)}
-                  placeholder="Rechercher une session…"
-                  className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors mb-1"
-                />
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={sessionSearch}
+                    onChange={e => setSessionSearch(e.target.value)}
+                    placeholder="Rechercher une session…"
+                    className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                  />
+                  <select
+                    value={sessionSort}
+                    onChange={e => setSessionSort(e.target.value as typeof sessionSort)}
+                    className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-stone-300 text-sm focus:outline-none focus:border-stone-600 transition-colors"
+                  >
+                    <option value="newest">Plus récente</option>
+                    <option value="oldest">Plus ancienne</option>
+                    <option value="title">Titre A→Z</option>
+                  </select>
+                </div>
               )}
-              {sessions.filter(s => !sessionSearch || s.title.toLowerCase().includes(sessionSearch.toLowerCase()) || (s.session_date ?? '').includes(sessionSearch)).map(s => (
+              {sessions
+                .filter(s => !sessionSearch || s.title.toLowerCase().includes(sessionSearch.toLowerCase()) || (s.session_date ?? '').includes(sessionSearch))
+                .sort((a, b) => {
+                  if (sessionSort === 'title') return a.title.localeCompare(b.title, 'fr')
+                  const da = a.session_date ?? ''
+                  const db = b.session_date ?? ''
+                  return sessionSort === 'newest' ? db.localeCompare(da) : da.localeCompare(db)
+                })
+                .map(s => (
                 <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
                   {editingSession === s.id ? (
                     <div className="p-5 space-y-3">
