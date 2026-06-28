@@ -968,6 +968,9 @@ export function CampaignPage() {
         random_tables: data.random_tables ?? [],
         game_calendar: data.game_calendar ?? {},
         session_prep: data.session_prep ?? null,
+        campaign_milestones: data.campaign_milestones ?? [],
+        quests: data.quests ?? [],
+        campaign_map: data.campaign_map ?? null,
       })
       if (Array.isArray(data.sessions)) {
         for (const s of data.sessions) {
@@ -1032,13 +1035,15 @@ export function CampaignPage() {
           const locs = active ? (campaign.locations ?? []).filter(l => l.name.toLowerCase().includes(q) || l.notes.toLowerCase().includes(q)) : []
           const monsters = active ? (campaign.custom_monsters ?? []).filter(m => m.name.toLowerCase().includes(q)) : []
           const sess = active ? sessions.filter(s => s.title.toLowerCase().includes(q) || (s.notes ?? '').toLowerCase().includes(q)) : []
-          const total = npcs.length + locs.length + monsters.length + sess.length
+          const quests = active ? (campaign.quests ?? []).filter(qt => qt.title.toLowerCase().includes(q) || qt.description.toLowerCase().includes(q) || qt.giver.toLowerCase().includes(q)) : []
+          const factions = active ? (campaign.factions ?? []).filter(f => f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q)) : []
+          const total = npcs.length + locs.length + monsters.length + sess.length + quests.length + factions.length
           return (
             <>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, sessions…"
+                  placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, sessions, quêtes, factions…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   className="w-full bg-stone-900 border border-stone-800 rounded-xl px-4 py-3 pr-10 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
@@ -1105,6 +1110,33 @@ export function CampaignPage() {
                               <div key={s.id} className="flex items-center gap-3 py-1.5">
                                 <span className="text-white text-sm font-medium">{s.title}</span>
                                 {s.session_date && <span className="text-stone-500 text-xs">{new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR')}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {quests.length > 0 && (
+                        <div>
+                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Quêtes ({quests.length})</p>
+                          <div className="divide-y divide-stone-800">
+                            {quests.map(qt => (
+                              <div key={qt.id} className="flex items-center gap-3 py-1.5">
+                                <span className="text-base shrink-0">{qt.status === 'active' ? '🟡' : qt.status === 'completed' ? '🟢' : qt.status === 'failed' ? '🔴' : '⚪'}</span>
+                                <span className="text-white text-sm font-medium">{qt.title}</span>
+                                {qt.giver && <span className="text-stone-500 text-xs">— {qt.giver}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {factions.length > 0 && (
+                        <div>
+                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Factions ({factions.length})</p>
+                          <div className="divide-y divide-stone-800">
+                            {factions.map((f, i) => (
+                              <div key={i} className="flex items-center gap-3 py-1.5">
+                                <span className="text-white text-sm font-medium">{f.name}</span>
+                                {f.description && <span className="text-stone-500 text-xs truncate max-w-xs">{f.description}</span>}
                               </div>
                             ))}
                           </div>
@@ -3029,7 +3061,7 @@ export function CampaignPage() {
                                   {scene.hook && <p className="text-stone-400">⚡ <span className="text-stone-300">{scene.hook}</span></p>}
                                   {scene.encounter_name && <p className="text-stone-400">⚔ <span className="text-stone-300">{scene.encounter_name}</span></p>}
                                   {scene.treasure && <p className="text-stone-400">💰 <span className="text-stone-300">{scene.treasure}</span></p>}
-                                  {scene.notes && <p className="text-stone-300 mt-1">{scene.notes}</p>}
+                                  {scene.notes && <MarkdownText className="text-stone-300 mt-1">{scene.notes}</MarkdownText>}
                                 </div>
                               )}
                             </>
@@ -3795,10 +3827,10 @@ export function CampaignPage() {
                               {expandedQuest === quest.id && (
                                 <div className="px-4 pb-4 border-t border-stone-800 pt-3 space-y-2">
                                   {quest.description && (
-                                    <p className="text-stone-300 text-sm">{quest.description}</p>
+                                    <MarkdownText className="text-stone-300 text-sm">{quest.description}</MarkdownText>
                                   )}
                                   {quest.notes && (
-                                    <p className="text-stone-500 text-xs italic">{quest.notes}</p>
+                                    <MarkdownText className="text-stone-500 text-xs">{quest.notes}</MarkdownText>
                                   )}
                                   {!quest.description && !quest.notes && (
                                     <p className="text-stone-600 text-sm">Aucune description.</p>

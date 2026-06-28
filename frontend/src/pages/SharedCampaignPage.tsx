@@ -342,7 +342,7 @@ export function SharedCampaignPage() {
                     <div className="min-w-0">
                       <p className="text-white font-semibold text-sm leading-tight">{q.title}</p>
                       {q.giver && <p className="text-stone-500 text-xs mt-0.5">— {q.giver}</p>}
-                      {q.description && <p className="text-stone-400 text-xs mt-1.5 leading-relaxed">{q.description}</p>}
+                      {q.description && <MarkdownText className="text-stone-400 text-xs mt-1.5">{q.description}</MarkdownText>}
                     </div>
                   </div>
                 </div>
