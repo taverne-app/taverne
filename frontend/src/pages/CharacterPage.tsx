@@ -668,6 +668,8 @@ export function CharacterPage() {
   const [expandedFeature, setExpandedFeature] = useState<number | null>(null)
   const [editingFeature, setEditingFeature]   = useState<number | null>(null)
   const [editDraft, setEditDraft]             = useState<Feature>(emptyFeatureDraft)
+  const [featureSearch, setFeatureSearch]     = useState('')
+  const [featureSourceFilter, setFeatureSourceFilter] = useState('all')
 
   async function handleAddFeature() {
     if (!character || !featureDraft.name.trim()) return
@@ -988,6 +990,15 @@ export function CharacterPage() {
   async function handleDeleteMacro(index: number) {
     if (!character) return
     const next = character.attack_macros.filter((_, i) => i !== index)
+    const updated = await withSave(() => updateAttackMacros(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
+  async function handleDuplicateMacro(index: number) {
+    if (!character) return
+    const src = character.attack_macros[index]
+    const copy = { ...src, name: `${src.name} (copie)` }
+    const next = [...character.attack_macros, copy]
     const updated = await withSave(() => updateAttackMacros(character.id, next))
     if (updated) setCharacter(updated)
   }
@@ -2570,6 +2581,12 @@ export function CharacterPage() {
                     )}
                   </div>
                   <button
+                    onClick={() => handleDuplicateMacro(i)}
+                    disabled={saving}
+                    className="text-stone-700 hover:text-sky-400 transition-colors disabled:cursor-not-allowed text-xs shrink-0"
+                    title="Dupliquer"
+                  >⎘</button>
+                  <button
                     onClick={() => { setEditingMacroIndex(i); setEditMacroDraft(draftFromMacro(macro)) }}
                     disabled={saving}
                     className="text-stone-600 hover:text-stone-300 transition-colors disabled:cursor-not-allowed text-sm shrink-0"
@@ -3684,13 +3701,39 @@ export function CharacterPage() {
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Traits &amp; Capacités
             </h2>
-            <button
-              onClick={() => { setAddingFeature(v => !v); setFeatureDraft(emptyFeatureDraft()) }}
-              className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
-            >
-              {addingFeature ? 'Annuler' : '+ Ajouter'}
-            </button>
+            <div className="flex items-center gap-2">
+              {character.features.length > 3 && (
+                <input
+                  type="text"
+                  value={featureSearch}
+                  onChange={e => setFeatureSearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-28 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors placeholder:text-stone-600"
+                />
+              )}
+              <button
+                onClick={() => { setAddingFeature(v => !v); setFeatureDraft(emptyFeatureDraft()) }}
+                className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
+              >
+                {addingFeature ? 'Annuler' : '+ Ajouter'}
+              </button>
+            </div>
           </div>
+
+          {/* Source filter pills */}
+          {(() => {
+            const sources = [...new Set(character.features.map(f => f.source).filter(Boolean))] as string[]
+            if (sources.length < 2) return null
+            return (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(['all', ...sources]).map(s => (
+                  <button key={s} onClick={() => setFeatureSourceFilter(s)} className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${featureSourceFilter === s ? 'bg-amber-900/60 border-amber-600/60 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}>
+                    {s === 'all' ? `Toutes (${character.features.length})` : `${s} (${character.features.filter(f => f.source === s).length})`}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
 
           {/* Add form */}
           {addingFeature && (
@@ -3735,7 +3778,7 @@ export function CharacterPage() {
             <p className="text-stone-500 text-sm">Aucune capacité enregistrée.</p>
           ) : (
             <div className="space-y-2">
-              {character.features.map((f, i) => (
+              {character.features.map((f, i) => ({ f, i })).filter(({ f }) => (featureSourceFilter === 'all' || f.source === featureSourceFilter) && (!featureSearch || f.name.toLowerCase().includes(featureSearch.toLowerCase()) || (f.source ?? '').toLowerCase().includes(featureSearch.toLowerCase()))).map(({ f, i }) => (
                 <div key={i} className="border border-stone-800 rounded-xl overflow-hidden">
                   {editingFeature === i ? (
                     /* Inline edit form */
@@ -3818,9 +3861,7 @@ export function CharacterPage() {
                       </button>
                       {expandedFeature === i && f.description && (
                         <div className="px-4 pb-4">
-                          <p className="text-stone-400 text-sm whitespace-pre-wrap leading-relaxed">
-                            {f.description}
-                          </p>
+                          <MarkdownText className="text-stone-400 text-sm">{f.description}</MarkdownText>
                         </div>
                       )}
                     </div>
