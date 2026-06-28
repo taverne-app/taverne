@@ -796,6 +796,20 @@ export function CampaignPage() {
     if (expandedScene === sceneId) setExpandedScene(null)
   }
 
+  async function handleMoveScene(sceneId: string, dir: -1 | 1) {
+    if (!campaign?.session_prep) return
+    const scenes = [...campaign.session_prep.scenes]
+    const idx = scenes.findIndex(s => s.id === sceneId)
+    if (idx < 0) return
+    const target = idx + dir
+    if (target < 0 || target >= scenes.length) return
+    ;[scenes[idx], scenes[target]] = [scenes[target], scenes[idx]]
+    const next: SessionPrep = { ...campaign.session_prep, scenes }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+  }
+
   async function handleDuplicateScene(sceneId: string) {
     if (!campaign?.session_prep) return
     const src = campaign.session_prep.scenes.find(s => s.id === sceneId)
@@ -1311,13 +1325,37 @@ export function CampaignPage() {
                           <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
                             <div className={`h-full ${bar} rounded-full transition-all`} style={{ width: `${pct * 100}%` }} />
                           </div>
-                          {conditions.length > 0 && (
+                          {(conditions.length > 0 || editing) && (
                             <div className="flex flex-wrap gap-1 mt-1.5">
-                              {conditions.map((cond: string, i: number) => (
-                                <span key={i} className="text-[10px] bg-amber-900/40 border border-amber-700/30 text-amber-300 rounded px-1.5 py-0.5">
-                                  {CONDITIONS_FR[cond] ?? cond}
-                                </span>
+                              {conditions.map((cond: string, idx: number) => (
+                                editing ? (
+                                  <button
+                                    key={idx}
+                                    onClick={() => handleRemoveCondition(c.id, cond)}
+                                    title="Retirer"
+                                    className="text-[10px] bg-amber-900/40 border border-amber-700/30 text-amber-300 hover:bg-red-900/40 hover:border-red-700/40 hover:text-red-300 rounded px-1.5 py-0.5 transition-colors"
+                                  >
+                                    {CONDITIONS_FR[cond] ?? cond} ×
+                                  </button>
+                                ) : (
+                                  <span key={idx} className="text-[10px] bg-amber-900/40 border border-amber-700/30 text-amber-300 rounded px-1.5 py-0.5">
+                                    {CONDITIONS_FR[cond] ?? cond}
+                                  </span>
+                                )
                               ))}
+                              {editing && (
+                                <select
+                                  value=""
+                                  onChange={e => { if (e.target.value) { handleAddCondition(c.id, e.target.value); e.target.value = '' } }}
+                                  className="text-[10px] bg-transparent border border-stone-700 text-stone-500 hover:text-stone-300 rounded px-1 py-0.5 focus:outline-none cursor-pointer transition-colors"
+                                  title="Ajouter une condition"
+                                >
+                                  <option value="">+ état</option>
+                                  {Object.entries(CONDITIONS_FR).filter(([k]) => !c.state.conditions.includes(k)).map(([k, v]) => (
+                                    <option key={k} value={k}>{v}</option>
+                                  ))}
+                                </select>
+                              )}
                             </div>
                           )}
                           {editing && (
@@ -3236,7 +3274,7 @@ export function CampaignPage() {
 
                   {(campaign.session_prep?.scenes ?? []).length > 0 ? (
                     <div className="space-y-2">
-                      {(campaign.session_prep!.scenes).map(scene => (
+                      {(campaign.session_prep!.scenes).map((scene, sceneIdx) => (
                         <div key={scene.id} className={`border rounded-lg overflow-hidden transition-colors ${scene.done ? 'border-stone-800 opacity-60' : 'border-sky-800/40'}`}>
                           {editingSceneId === scene.id ? (
                             <div className="px-3 py-3 space-y-2">
@@ -3274,6 +3312,20 @@ export function CampaignPage() {
                                 </button>
                                 <p className={`text-sm font-medium flex-1 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
                                 {scene.location_name && <span className="text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
+                                {sceneIdx > 0 && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleMoveScene(scene.id, -1) }}
+                                    className="text-stone-700 hover:text-stone-400 text-xs leading-none shrink-0 transition-colors"
+                                    title="Monter"
+                                  >↑</button>
+                                )}
+                                {sceneIdx < (campaign.session_prep!.scenes.length - 1) && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleMoveScene(scene.id, 1) }}
+                                    className="text-stone-700 hover:text-stone-400 text-xs leading-none shrink-0 transition-colors"
+                                    title="Descendre"
+                                  >↓</button>
+                                )}
                                 <button
                                   onClick={e => { e.stopPropagation(); handleDuplicateScene(scene.id) }}
                                   className="text-stone-600 hover:text-sky-400 text-xs leading-none shrink-0 transition-colors"

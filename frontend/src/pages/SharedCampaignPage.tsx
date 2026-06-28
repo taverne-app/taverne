@@ -228,6 +228,37 @@ function CombatantCard({ c }: { c: Combatant }) {
   )
 }
 
+import type { Quest } from '../api/campaigns'
+
+function QuestHistory({ quests }: { quests: Quest[] }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <section>
+      <button
+        onClick={() => setOpen(v => !v)}
+        className="flex items-center gap-2 text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3 hover:text-stone-300 transition-colors"
+      >
+        Historique des quêtes ({quests.length}) <span>{open ? '▲' : '▼'}</span>
+      </button>
+      {open && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          {quests.map(q => (
+            <div key={q.id} className={`bg-stone-900 border rounded-xl p-4 ${q.status === 'completed' ? 'border-emerald-900/40' : 'border-red-900/30'}`}>
+              <div className="flex items-start gap-2">
+                <span className="text-sm shrink-0 mt-0.5">{q.status === 'completed' ? '✅' : '❌'}</span>
+                <div className="min-w-0">
+                  <p className={`font-semibold text-sm leading-tight ${q.status === 'completed' ? 'text-stone-300' : 'text-stone-500 line-through'}`}>{q.title}</p>
+                  {q.giver && <p className="text-stone-600 text-xs mt-0.5">— {q.giver}</p>}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 export function SharedCampaignPage() {
   const { token } = useParams<{ token: string }>()
   const [campaign, setCampaign] = useState<Campaign | null>(null)
@@ -378,6 +409,11 @@ export function SharedCampaignPage() {
           </section>
         )}
 
+        {/* Historique des quêtes */}
+        {(campaign.quests ?? []).filter(q => q.status === 'completed' || q.status === 'failed').length > 0 && (
+          <QuestHistory quests={(campaign.quests ?? []).filter(q => q.status === 'completed' || q.status === 'failed')} />
+        )}
+
         {/* Journal de session */}
         {sessions.length > 0 && (
           <section>
@@ -505,9 +541,10 @@ export function SharedCampaignPage() {
                       <div className="min-w-0">
                         <p className="text-white font-semibold text-sm leading-tight">{npc.name}</p>
                         {npc.role && <p className="text-stone-400 text-xs mt-0.5">{npc.role}</p>}
-                        {npc.location && (
-                          <p className="text-stone-500 text-xs mt-1">📍 {npc.location}</p>
-                        )}
+                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                          {npc.location && <p className="text-stone-500 text-xs">📍 {npc.location}</p>}
+                          {npc.faction && <p className="text-stone-500 text-xs">⚔ {npc.faction}</p>}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -538,7 +575,7 @@ export function SharedCampaignPage() {
                         {loc.status === 'exploré' ? 'Exploré' : 'Connu'}
                       </span>
                     </div>
-                    {loc.notes && <p className="text-stone-400 text-xs mt-2 line-clamp-2">{loc.notes}</p>}
+                    {loc.notes && <MarkdownText className="text-stone-400 text-xs mt-2 line-clamp-3">{loc.notes}</MarkdownText>}
                   </div>
                 ))}
             </div>
