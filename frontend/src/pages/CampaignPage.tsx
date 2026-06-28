@@ -24,7 +24,7 @@ import {
   type MonsterAttack,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, shortRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, updateExhaustion, updateDeathSaves, type Character } from '../api/characters'
+import { listCharacters, longRest, shortRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, updateExhaustion, updateDeathSaves, updateTempMaxHp, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -104,6 +104,7 @@ export function CampaignPage() {
   const [editingNpcIdx, setEditingNpcIdx]   = useState<number | null>(null)
   const [editNpcDraft, setEditNpcDraft]     = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
   const [npcStatusFilter, setNpcStatusFilter] = useState<'all' | Npc['status']>('all')
+  const [npcFactionFilter, setNpcFactionFilter] = useState<string>('all')
 
   // Calendrier
   const [calendarDraft, setCalendarDraft] = useState<Partial<GameCalendar>>({})
@@ -161,6 +162,8 @@ export function CampaignPage() {
   const [editingMonsterIdx, setEditingMonsterIdx] = useState<number | null>(null)
   const [editMonsterDraft, setEditMonsterDraft] = useState<CustomMonster>(emptyMonsterDraft())
   const [editAttackDraft, setEditAttackDraft] = useState<MonsterAttack>(emptyAttackDraft())
+  const [combatMonsterIdx, setCombatMonsterIdx] = useState<number | null>(null)
+  const [combatMonsterCount, setCombatMonsterCount] = useState(1)
 
   // Factions
   const emptyFactionDraft = (): Faction => ({ name: '', description: '', reputation: 0, notes: '' })
@@ -940,9 +943,33 @@ export function CampaignPage() {
     if (editingMonsterIdx === index) setEditingMonsterIdx(null)
   }
 
-  async function handleAddMonsterToCombat(m: CustomMonster) {
+  async function handleAddMonsterToCombat(m: CustomMonster, count: number) {
     if (!campaign) return
-    await createCombatant(campaign.id, { name: m.name, max_hp: m.hp_avg, armor_class: m.ac })
+    await Promise.all(
+      Array.from({ length: count }, (_, idx) =>
+        createCombatant(campaign.id, {
+          name: count > 1 ? `${m.name} ${idx + 1}` : m.name,
+          max_hp: m.hp_avg,
+          armor_class: m.ac,
+        })
+      )
+    )
+    setCombatMonsterIdx(null)
+  }
+
+  async function handleDuplicateMonster(index: number) {
+    if (!campaign) return
+    const src = (campaign.custom_monsters ?? [])[index]
+    if (!src) return
+    const copy = { ...src, name: `${src.name} (copie)`, attacks: [...(src.attacks ?? [])] }
+    const next = [...(campaign.custom_monsters ?? []), copy]
+    const updated = await updateCampaign(campaign.id, { custom_monsters: next })
+    setCampaign(updated)
+  }
+
+  async function handleUpdateTempMaxHp(charId: number, bonus: number) {
+    const updated = await updateTempMaxHp(charId, bonus)
+    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
   }
 
   async function handleUpdateCustomMonster(index: number) {
@@ -1268,6 +1295,28 @@ export function CampaignPage() {
                               >
                                 + PV temporaires
                               </button>
+                              <div className="flex items-center gap-1 pt-1 border-t border-stone-700">
+                                <span className="text-stone-500 text-[10px] flex-1">
+                                  Max PV {c.combat.temp_max_hp_bonus !== 0 ? <span className={c.combat.temp_max_hp_bonus < 0 ? 'text-red-400' : 'text-emerald-400'}>{c.combat.temp_max_hp_bonus > 0 ? '+' : ''}{c.combat.temp_max_hp_bonus}</span> : ''}
+                                </span>
+                                <button
+                                  onClick={() => handleUpdateTempMaxHp(c.id, c.combat.temp_max_hp_bonus - hpDeltaValue)}
+                                  className="px-1.5 py-0.5 bg-red-900/40 hover:bg-red-900/60 border border-red-900/50 text-red-400 text-xs rounded transition-colors"
+                                  title="Réduire le max de PV (drain)"
+                                >−</button>
+                                <button
+                                  onClick={() => handleUpdateTempMaxHp(c.id, Math.min(0, c.combat.temp_max_hp_bonus + hpDeltaValue))}
+                                  className="px-1.5 py-0.5 bg-emerald-900/40 hover:bg-emerald-900/60 border border-emerald-900/50 text-emerald-400 text-xs rounded transition-colors"
+                                  title="Restaurer le max de PV"
+                                >+</button>
+                                {c.combat.temp_max_hp_bonus !== 0 && (
+                                  <button
+                                    onClick={() => handleUpdateTempMaxHp(c.id, 0)}
+                                    className="text-stone-600 hover:text-stone-400 text-[10px] transition-colors"
+                                    title="Réinitialiser"
+                                  >↺</button>
+                                )}
+                              </div>
                             </div>
                           )}
                         </div>
@@ -2240,7 +2289,7 @@ export function CampaignPage() {
             <>
               {/* Filtre par statut */}
               {(campaign.npcs ?? []).length > 1 && (
-                <div className="flex flex-wrap gap-1.5 mb-3">
+                <div className="flex flex-wrap gap-1.5 mb-2">
                   {(['all', 'allié', 'ennemi', 'neutre', 'inconnu'] as const).map(s => {
                     const count = s === 'all'
                       ? (campaign.npcs ?? []).length
@@ -2264,10 +2313,37 @@ export function CampaignPage() {
                 </div>
               )}
 
+              {/* Filtre par faction */}
+              {(() => {
+                const usedFactions = [...new Set((campaign.npcs ?? []).map(n => n.faction).filter(Boolean))] as string[]
+                if (usedFactions.length < 2) return null
+                return (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {(['all', ...usedFactions]).map(f => {
+                      const count = f === 'all' ? (campaign.npcs ?? []).length : (campaign.npcs ?? []).filter(n => n.faction === f).length
+                      return (
+                        <button
+                          key={f}
+                          onClick={() => setNpcFactionFilter(f)}
+                          className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                            npcFactionFilter === f
+                              ? 'bg-sky-900/60 border-sky-600/60 text-sky-300'
+                              : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                          }`}
+                        >
+                          {f === 'all' ? `Toutes factions (${count})` : `${f} (${count})`}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+
               <div className="space-y-2">
                 {(campaign.npcs ?? [])
                   .map((npc, i) => ({ npc, i }))
                   .filter(({ npc }) => npcStatusFilter === 'all' || npc.status === npcStatusFilter)
+                  .filter(({ npc }) => npcFactionFilter === 'all' || npc.faction === npcFactionFilter)
                   .map(({ npc, i }) => {
                     const statusColor = npc.status === 'allié' ? 'text-emerald-400' : npc.status === 'ennemi' ? 'text-red-400' : npc.status === 'neutre' ? 'text-amber-400' : 'text-stone-400'
                     const statusIcon = npc.status === 'allié' ? '🟢' : npc.status === 'ennemi' ? '🔴' : npc.status === 'neutre' ? '🟡' : '❓'
@@ -3540,7 +3616,30 @@ export function CampaignPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={() => handleAddMonsterToCombat(m)} className="text-stone-600 hover:text-amber-400 text-xs transition-colors" title="Ajouter au combat">⚔</button>
+                        {combatMonsterIdx === i ? (
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="number"
+                              value={combatMonsterCount}
+                              onChange={e => setCombatMonsterCount(Math.max(1, Math.min(9, parseInt(e.target.value) || 1)))}
+                              min={1} max={9}
+                              className="w-10 bg-stone-800 border border-stone-700 rounded px-1 py-0.5 text-white text-xs text-center focus:outline-none focus:border-amber-500"
+                              autoFocus
+                            />
+                            <button
+                              onClick={() => handleAddMonsterToCombat(m, combatMonsterCount)}
+                              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+                            >⚔</button>
+                            <button onClick={() => setCombatMonsterIdx(null)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors">✕</button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={() => { setCombatMonsterIdx(i); setCombatMonsterCount(1) }}
+                            className="text-stone-600 hover:text-amber-400 text-xs transition-colors"
+                            title="Ajouter au combat"
+                          >⚔</button>
+                        )}
+                        <button onClick={() => handleDuplicateMonster(i)} className="text-stone-600 hover:text-sky-400 text-xs transition-colors" title="Dupliquer">⎘</button>
                         <button onClick={() => { setEditMonsterDraft({ ...m, attacks: [...(m.attacks ?? [])] }); setEditAttackDraft(emptyAttackDraft()); setEditingMonsterIdx(i) }} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Modifier">✎</button>
                         <button onClick={() => handleDeleteCustomMonster(i)} className="text-stone-600 hover:text-red-400 text-lg leading-none transition-colors">×</button>
                       </div>
