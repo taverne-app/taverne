@@ -32,6 +32,7 @@ import {
   deleteSession,
   type CampaignSession,
 } from '../api/sessions'
+import { createCombatant } from '../api/combatants'
 import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
@@ -469,6 +470,16 @@ export function CampaignPage() {
     const updated = await updateCampaign(campaign.id, { npcs: next })
     setCampaign(updated)
     if (expandedNpc === index) setExpandedNpc(null)
+  }
+
+  async function handleDuplicateNpc(index: number) {
+    if (!campaign) return
+    const src = (campaign.npcs ?? [])[index]
+    if (!src) return
+    const copy = { ...src, name: `${src.name} (copie)` }
+    const next = [...(campaign.npcs ?? []), copy]
+    const updated = await updateCampaign(campaign.id, { npcs: next })
+    setCampaign(updated)
   }
 
   async function handleUpdateNpcStatus(index: number, status: Npc['status']) {
@@ -927,6 +938,11 @@ export function CampaignPage() {
     const updated = await updateCampaign(campaign.id, { custom_monsters: next })
     setCampaign(updated)
     if (editingMonsterIdx === index) setEditingMonsterIdx(null)
+  }
+
+  async function handleAddMonsterToCombat(m: CustomMonster) {
+    if (!campaign) return
+    await createCombatant(campaign.id, { name: m.name, max_hp: m.hp_avg, armor_class: m.ac })
   }
 
   async function handleUpdateCustomMonster(index: number) {
@@ -1800,6 +1816,11 @@ export function CampaignPage() {
                               ⬆ Niv
                             </span>
                           )}
+                          <button
+                            onClick={e => { e.preventDefault(); handleToggleInspiration(c.id, c.combat.inspiration) }}
+                            title={c.combat.inspiration ? "Retirer l'inspiration" : "Accorder l'inspiration"}
+                            className={`relative z-10 text-xs transition-colors ${c.combat.inspiration ? 'text-amber-400 hover:text-amber-300' : 'text-stone-700 hover:text-amber-500'}`}
+                          >✦</button>
                         </div>
                         <p className="text-stone-500 text-xs mt-0.5">
                           {c.race} · {c.character_class} · Niv. {c.level}
@@ -2363,6 +2384,13 @@ export function CampaignPage() {
                                     {expandedNpc === i ? '▲' : '▼'}
                                   </button>
                                 )}
+                                <button
+                                  onClick={() => handleDuplicateNpc(i)}
+                                  className="text-stone-700 hover:text-sky-400 text-xs transition-colors"
+                                  title="Dupliquer ce PNJ"
+                                >
+                                  ⎘
+                                </button>
                                 <button
                                   onClick={() => handleDeleteNpc(i)}
                                   className="text-stone-700 hover:text-red-400 text-xs transition-colors"
@@ -3512,6 +3540,7 @@ export function CampaignPage() {
                         )}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => handleAddMonsterToCombat(m)} className="text-stone-600 hover:text-amber-400 text-xs transition-colors" title="Ajouter au combat">⚔</button>
                         <button onClick={() => { setEditMonsterDraft({ ...m, attacks: [...(m.attacks ?? [])] }); setEditAttackDraft(emptyAttackDraft()); setEditingMonsterIdx(i) }} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Modifier">✎</button>
                         <button onClick={() => handleDeleteCustomMonster(i)} className="text-stone-600 hover:text-red-400 text-lg leading-none transition-colors">×</button>
                       </div>

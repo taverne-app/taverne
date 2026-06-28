@@ -330,6 +330,33 @@ export function SharedCampaignPage() {
           <p className="text-stone-400 text-sm">{campaign.description}</p>
         )}
 
+        {/* Calendrier de campagne */}
+        {(campaign.game_calendar?.date || campaign.game_calendar?.weather || campaign.game_calendar?.notes) && (
+          <section>
+            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Calendrier</h2>
+            <div className="bg-stone-900 border border-stone-800 rounded-xl px-5 py-4 flex flex-wrap items-center gap-x-6 gap-y-2">
+              {campaign.game_calendar.date && (
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-500 text-xs">📅</span>
+                  <span className="text-white text-sm font-medium">{campaign.game_calendar.date}</span>
+                  {campaign.game_calendar.time && (
+                    <span className="text-stone-400 text-xs capitalize">· {campaign.game_calendar.time}</span>
+                  )}
+                </div>
+              )}
+              {campaign.game_calendar.weather && (
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-500 text-xs">🌤</span>
+                  <span className="text-stone-300 text-sm">{campaign.game_calendar.weather}</span>
+                </div>
+              )}
+              {campaign.game_calendar.notes && (
+                <span className="text-stone-500 text-xs italic w-full">{campaign.game_calendar.notes}</span>
+              )}
+            </div>
+          </section>
+        )}
+
         {/* Quêtes actives */}
         {(campaign.quests ?? []).filter(q => q.status === 'active').length > 0 && (
           <section>
