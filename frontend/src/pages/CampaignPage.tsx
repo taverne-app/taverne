@@ -134,6 +134,7 @@ export function CampaignPage() {
   const [editQuestDraft, setEditQuestDraft] = useState<Omit<Quest, 'id'>>(emptyQuestDraft())
   const [questStatusFilter, setQuestStatusFilter] = useState<'all' | Quest['status']>('all')
   const [questSearch, setQuestSearch] = useState('')
+  const [questSort, setQuestSort] = useState<'default' | 'title' | 'giver'>('default')
 
   // Trésor partagé
   const emptyTreasureDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
@@ -174,6 +175,7 @@ export function CampaignPage() {
   const [combatMonsterCount, setCombatMonsterCount] = useState(1)
   const [monsterSearch, setMonsterSearch] = useState('')
   const [monsterCrFilter, setMonsterCrFilter] = useState<'all' | 'low' | 'mid' | 'high'>('all')
+  const [monsterSort, setMonsterSort] = useState<'name' | 'cr' | 'xp' | 'hp'>('name')
 
   // Factions
   const emptyFactionDraft = (): Faction => ({ name: '', description: '', reputation: 0, notes: '' })
@@ -183,6 +185,7 @@ export function CampaignPage() {
   const [editingFactionIdx, setEditingFactionIdx] = useState<number | null>(null)
   const [editFactionDraft, setEditFactionDraft]   = useState<Faction>(emptyFactionDraft())
   const [factionRepFilter, setFactionRepFilter] = useState<'all' | 'allied' | 'neutral' | 'enemy'>('all')
+  const [factionSearch, setFactionSearch] = useState('')
 
   // Générateur de PNJ
   const [generatedNpc, setGeneratedNpc] = useState<GeneratedNpc | null>(null)
@@ -1056,6 +1059,16 @@ export function CampaignPage() {
     const copy = { ...src, name: `${src.name} (copie)`, attacks: [...(src.attacks ?? [])] }
     const next = [...(campaign.custom_monsters ?? []), copy]
     const updated = await updateCampaign(campaign.id, { custom_monsters: next })
+    setCampaign(updated)
+  }
+
+  async function handleDuplicateTable(index: number) {
+    if (!campaign) return
+    const src = (campaign.random_tables ?? [])[index]
+    if (!src) return
+    const copy = { ...src, name: `${src.name} (copie)`, entries: [...src.entries] }
+    const next = [...(campaign.random_tables ?? []), copy]
+    const updated = await updateCampaign(campaign.id, { random_tables: next })
     setCampaign(updated)
   }
 
@@ -3802,13 +3815,25 @@ export function CampaignPage() {
 
           {(campaign.custom_monsters ?? []).length > 0 && (
             <div className="mb-3 space-y-2">
-              <input
-                type="text"
-                value={monsterSearch}
-                onChange={e => setMonsterSearch(e.target.value)}
-                placeholder="Rechercher un monstre…"
-                className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
-              />
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={monsterSearch}
+                  onChange={e => setMonsterSearch(e.target.value)}
+                  placeholder="Rechercher un monstre…"
+                  className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+                <select
+                  value={monsterSort}
+                  onChange={e => setMonsterSort(e.target.value as typeof monsterSort)}
+                  className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-stone-300 text-sm focus:outline-none focus:border-stone-600 transition-colors"
+                >
+                  <option value="name">Nom A→Z</option>
+                  <option value="cr">CR ↑</option>
+                  <option value="xp">XP ↑</option>
+                  <option value="hp">PV ↑</option>
+                </select>
+              </div>
               <div className="flex gap-1.5 flex-wrap">
                 {(['all', 'low', 'mid', 'high'] as const).map(f => {
                   const labels = { all: 'Tous', low: 'CR 0–4', mid: 'CR 5–10', high: 'CR 11+' }
@@ -3832,6 +3857,12 @@ export function CampaignPage() {
                 if (monsterCrFilter === 'mid' && (crNum(m.cr) < 5 || crNum(m.cr) > 10)) return false
                 if (monsterCrFilter === 'high' && crNum(m.cr) < 11) return false
                 return true
+              })
+              .sort((a, b) => {
+                if (monsterSort === 'cr') return crNum(a.m.cr) - crNum(b.m.cr)
+                if (monsterSort === 'xp') return (a.m.xp ?? 0) - (b.m.xp ?? 0)
+                if (monsterSort === 'hp') return (a.m.max_hp ?? 0) - (b.m.max_hp ?? 0)
+                return a.m.name.localeCompare(b.m.name, 'fr')
               })
             if (filtered.length === 0) return (
               <p className="text-stone-600 text-sm text-center py-6">Aucun monstre ne correspond aux filtres.</p>
@@ -4012,6 +4043,16 @@ export function CampaignPage() {
             </div>
           )}
 
+          {(campaign.factions ?? []).length > 2 && (
+            <input
+              type="text"
+              value={factionSearch}
+              onChange={e => setFactionSearch(e.target.value)}
+              placeholder="Rechercher une faction…"
+              className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors mb-2"
+            />
+          )}
+
           {(campaign.factions ?? []).length > 1 && (
             <div className="flex flex-wrap gap-1.5 mb-3">
               {(['all', 'allied', 'neutral', 'enemy'] as const).map(f => {
@@ -4030,7 +4071,7 @@ export function CampaignPage() {
 
           {(campaign.factions ?? []).length > 0 ? (
             <div className="space-y-2">
-              {(campaign.factions ?? []).map((faction, i) => ({ faction, i })).filter(({ faction }) => factionRepFilter === 'all' || (factionRepFilter === 'allied' && faction.reputation >= 2) || (factionRepFilter === 'neutral' && faction.reputation >= -1 && faction.reputation < 2) || (factionRepFilter === 'enemy' && faction.reputation < -1)).map(({ faction, i }) => {
+              {(campaign.factions ?? []).map((faction, i) => ({ faction, i })).filter(({ faction }) => (factionRepFilter === 'all' || (factionRepFilter === 'allied' && faction.reputation >= 2) || (factionRepFilter === 'neutral' && faction.reputation >= -1 && faction.reputation < 2) || (factionRepFilter === 'enemy' && faction.reputation < -1)) && (!factionSearch || faction.name.toLowerCase().includes(factionSearch.toLowerCase()) || (faction.description ?? '').toLowerCase().includes(factionSearch.toLowerCase()))).map(({ faction, i }) => {
                 const rep = faction.reputation
                 const repLabel = rep >= 4 ? 'Vénéré' : rep >= 2 ? 'Allié' : rep >= 0 ? 'Neutre' : rep >= -2 ? 'Suspect' : 'Ennemi'
                 const repColor = rep >= 2 ? 'text-emerald-400' : rep >= 0 ? 'text-stone-400' : rep >= -2 ? 'text-amber-400' : 'text-red-400'
@@ -4210,13 +4251,24 @@ export function CampaignPage() {
           )}
 
           {(campaign.quests ?? []).length > 1 && (
-            <input
-              type="text"
-              value={questSearch}
-              onChange={e => setQuestSearch(e.target.value)}
-              placeholder="Rechercher une quête…"
-              className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors mb-2"
-            />
+            <div className="flex gap-2 mb-2">
+              <input
+                type="text"
+                value={questSearch}
+                onChange={e => setQuestSearch(e.target.value)}
+                placeholder="Rechercher une quête…"
+                className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+              />
+              <select
+                value={questSort}
+                onChange={e => setQuestSort(e.target.value as typeof questSort)}
+                className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-stone-300 text-sm focus:outline-none focus:border-stone-600 transition-colors"
+              >
+                <option value="default">Défaut</option>
+                <option value="title">Titre A→Z</option>
+                <option value="giver">Donneur</option>
+              </select>
+            </div>
           )}
 
           {(campaign.quests ?? []).length > 1 && (
@@ -4249,7 +4301,9 @@ export function CampaignPage() {
             <div className="space-y-2">
               {(['active', 'dormant', 'completed', 'failed'] as Quest['status'][]).map(status => {
                 if (questStatusFilter !== 'all' && questStatusFilter !== status) return null
-                const quests = (campaign.quests ?? []).filter(q => q.status === status && (!questSearch || q.title.toLowerCase().includes(questSearch.toLowerCase()) || (q.giver ?? '').toLowerCase().includes(questSearch.toLowerCase())))
+                const quests = (campaign.quests ?? [])
+                  .filter(q => q.status === status && (!questSearch || q.title.toLowerCase().includes(questSearch.toLowerCase()) || (q.giver ?? '').toLowerCase().includes(questSearch.toLowerCase())))
+                  .sort((a, b) => questSort === 'title' ? a.title.localeCompare(b.title, 'fr') : questSort === 'giver' ? (a.giver ?? '').localeCompare(b.giver ?? '', 'fr') : 0)
                 if (quests.length === 0) return null
                 const statusLabel: Record<Quest['status'], string> = { active: '🟡 Actives', dormant: '⚪ En attente', completed: '🟢 Terminées', failed: '🔴 Échouées' }
                 return (
@@ -4459,6 +4513,11 @@ export function CampaignPage() {
                       >
                         🎲 Lancer
                       </button>
+                      <button
+                        onClick={() => handleDuplicateTable(tIdx)}
+                        className="text-stone-600 hover:text-sky-400 text-xs transition-colors"
+                        title="Dupliquer"
+                      >⎘</button>
                       <button
                         onClick={() => setEditingTableIdx(editingTableIdx === tIdx ? null : tIdx)}
                         className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
