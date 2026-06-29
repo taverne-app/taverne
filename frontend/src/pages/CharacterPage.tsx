@@ -1168,6 +1168,7 @@ export function CharacterPage() {
   const [itemDraft, setItemDraft]   = useState<ItemDraft>(emptyItemDraft)
   const [inventorySearch, setInventorySearch] = useState('')
   const [inventoryFilter, setInventoryFilter] = useState<'all' | 'equipped' | 'magical' | 'attuned'>('all')
+  const [inventorySort, setInventorySort] = useState<'default' | 'name' | 'quantity'>('default')
   const [showItemCompendium, setShowItemCompendium] = useState(false)
   const [compendiumSearch, setCompendiumSearch]     = useState('')
   const [compendiumRarity, setCompendiumRarity]     = useState<ItemRarity | 'toutes'>('toutes')
@@ -3043,9 +3044,9 @@ export function CharacterPage() {
             </div>
           </div>
 
-          {/* Inventory filter pills */}
+          {/* Inventory filter pills + sort */}
           {character.inventory.items.length > 1 && (
-            <div className="flex flex-wrap gap-1.5 mb-3">
+            <div className="flex flex-wrap items-center gap-1.5 mb-3">
               {(['all', 'equipped', 'magical', 'attuned'] as const).map(f => {
                 const items = character.inventory.items
                 const count = f === 'all' ? items.length : f === 'equipped' ? items.filter(it => it.equipped).length : f === 'magical' ? items.filter(it => it.magical).length : items.filter(it => it.attuned).length
@@ -3057,6 +3058,15 @@ export function CharacterPage() {
                   </button>
                 )
               })}
+              <select
+                value={inventorySort}
+                onChange={e => setInventorySort(e.target.value as typeof inventorySort)}
+                className="ml-auto bg-stone-800 border border-stone-700 rounded px-2 py-0.5 text-stone-400 text-xs focus:outline-none focus:border-stone-500 transition-colors"
+              >
+                <option value="default">Défaut</option>
+                <option value="name">Nom A→Z</option>
+                <option value="quantity">Quantité ↓</option>
+              </select>
             </div>
           )}
 
@@ -3121,6 +3131,11 @@ export function CharacterPage() {
                 .map((item, i) => ({ item, i }))
                 .filter(({ item }) => !inventorySearch || item.name.toLowerCase().includes(inventorySearch.toLowerCase()))
                 .filter(({ item }) => inventoryFilter === 'all' || (inventoryFilter === 'equipped' && item.equipped) || (inventoryFilter === 'magical' && item.magical) || (inventoryFilter === 'attuned' && item.attuned))
+                .sort((a, b) => {
+                  if (inventorySort === 'name') return a.item.name.localeCompare(b.item.name, 'fr')
+                  if (inventorySort === 'quantity') return b.item.quantity - a.item.quantity
+                  return 0
+                })
                 .map(({ item, i }) => (
                 <div key={i} className="flex items-center gap-3 py-2.5">
                   {/* Equipped toggle */}

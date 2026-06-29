@@ -501,6 +501,9 @@ export function CombatPage() {
   const [encounterEntries, setEncounterEntries] = useState<{ monster: MonsterTemplate; count: number }[]>([])
   const [saveEncounterName, setSaveEncounterName] = useState('')
   const [showSavedEncounters, setShowSavedEncounters] = useState(false)
+  const [savedEncounterSearch, setSavedEncounterSearch] = useState('')
+  const [savedEncounterSort, setSavedEncounterSort] = useState<'default' | 'name' | 'difficulty'>('default')
+  const [combatFactionFilter, setCombatFactionFilter] = useState<'all' | 'allié' | 'ennemi' | 'neutre'>('all')
 
   // Saving throws
   const [showSavingThrow, setShowSavingThrow] = useState(false)
@@ -1066,6 +1069,16 @@ export function CombatPage() {
   async function handleDeleteSavedEncounter(index: number) {
     if (!campaign || !campaignId) return
     const next = (campaign.saved_encounters ?? []).filter((_, i) => i !== index)
+    const updated = await updateCampaign(campaignId, { saved_encounters: next })
+    setCampaign(updated)
+  }
+
+  async function handleDuplicateSavedEncounter(index: number) {
+    if (!campaign || !campaignId) return
+    const src = (campaign.saved_encounters ?? [])[index]
+    if (!src) return
+    const copy: SavedEncounter = { ...src, name: `${src.name} (copie)`, entries: src.entries.map(e => ({ ...e })) }
+    const next = [...(campaign.saved_encounters ?? []), copy]
     const updated = await updateCampaign(campaignId, { saved_encounters: next })
     setCampaign(updated)
   }
@@ -1974,6 +1987,24 @@ export function CombatPage() {
             </div>
           </div>
 
+          {displayRows.length > 0 && combatants.length > 0 && (() => {
+            const factions = [...new Set(combatants.map(c => c.faction))]
+            return factions.length > 1 ? (
+              <div className="flex gap-1.5 px-5 py-2 border-b border-stone-800/60 flex-wrap">
+                {(['all', 'allié', 'ennemi', 'neutre'] as const).filter(f => f === 'all' || factions.includes(f as typeof factions[number])).map(f => {
+                  const count = f === 'all' ? combatants.length : combatants.filter(c => c.faction === f).length
+                  const labels = { all: `Tous (${count})`, allié: `🟢 Alliés (${count})`, ennemi: `🔴 Ennemis (${count})`, neutre: `🟡 Neutres (${count})` }
+                  return (
+                    <button key={f} onClick={() => setCombatFactionFilter(f)}
+                      className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${combatFactionFilter === f ? 'bg-stone-700 border-stone-500 text-stone-100' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}>
+                      {labels[f]}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : null
+          })()}
+
           {displayRows.length === 0 ? (
             <div className="px-5 py-10 text-center text-stone-500 text-sm">
               Aucun combattant.{' '}
@@ -1983,7 +2014,7 @@ export function CombatPage() {
             </div>
           ) : (
             <div className="divide-y divide-stone-800">
-              {displayRows.map((row, displayIdx) => {
+              {displayRows.filter(row => combatFactionFilter === 'all' || (row.kind === 'character' ? combatFactionFilter === 'allié' : row.data.faction === combatFactionFilter)).map((row, displayIdx) => {
                 const isActive = withRollDisplay.length > 0 && activeCombatant && rowId(row) === rowId(activeCombatant)
                 const position = withRollDisplay.findIndex(r => rowId(r) === rowId(row))
 
@@ -3186,7 +3217,40 @@ export function CombatPage() {
                     {/* Saved encounters list */}
                     {showSavedEncounters && campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (
                       <div className="bg-stone-800/60 rounded-lg p-2 space-y-1">
-                        {campaign!.saved_encounters!.map((saved, i) => {
+                        {(campaign!.saved_encounters!.length > 2) && (
+                          <div className="flex gap-1.5 pb-1">
+                            <input
+                              type="text"
+                              value={savedEncounterSearch}
+                              onChange={e => setSavedEncounterSearch(e.target.value)}
+                              placeholder="Rechercher…"
+                              className="flex-1 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-stone-200 text-xs placeholder-stone-500 focus:outline-none focus:border-violet-500 transition-colors"
+                            />
+                            <select
+                              value={savedEncounterSort}
+                              onChange={e => setSavedEncounterSort(e.target.value as typeof savedEncounterSort)}
+                              className="bg-stone-700 border border-stone-600 rounded px-1.5 py-1 text-stone-300 text-xs focus:outline-none"
+                            >
+                              <option value="default">Défaut</option>
+                              <option value="name">Nom A→Z</option>
+                              <option value="difficulty">Difficulté</option>
+                            </select>
+                          </div>
+                        )}
+                        {campaign!.saved_encounters!
+                          .map((saved, i) => ({ saved, i }))
+                          .filter(({ saved }) => !savedEncounterSearch || saved.name.toLowerCase().includes(savedEncounterSearch.toLowerCase()))
+                          .sort((a, b) => {
+                            if (savedEncounterSort === 'name') return a.saved.name.localeCompare(b.saved.name, 'fr')
+                            if (savedEncounterSort === 'difficulty') {
+                              const order = ['facile', 'moyen', 'difficile', 'mortelle']
+                              const da = computeEncounterDifficulty(a.saved.entries, characters.map(c => c.level)) ?? ''
+                              const db = computeEncounterDifficulty(b.saved.entries, characters.map(c => c.level)) ?? ''
+                              return order.indexOf(da) - order.indexOf(db)
+                            }
+                            return 0
+                          })
+                          .map(({ saved, i }) => {
                           const diff = computeEncounterDifficulty(saved.entries, characters.map(c => c.level))
                           return (
                           <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-stone-700/50 transition-colors">
@@ -3206,6 +3270,11 @@ export function CombatPage() {
                               >
                                 Charger
                               </button>
+                              <button
+                                onClick={() => handleDuplicateSavedEncounter(i)}
+                                className="text-stone-600 hover:text-sky-400 text-xs transition-colors"
+                                title="Dupliquer"
+                              >⎘</button>
                               <button
                                 onClick={() => handleDeleteSavedEncounter(i)}
                                 className="text-stone-600 hover:text-red-400 text-xs transition-colors"
