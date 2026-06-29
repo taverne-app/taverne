@@ -144,6 +144,8 @@ export function CampaignPage() {
   const [distributingIdx, setDistributingIdx] = useState<number | null>(null)
   const [editingTreasureIdx, setEditingTreasureIdx] = useState<number | null>(null)
   const [editTreasureDraft, setEditTreasureDraft]   = useState<TreasureItem>(emptyTreasureDraft())
+  const [treasurySearch, setTreasurySearch] = useState('')
+  const [treasurySort, setTreasurySort] = useState<'default' | 'name' | 'quantity' | 'value'>('default')
 
   // Lieux
   const emptyLocationDraft = (): Location => ({ name: '', type: 'autre', status: 'inconnu', reputation: 'neutre', notes: '' })
@@ -221,6 +223,8 @@ export function CampaignPage() {
   const [addingScene, setAddingScene] = useState(false)
   const [expandedScene, setExpandedScene] = useState<string | null>(null)
   const [editingSceneId, setEditingSceneId] = useState<string | null>(null)
+  const [sceneSearch, setSceneSearch] = useState('')
+  const [sceneStatusFilter, setSceneStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
   const [editSceneDraft, setEditSceneDraft] = useState<PrepScene>(emptyScene())
 
   // Jalons de campagne
@@ -676,6 +680,16 @@ export function CampaignPage() {
     const updated = await updateCampaign(campaign.id, { party_treasury: next })
     setCampaign(updated)
     setEditingTreasureIdx(null)
+  }
+
+  async function handleDuplicateTreasureItem(index: number) {
+    if (!campaign) return
+    const src = (campaign.party_treasury ?? [])[index]
+    if (!src) return
+    const copy: TreasureItem = { ...src, name: `${src.name} (copie)` }
+    const next = [...(campaign.party_treasury ?? []), copy]
+    const updated = await updateCampaign(campaign.id, { party_treasury: next })
+    setCampaign(updated)
   }
 
   async function handleDistributeItem(index: number, character: Character) {
@@ -2804,7 +2818,37 @@ export function CampaignPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {(campaign?.party_treasury ?? []).map((item, i) => (
+              {(campaign?.party_treasury ?? []).length > 2 && (
+                <div className="flex gap-2 mb-1">
+                  <input
+                    type="text"
+                    value={treasurySearch}
+                    onChange={e => setTreasurySearch(e.target.value)}
+                    placeholder="Rechercher un objet…"
+                    className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                  />
+                  <select
+                    value={treasurySort}
+                    onChange={e => setTreasurySort(e.target.value as typeof treasurySort)}
+                    className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-stone-300 text-sm focus:outline-none focus:border-stone-600 transition-colors"
+                  >
+                    <option value="default">Défaut</option>
+                    <option value="name">Nom A→Z</option>
+                    <option value="quantity">Quantité ↓</option>
+                    <option value="value">Valeur</option>
+                  </select>
+                </div>
+              )}
+              {(campaign?.party_treasury ?? [])
+                .map((item, i) => ({ item, i }))
+                .filter(({ item }) => !treasurySearch || item.name.toLowerCase().includes(treasurySearch.toLowerCase()) || (item.notes ?? '').toLowerCase().includes(treasurySearch.toLowerCase()))
+                .sort((a, b) => {
+                  if (treasurySort === 'name') return a.item.name.localeCompare(b.item.name, 'fr')
+                  if (treasurySort === 'quantity') return b.item.quantity - a.item.quantity
+                  if (treasurySort === 'value') return (a.item.value ?? '').localeCompare(b.item.value ?? '', 'fr')
+                  return 0
+                })
+                .map(({ item, i }) => (
                 <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
                   {editingTreasureIdx === i ? (
                     <div className="space-y-2">
@@ -2876,6 +2920,11 @@ export function CampaignPage() {
                             className="text-xs text-stone-500 hover:text-amber-400 transition-colors"
                             title="Modifier"
                           >✎</button>
+                          <button
+                            onClick={() => handleDuplicateTreasureItem(i)}
+                            className="text-xs text-stone-600 hover:text-sky-400 transition-colors"
+                            title="Dupliquer"
+                          >⎘</button>
                           <button
                             onClick={() => setDistributingIdx(distributingIdx === i ? null : i)}
                             className="text-xs text-sky-400 hover:text-sky-300 transition-colors font-medium"
@@ -3466,9 +3515,35 @@ export function CampaignPage() {
                     </div>
                   )}
 
+                  {(campaign.session_prep?.scenes ?? []).length > 2 && (
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={sceneSearch}
+                        onChange={e => setSceneSearch(e.target.value)}
+                        placeholder="Rechercher une scène…"
+                        className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-600 transition-colors"
+                      />
+                      <div className="flex gap-1">
+                        {(['all', 'todo', 'done'] as const).map(f => (
+                          <button
+                            key={f}
+                            onClick={() => setSceneStatusFilter(f)}
+                            className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${sceneStatusFilter === f ? 'bg-sky-900/60 border-sky-700 text-sky-300' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}
+                          >
+                            {f === 'all' ? 'Toutes' : f === 'todo' ? 'À faire' : '✓ Faites'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {(campaign.session_prep?.scenes ?? []).length > 0 ? (
                     <div className="space-y-2">
-                      {(campaign.session_prep!.scenes).map((scene, sceneIdx) => (
+                      {(campaign.session_prep!.scenes).filter(s =>
+                        (sceneStatusFilter === 'all' || (sceneStatusFilter === 'done' ? s.done : !s.done)) &&
+                        (!sceneSearch || s.title.toLowerCase().includes(sceneSearch.toLowerCase()) || (s.location_name ?? '').toLowerCase().includes(sceneSearch.toLowerCase()) || (s.notes ?? '').toLowerCase().includes(sceneSearch.toLowerCase()))
+                      ).map((scene, sceneIdx) => (
                         <div key={scene.id} className={`border rounded-lg overflow-hidden transition-colors ${scene.done ? 'border-stone-800 opacity-60' : 'border-sky-800/40'}`}>
                           {editingSceneId === scene.id ? (
                             <div className="px-3 py-3 space-y-2">
@@ -3506,14 +3581,14 @@ export function CampaignPage() {
                                 </button>
                                 <p className={`text-sm font-medium flex-1 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
                                 {scene.location_name && <span className="text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
-                                {sceneIdx > 0 && (
+                                {!sceneSearch && sceneStatusFilter === 'all' && sceneIdx > 0 && (
                                   <button
                                     onClick={e => { e.stopPropagation(); handleMoveScene(scene.id, -1) }}
                                     className="text-stone-700 hover:text-stone-400 text-xs leading-none shrink-0 transition-colors"
                                     title="Monter"
                                   >↑</button>
                                 )}
-                                {sceneIdx < (campaign.session_prep!.scenes.length - 1) && (
+                                {!sceneSearch && sceneStatusFilter === 'all' && sceneIdx < (campaign.session_prep!.scenes.length - 1) && (
                                   <button
                                     onClick={e => { e.stopPropagation(); handleMoveScene(scene.id, 1) }}
                                     className="text-stone-700 hover:text-stone-400 text-xs leading-none shrink-0 transition-colors"
