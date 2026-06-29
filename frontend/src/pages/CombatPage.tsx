@@ -1107,6 +1107,14 @@ export function CombatPage() {
     setCombatants([])
   }
 
+  async function handleClearDeadCombatants() {
+    if (!campaignId) return
+    const dead = combatants.filter(c => c.current_hp <= 0)
+    if (dead.length === 0) return
+    await Promise.all(dead.map(c => deleteCombatant(campaignId, c.id)))
+    setCombatants(prev => prev.filter(c => c.current_hp > 0))
+  }
+
   function handleGroupSavingThrow() {
     if (characters.length === 0) return
     const dc = parseInt(savingThrowDC, 10) || 15
@@ -1915,6 +1923,14 @@ export function CombatPage() {
                   }`}
                 >
                   🎲 JS groupe
+                </button>
+              )}
+              {campaignId && combatants.some(c => c.current_hp <= 0) && (
+                <button
+                  onClick={handleClearDeadCombatants}
+                  className="text-amber-600 hover:text-amber-400 text-xs transition-colors"
+                >
+                  ☠ Retirer morts
                 </button>
               )}
               {campaignId && combatants.length > 0 && (

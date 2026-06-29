@@ -1122,6 +1122,16 @@ export function CharacterPage() {
     if (updated) setCharacter(updated)
   }
 
+  async function handleDuplicateResource(index: number) {
+    if (!character) return
+    const src = character.resources[index]
+    if (!src) return
+    const copy: ClassResource = { ...src, name: `${src.name} (copie)` }
+    const next = [...character.resources, copy]
+    const updated = await withSave(() => updateResources(character.id, next))
+    if (updated) setCharacter(updated)
+  }
+
   // ── Assistant de montée de niveau ─────────────────────────────────────────────
 
   const [showLevelUp, setShowLevelUp] = useState(false)
@@ -2776,6 +2786,12 @@ export function CharacterPage() {
                       +
                     </button>
                   </div>
+                  <button
+                    onClick={() => handleDuplicateResource(i)}
+                    disabled={saving}
+                    className="text-stone-700 hover:text-sky-400 transition-colors disabled:cursor-not-allowed text-xs shrink-0"
+                    title="Dupliquer"
+                  >⎘</button>
                   <button
                     onClick={() => handleDeleteResource(i)}
                     disabled={saving}

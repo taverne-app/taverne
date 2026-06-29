@@ -106,6 +106,7 @@ export function CampaignPage() {
   const [editNpcDraft, setEditNpcDraft]     = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
   const [npcStatusFilter, setNpcStatusFilter] = useState<'all' | Npc['status']>('all')
   const [npcFactionFilter, setNpcFactionFilter] = useState<string>('all')
+  const [npcLocationFilter, setNpcLocationFilter] = useState<string>('all')
   const [npcSort, setNpcSort] = useState<'default' | 'name' | 'status' | 'faction'>('default')
   const [npcSearch, setNpcSearch] = useState('')
 
@@ -152,6 +153,7 @@ export function CampaignPage() {
   const [editingLocationIdx, setEditingLocationIdx] = useState<number | null>(null)
   const [editLocationDraft, setEditLocationDraft]   = useState<Location>(emptyLocationDraft())
   const [locationStatusFilter, setLocationStatusFilter] = useState<'all' | Location['status']>('all')
+  const [locationTypeFilter, setLocationTypeFilter] = useState<string>('all')
   const [locationSearch, setLocationSearch] = useState('')
   const [locationSort, setLocationSort] = useState<'default' | 'name' | 'type' | 'status'>('default')
 
@@ -2525,7 +2527,7 @@ export function CampaignPage() {
                 const usedFactions = [...new Set((campaign.npcs ?? []).map(n => n.faction).filter(Boolean))] as string[]
                 if (usedFactions.length < 2) return null
                 return (
-                  <div className="flex flex-wrap gap-1.5 mb-3">
+                  <div className="flex flex-wrap gap-1.5 mb-2">
                     {(['all', ...usedFactions]).map(f => {
                       const count = f === 'all' ? (campaign.npcs ?? []).length : (campaign.npcs ?? []).filter(n => n.faction === f).length
                       return (
@@ -2546,11 +2548,38 @@ export function CampaignPage() {
                 )
               })()}
 
+              {/* Filtre par lieu */}
+              {(() => {
+                const usedLocations = [...new Set((campaign.npcs ?? []).map(n => n.location).filter(Boolean))] as string[]
+                if (usedLocations.length < 2) return null
+                return (
+                  <div className="flex flex-wrap gap-1.5 mb-3">
+                    {(['all', ...usedLocations]).map(l => {
+                      const count = l === 'all' ? (campaign.npcs ?? []).length : (campaign.npcs ?? []).filter(n => n.location === l).length
+                      return (
+                        <button
+                          key={l}
+                          onClick={() => setNpcLocationFilter(l)}
+                          className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                            npcLocationFilter === l
+                              ? 'bg-emerald-900/60 border-emerald-600/60 text-emerald-300'
+                              : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                          }`}
+                        >
+                          {l === 'all' ? `Tous lieux (${count})` : `📍 ${l} (${count})`}
+                        </button>
+                      )
+                    })}
+                  </div>
+                )
+              })()}
+
               <div className="space-y-2">
                 {(campaign.npcs ?? [])
                   .map((npc, i) => ({ npc, i }))
                   .filter(({ npc }) => npcStatusFilter === 'all' || npc.status === npcStatusFilter)
                   .filter(({ npc }) => npcFactionFilter === 'all' || npc.faction === npcFactionFilter)
+                  .filter(({ npc }) => npcLocationFilter === 'all' || npc.location === npcLocationFilter)
                   .filter(({ npc }) => !npcSearch || npc.name.toLowerCase().includes(npcSearch.toLowerCase()) || (npc.role ?? '').toLowerCase().includes(npcSearch.toLowerCase()))
                   .sort((a, b) => {
                     if (npcSort === 'name') return a.npc.name.localeCompare(b.npc.name, 'fr')
@@ -2987,7 +3016,7 @@ export function CampaignPage() {
                 placeholder="Rechercher un lieu…"
                 className="w-full bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
               />
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 mb-2">
               {(['all', 'inconnu', 'connu', 'exploré'] as const).map(s => {
                 const count = s === 'all'
                   ? (campaign?.locations ?? []).length
@@ -3009,6 +3038,31 @@ export function CampaignPage() {
                 )
               })}
             </div>
+            {(() => {
+              const usedTypes = [...new Set((campaign?.locations ?? []).map(l => l.type).filter(Boolean))]
+              if (usedTypes.length < 2) return null
+              const typeIcons: Record<string, string> = { ville: '🏙', donjon: '⛏', forêt: '🌲', taverne: '🍺', temple: '⛪', château: '🏰', autre: '📍' }
+              return (
+                <div className="flex flex-wrap gap-1.5">
+                  {(['all', ...usedTypes]).map(t => {
+                    const count = t === 'all' ? (campaign?.locations ?? []).length : (campaign?.locations ?? []).filter(l => l.type === t).length
+                    return (
+                      <button
+                        key={t}
+                        onClick={() => setLocationTypeFilter(t)}
+                        className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${
+                          locationTypeFilter === t
+                            ? 'bg-sky-900/60 border-sky-600/60 text-sky-300'
+                            : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                        }`}
+                      >
+                        {t === 'all' ? `Tous types (${count})` : `${typeIcons[t] ?? '📍'} ${t[0].toUpperCase() + t.slice(1)} (${count})`}
+                      </button>
+                    )
+                  })}
+                </div>
+              )
+            })()}
             </div>
           )}
 
@@ -3023,7 +3077,7 @@ export function CampaignPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {(campaign?.locations ?? []).map((loc, i) => ({ loc, i })).filter(({ loc }) => (locationStatusFilter === 'all' || loc.status === locationStatusFilter) && (!locationSearch || loc.name.toLowerCase().includes(locationSearch.toLowerCase()))).sort((a, b) => {
+              {(campaign?.locations ?? []).map((loc, i) => ({ loc, i })).filter(({ loc }) => (locationStatusFilter === 'all' || loc.status === locationStatusFilter) && (locationTypeFilter === 'all' || loc.type === locationTypeFilter) && (!locationSearch || loc.name.toLowerCase().includes(locationSearch.toLowerCase()))).sort((a, b) => {
                 if (locationSort === 'name') return a.loc.name.localeCompare(b.loc.name, 'fr')
                 if (locationSort === 'type') return a.loc.type.localeCompare(b.loc.type, 'fr')
                 if (locationSort === 'status') { const order = ['exploré', 'connu', 'inconnu']; return order.indexOf(a.loc.status) - order.indexOf(b.loc.status) }
