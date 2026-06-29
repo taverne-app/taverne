@@ -601,6 +601,56 @@ export function CampaignPage() {
     } finally { setSavingSessionPrep(false) }
   }
 
+  function handleExportSessionPrepMarkdown() {
+    if (!campaign?.session_prep) return
+    const prep = campaign.session_prep
+    const lines: string[] = []
+    lines.push(`# Préparation — ${prep.title || 'Session sans titre'}`)
+    if (prep.date) lines.push(`**Date prévue :** ${prep.date}`)
+    lines.push('')
+    if (prep.npc_names.length > 0) {
+      lines.push('## PNJ impliqués')
+      prep.npc_names.forEach(n => lines.push(`- ${n}`))
+      lines.push('')
+    }
+    if (prep.location_names.length > 0) {
+      lines.push('## Lieux à visiter')
+      prep.location_names.forEach(l => lines.push(`- ${l}`))
+      lines.push('')
+    }
+    if (prep.encounter_names.length > 0) {
+      lines.push('## Rencontres planifiées')
+      prep.encounter_names.forEach(e => lines.push(`- ${e}`))
+      lines.push('')
+    }
+    if ((prep.scenes ?? []).length > 0) {
+      lines.push('## Scènes')
+      prep.scenes.forEach((s, idx) => {
+        lines.push(`### ${idx + 1}. ${s.title}${s.done ? ' ✓' : ''}`)
+        if (s.location_name) lines.push(`**Lieu :** ${s.location_name}`)
+        if (s.encounter_name) lines.push(`**Rencontre :** ${s.encounter_name}`)
+        if (s.hook) lines.push(`**Accroche :** ${s.hook}`)
+        if (s.treasure) lines.push(`**Trésor :** ${s.treasure}`)
+        if (s.notes) { lines.push(''); lines.push(s.notes) }
+        lines.push('')
+      })
+    }
+    if (prep.notes) {
+      lines.push('## Notes de préparation')
+      lines.push(prep.notes)
+      lines.push('')
+    }
+    const md = lines.join('\n')
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const filename = (prep.title || 'session').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+    a.download = `prep_${filename || 'session'}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
   async function handleClearSessionPrep() {
     if (!campaign) return
     const updated = await updateCampaign(campaign.id, { session_prep: null })
@@ -3292,6 +3342,9 @@ export function CampaignPage() {
               {savingSessionPrep && <div className="w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />}
               {hasSessionPrep && !editingSessionPrep && (
                 <button onClick={() => setEditingSessionPrep(true)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Modifier</button>
+              )}
+              {hasSessionPrep && !editingSessionPrep && (
+                <button onClick={handleExportSessionPrepMarkdown} className="text-stone-500 hover:text-stone-300 text-xs transition-colors" title="Exporter en Markdown">↓ MD</button>
               )}
               {hasSessionPrep && (
                 <button onClick={handleClearSessionPrep} className="text-red-500 hover:text-red-400 text-xs transition-colors">Effacer</button>

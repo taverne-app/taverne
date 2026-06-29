@@ -739,6 +739,8 @@ export function CharacterPage() {
   const [editDraft, setEditDraft]             = useState<Feature>(emptyFeatureDraft)
   const [featureSearch, setFeatureSearch]     = useState('')
   const [featureSourceFilter, setFeatureSourceFilter] = useState('all')
+  const [macroSearch, setMacroSearch] = useState('')
+  const [resourceResetFilter, setResourceResetFilter] = useState<'all' | ClassResource['reset']>('all')
 
   async function handleAddFeature() {
     if (!character || !featureDraft.name.trim()) return
@@ -2572,7 +2574,19 @@ export function CharacterPage() {
             <p className="text-stone-500 text-sm">Aucune attaque enregistrée.</p>
           ) : (
             <div className="space-y-2">
-              {character.attack_macros.map((macro, i) => (
+              {character.attack_macros.length >= 4 && (
+                <input
+                  type="text"
+                  value={macroSearch}
+                  onChange={e => setMacroSearch(e.target.value)}
+                  placeholder="Rechercher une attaque…"
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-rose-600 transition-colors mb-1"
+                />
+              )}
+              {character.attack_macros
+                .map((macro, i) => ({ macro, i }))
+                .filter(({ macro }) => !macroSearch || macro.name.toLowerCase().includes(macroSearch.toLowerCase()) || (macro.damage_type ?? '').toLowerCase().includes(macroSearch.toLowerCase()))
+                .map(({ macro, i }) => (
                 editingMacroIndex === i ? (
                   <div key={i} className="bg-stone-800 border border-rose-800/50 rounded-xl p-4 space-y-3">
                     <div className="grid grid-cols-2 gap-2">
@@ -2759,7 +2773,25 @@ export function CharacterPage() {
             <p className="text-stone-600 text-sm italic">Aucune ressource — Ki, Inspiration bardique, etc.</p>
           ) : (
             <div className="space-y-2">
-              {character.resources.map((res, i) => (
+              {character.resources.length >= 3 && (
+                <div className="flex gap-1.5 flex-wrap mb-1">
+                  {(['all', 'long', 'short', 'manual'] as const).map(f => {
+                    const count = f === 'all' ? character.resources.length : character.resources.filter(r => r.reset === f).length
+                    if (f !== 'all' && count === 0) return null
+                    const labels = { all: `Tous (${count})`, long: `☀ Repos long (${count})`, short: `⏾ Repos court (${count})`, manual: `✎ Manuel (${count})` }
+                    return (
+                      <button key={f} onClick={() => setResourceResetFilter(f)}
+                        className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${resourceResetFilter === f ? 'bg-amber-900/60 border-amber-600/60 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}>
+                        {labels[f]}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {character.resources
+                .map((res, i) => ({ res, i }))
+                .filter(({ res }) => resourceResetFilter === 'all' || res.reset === resourceResetFilter)
+                .map(({ res, i }) => (
                 <div key={i} className="flex items-center gap-3 py-2 border-b border-stone-800/60 last:border-0">
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-white truncate">{res.name}</div>

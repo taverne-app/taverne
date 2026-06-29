@@ -363,6 +363,33 @@ export function SharedCampaignPage() {
           <p className="text-stone-400 text-sm">{campaign.description}</p>
         )}
 
+        {/* Statistiques rapides */}
+        {(sessions.length > 0 || characters.length > 0) && (
+          <div className="flex flex-wrap gap-3">
+            {sessions.length > 0 && (
+              <span className="text-xs bg-stone-900 border border-stone-800 rounded-full px-3 py-1 text-stone-400">
+                📖 {sessions.length} session{sessions.length > 1 ? 's' : ''} jouée{sessions.length > 1 ? 's' : ''}
+              </span>
+            )}
+            {characters.length > 0 && (() => {
+              const avgLevel = Math.round(characters.reduce((s, c) => s + c.level, 0) / characters.length)
+              return (
+                <span className="text-xs bg-stone-900 border border-stone-800 rounded-full px-3 py-1 text-stone-400">
+                  ⚔ {characters.length} personnage{characters.length > 1 ? 's' : ''} · Niv. moyen {avgLevel}
+                </span>
+              )
+            })()}
+            {sessions.length > 0 && (() => {
+              const totalXp = sessions.reduce((s, sess) => s + (sess.xp_awarded ?? 0), 0)
+              return totalXp > 0 ? (
+                <span className="text-xs bg-stone-900 border border-stone-800 rounded-full px-3 py-1 text-stone-400">
+                  ⬆ {totalXp.toLocaleString('fr-FR')} XP distribués
+                </span>
+              ) : null
+            })()}
+          </div>
+        )}
+
         {/* Calendrier de campagne */}
         {(campaign.game_calendar?.date || campaign.game_calendar?.weather || campaign.game_calendar?.notes) && (
           <section>
