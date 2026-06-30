@@ -46,8 +46,8 @@ class BillingController extends Controller
             'customer'             => $user->stripe_customer_id,
             'mode'                 => 'subscription',
             'line_items'           => [['price' => $priceId, 'quantity' => 1]],
-            'success_url'          => config('app.frontend_url') . '/campaigns?upgraded=1',
-            'cancel_url'           => config('app.frontend_url') . '/campaigns',
+            'success_url'          => config('services.stripe.frontend_url') . '/campaigns?upgraded=1',
+            'cancel_url'           => config('services.stripe.frontend_url') . '/campaigns',
             'subscription_data'    => ['metadata' => ['user_id' => $user->id]],
         ]);
 
@@ -63,7 +63,7 @@ class BillingController extends Controller
 
         $session = $this->stripe()->billingPortal->sessions->create([
             'customer'   => $user->stripe_customer_id,
-            'return_url' => config('app.frontend_url') . '/campaigns',
+            'return_url' => config('services.stripe.frontend_url') . '/campaigns',
         ]);
 
         return response()->json(['url' => $session->url]);

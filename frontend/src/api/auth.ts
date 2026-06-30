@@ -32,6 +32,12 @@ export async function login(
   return res.json()
 }
 
+export async function fetchCurrentUser(): Promise<User> {
+  const res = await apiFetch('/user')
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return res.json()
+}
+
 export async function logout(): Promise<void> {
   await apiFetch('/auth/logout', { method: 'POST' })
   localStorage.removeItem('token')

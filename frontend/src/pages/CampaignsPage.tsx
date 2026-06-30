@@ -1,13 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { listCampaigns, createCampaign, deleteCampaign, type Campaign } from '../api/campaigns'
 import { logout } from '../api/auth'
 import { createCheckoutSession, createPortalSession } from '../api/billing'
 import { useAuth } from '../contexts/AuthContext'
 
 export function CampaignsPage() {
-  const { user, clearAuth } = useAuth()
+  const { user, clearAuth, refreshUser } = useAuth()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const [upgradeSuccess, setUpgradeSuccess] = useState(false)
 
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [loading, setLoading]     = useState(true)
@@ -27,7 +29,17 @@ export function CampaignsPage() {
     try { setCampaigns(await listCampaigns()) } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    if (searchParams.get('upgraded') === '1') {
+      refreshUser().then(() => {
+        setUpgradeSuccess(true)
+        setSearchParams({}, { replace: true })
+        setTimeout(() => setUpgradeSuccess(false), 5000)
+      })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   async function handleCreate() {
     if (!nameDraft.trim()) return
@@ -106,6 +118,14 @@ export function CampaignsPage() {
       </header>
 
       <main className="max-w-4xl mx-auto px-4 py-8">
+        {upgradeSuccess && (
+          <div className="mb-5 bg-amber-950/50 border border-amber-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
+            <p className="text-amber-300 text-sm font-medium">
+              Abonnement activé — bienvenue dans le plan {user?.plan === 'guild' ? 'Guilde' : 'Aventurier'} !
+            </p>
+            <button onClick={() => setUpgradeSuccess(false)} className="text-amber-600 hover:text-amber-400 text-lg leading-none">×</button>
+          </div>
+        )}
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-white text-xl font-semibold">Mes campagnes</h1>
