@@ -4,6 +4,7 @@ import { ProtectedRoute } from './components/ProtectedRoute'
 import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
+import { AccountPage } from './pages/AccountPage'
 import { CharactersPage } from './pages/CharactersPage'
 import { CharacterPage } from './pages/CharacterPage'
 import { CombatPage } from './pages/CombatPage'
@@ -23,6 +24,14 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route
+            path="/account"
+            element={
+              <ProtectedRoute>
+                <AccountPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/characters"
             element={

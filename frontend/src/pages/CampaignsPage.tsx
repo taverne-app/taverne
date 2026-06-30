@@ -109,7 +109,7 @@ export function CampaignsPage() {
                 Gratuit — Passer Pro
               </button>
             )}
-            <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
+            <Link to="/account" className="text-stone-400 hover:text-stone-200 text-sm transition-colors hidden sm:block">{user?.name}</Link>
             <button onClick={handleLogout} className="text-stone-400 hover:text-stone-200 text-sm transition-colors">
               Déconnexion
             </button>

@@ -32,6 +32,27 @@ export async function login(
   return res.json()
 }
 
+export async function updateProfile(name: string, email: string): Promise<User> {
+  const res = await apiFetch('/user', {
+    method: 'PATCH',
+    body: JSON.stringify({ name, email }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return res.json()
+}
+
+export async function updatePassword(
+  current_password: string,
+  password: string,
+  password_confirmation: string,
+): Promise<void> {
+  const res = await apiFetch('/user/password', {
+    method: 'PUT',
+    body: JSON.stringify({ current_password, password, password_confirmation }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+}
+
 export async function fetchCurrentUser(): Promise<User> {
   const res = await apiFetch('/user')
   if (!res.ok) throw new ApiError(res.status, await res.json())
