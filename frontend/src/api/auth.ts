@@ -4,6 +4,7 @@ export interface User {
   id: number
   name: string
   email: string
+  plan: 'free' | 'adventurer' | 'guild'
 }
 
 export async function register(

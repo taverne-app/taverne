@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Http\Resources\CampaignResource;
 use App\Models\Campaign;
 use App\Models\Character;
+use App\Services\PlanLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
@@ -26,12 +27,20 @@ class CampaignController extends Controller
 
     public function store(Request $request): CampaignResource
     {
+        $user = $request->user();
+        $max  = PlanLimits::maxCampaigns($user->plan ?? 'free');
+        abort_if(
+            $user->campaigns()->count() >= $max,
+            403,
+            'Limite de campagnes atteinte pour votre plan.'
+        );
+
         $validated = $request->validate([
             'name'        => ['required', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
         ]);
 
-        $campaign = $request->user()->campaigns()->create($validated);
+        $campaign = $user->campaigns()->create($validated);
 
         return new CampaignResource($campaign->load(['characters', 'combatants']));
     }
@@ -91,6 +100,13 @@ class CampaignController extends Controller
         $character = Character::where('id', $request->integer('character_id'))
             ->where('user_id', $request->user()->id)
             ->firstOrFail();
+
+        $max = PlanLimits::maxCharactersPerCampaign($request->user()->plan ?? 'free');
+        abort_if(
+            $campaign->characters()->count() >= $max,
+            403,
+            'Limite de joueurs atteinte pour votre plan.'
+        );
 
         $character->update(['campaign_id' => $campaign->id]);
 

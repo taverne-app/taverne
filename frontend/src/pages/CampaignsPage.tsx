@@ -16,6 +16,8 @@ export function CampaignsPage() {
   const [saving, setSaving]       = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
 
+  const atCampaignLimit = user?.plan === 'free' && campaigns.length >= 1
+
   async function load() {
     setLoading(true)
     try { setCampaigns(await listCampaigns()) } finally { setLoading(false) }
@@ -75,12 +77,24 @@ export function CampaignsPage() {
               {campaigns.length} campagne{campaigns.length !== 1 ? 's' : ''}
             </p>
           </div>
-          <button
-            onClick={() => { setCreating(v => !v); setNameDraft(''); setDescDraft('') }}
-            className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-sm rounded-lg px-4 py-2 transition-colors"
-          >
-            {creating ? 'Annuler' : '+ Nouvelle'}
-          </button>
+          {atCampaignLimit ? (
+            <div className="flex flex-col items-end gap-0.5">
+              <button
+                disabled
+                className="bg-stone-700 text-stone-500 font-semibold text-sm rounded-lg px-4 py-2 cursor-not-allowed"
+              >
+                + Nouvelle
+              </button>
+              <span className="text-stone-600 text-xs">Plan gratuit — 1 campagne max</span>
+            </div>
+          ) : (
+            <button
+              onClick={() => { setCreating(v => !v); setNameDraft(''); setDescDraft('') }}
+              className="bg-amber-500 hover:bg-amber-400 text-stone-950 font-semibold text-sm rounded-lg px-4 py-2 transition-colors"
+            >
+              {creating ? 'Annuler' : '+ Nouvelle'}
+            </button>
+          )}
         </div>
 
         {/* Create form */}
