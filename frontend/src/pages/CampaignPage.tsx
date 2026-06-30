@@ -255,6 +255,19 @@ export function CampaignPage() {
 
   // Recherche globale
   const [searchQuery, setSearchQuery] = useState('')
+  const [searchFocused, setSearchFocused] = useState(false)
+  const [searchHistory, setSearchHistory] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('taverne-search-history') ?? '[]') } catch { return [] }
+  })
+  const [searchFavorites, setSearchFavorites] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('taverne-search-favorites') ?? '[]') } catch { return [] }
+  })
+
+  // Copy feedback
+  const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
+  // Audit
+  const [showAudit, setShowAudit] = useState(false)
 
   // HP rapide (tableau de bord santé du groupe)
   const [hpEditCharId, setHpEditCharId] = useState<number | null>(null)
@@ -1251,6 +1264,65 @@ export function CampaignPage() {
     }
   }
 
+  function copyToClipboard(key: string, text: string) {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key)
+      setTimeout(() => setCopiedKey(null), 1500)
+    })
+  }
+
+  function saveSearchToHistory(q: string) {
+    if (q.trim().length < 2) return
+    setSearchHistory(prev => {
+      const next = [q.trim(), ...prev.filter(s => s !== q.trim())].slice(0, 10)
+      try { localStorage.setItem('taverne-search-history', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function toggleSearchFavorite(q: string) {
+    setSearchFavorites(prev => {
+      const next = prev.includes(q) ? prev.filter(s => s !== q) : [...prev, q]
+      try { localStorage.setItem('taverne-search-favorites', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function removeFromHistory(q: string) {
+    setSearchHistory(prev => {
+      const next = prev.filter(s => s !== q)
+      try { localStorage.setItem('taverne-search-history', JSON.stringify(next)) } catch {}
+      return next
+    })
+  }
+
+  function exportSection(sectionKey: string, data: unknown[]) {
+    if (!campaign) return
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${campaign.name.replace(/[^a-z0-9]/gi, '_')}_${sectionKey}.json`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  async function importSectionData(file: File, section: 'npcs' | 'locations' | 'quests' | 'factions') {
+    if (!campaign) return
+    try {
+      const text = await file.text()
+      const parsed = JSON.parse(text) as unknown
+      const arr: unknown[] = Array.isArray(parsed) ? parsed : (Array.isArray((parsed as { data?: unknown[] }).data) ? (parsed as { data: unknown[] }).data : [])
+      if (arr.length === 0) return
+      let updated: Campaign
+      if (section === 'npcs') updated = await updateCampaign(Number(id), { npcs: [...(campaign.npcs ?? []), ...(arr as Npc[])] })
+      else if (section === 'locations') updated = await updateCampaign(Number(id), { locations: [...(campaign.locations ?? []), ...(arr as Location[])] })
+      else if (section === 'quests') updated = await updateCampaign(Number(id), { quests: [...(campaign.quests ?? []), ...(arr as Quest[])] })
+      else updated = await updateCampaign(Number(id), { factions: [...(campaign.factions ?? []), ...(arr as Faction[])] })
+      setCampaign(updated)
+    } catch { alert('Fichier invalide ou format non reconnu.') }
+  }
+
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
     clearAuth()
@@ -1312,12 +1384,33 @@ export function CampaignPage() {
                   placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, sessions, quêtes, factions…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => setTimeout(() => setSearchFocused(false), 150)}
                   className="w-full bg-stone-900 border border-stone-800 rounded-xl px-4 py-3 pr-10 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
                 />
                 {active ? (
-                  <button onClick={() => setSearchQuery('')} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 text-lg leading-none transition-colors">×</button>
+                  <button onClick={() => { saveSearchToHistory(searchQuery); setSearchQuery('') }} className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-500 hover:text-stone-300 text-lg leading-none transition-colors">×</button>
                 ) : (
                   <span className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-600 text-sm">🔍</span>
+                )}
+                {searchFocused && !active && (searchFavorites.length > 0 || searchHistory.filter(s => !searchFavorites.includes(s)).length > 0) && (
+                  <div className="absolute top-full left-0 right-0 z-30 mt-1 bg-stone-900 border border-stone-800 rounded-xl shadow-xl overflow-hidden">
+                    {searchFavorites.map(s => (
+                      <div key={s} className="flex items-center gap-2 px-3 py-2 hover:bg-stone-800 group">
+                        <span className="text-amber-400 text-xs shrink-0">⭐</span>
+                        <button onMouseDown={() => setSearchQuery(s)} className="flex-1 text-left text-sm text-stone-300 truncate">{s}</button>
+                        <button onMouseDown={() => toggleSearchFavorite(s)} className="text-stone-600 hover:text-stone-400 text-xs opacity-0 group-hover:opacity-100 shrink-0" title="Désépingler">✕</button>
+                      </div>
+                    ))}
+                    {searchHistory.filter(s => !searchFavorites.includes(s)).map(s => (
+                      <div key={s} className="flex items-center gap-2 px-3 py-2 hover:bg-stone-800 group border-t border-stone-800/60">
+                        <span className="text-stone-600 text-xs shrink-0">🕐</span>
+                        <button onMouseDown={() => setSearchQuery(s)} className="flex-1 text-left text-sm text-stone-500 truncate">{s}</button>
+                        <button onMouseDown={() => toggleSearchFavorite(s)} className="text-stone-600 hover:text-amber-400 text-xs opacity-0 group-hover:opacity-100 shrink-0" title="Épingler">⭐</button>
+                        <button onMouseDown={() => removeFromHistory(s)} className="text-stone-600 hover:text-stone-400 text-xs opacity-0 group-hover:opacity-100 shrink-0" title="Supprimer">✕</button>
+                      </div>
+                    ))}
+                  </div>
                 )}
               </div>
               {active && (
@@ -1747,6 +1840,76 @@ export function CampaignPage() {
             </div>
           )}
         </div>
+
+        {/* Audit de campagne */}
+        {(() => {
+          const npcNames = new Set((campaign.npcs ?? []).map(n => n.name.toLowerCase()))
+          const locationNames = new Set((campaign.locations ?? []).map(l => l.name.toLowerCase()))
+          const factionNames = new Set((campaign.factions ?? []).map(f => f.name.toLowerCase()))
+          const monsterNames = new Set([...(campaign.custom_monsters ?? []).map(m => m.name)])
+
+          const issues: { type: string; msg: string }[] = []
+
+          ;(campaign.quests ?? []).filter(q => q.giver && q.giver.trim()).forEach(q => {
+            if (!npcNames.has(q.giver.toLowerCase())) {
+              issues.push({ type: 'quête', msg: `Quête «${q.title}» — donneur «${q.giver}» introuvable dans les PNJs` })
+            }
+          })
+          ;(campaign.npcs ?? []).filter(n => n.faction && n.faction.trim()).forEach(n => {
+            if (!factionNames.has(n.faction.toLowerCase())) {
+              issues.push({ type: 'pnj', msg: `PNJ «${n.name}» — faction «${n.faction}» introuvable` })
+            }
+          })
+          ;(campaign.npcs ?? []).filter(n => n.location && n.location.trim()).forEach(n => {
+            if (!locationNames.has(n.location.toLowerCase())) {
+              issues.push({ type: 'pnj', msg: `PNJ «${n.name}» — lieu «${n.location}» introuvable` })
+            }
+          })
+          ;(campaign.saved_encounters ?? []).forEach(enc => {
+            enc.entries.forEach(e => {
+              if (!monsterNames.has(e.monster_name)) {
+                issues.push({ type: 'rencontre', msg: `Rencontre «${enc.name}» — monstre «${e.monster_name}» introuvable dans le bestiaire custom` })
+              }
+            })
+          })
+
+          return (
+            <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setShowAudit(v => !v)}
+                className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-stone-800/50 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-stone-300 text-sm font-semibold">Rapport d'audit</span>
+                  {issues.length > 0 && (
+                    <span className="text-xs bg-amber-900/60 border border-amber-700/50 text-amber-300 rounded-full px-2 py-0.5">
+                      {issues.length} problème{issues.length > 1 ? 's' : ''}
+                    </span>
+                  )}
+                </div>
+                <span className="text-stone-500 text-xs">{showAudit ? '▲' : '▼'}</span>
+              </button>
+              {showAudit && (
+                <div className="px-5 pb-5 border-t border-stone-800 pt-4">
+                  {issues.length === 0 ? (
+                    <p className="text-emerald-400 text-sm">✓ Aucun problème détecté dans la campagne.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {issues.map((issue, i) => (
+                        <div key={i} className="flex items-start gap-2 text-sm">
+                          <span className={`shrink-0 text-xs font-medium rounded px-1.5 py-0.5 mt-0.5 ${
+                            issue.type === 'quête' ? 'bg-amber-900/40 text-amber-400' : issue.type === 'pnj' ? 'bg-violet-900/40 text-violet-400' : 'bg-red-900/40 text-red-400'
+                          }`}>{issue.type}</span>
+                          <span className="text-stone-400 text-xs leading-relaxed">{issue.msg}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         {/* Share / Vue MJ */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
@@ -2421,6 +2584,12 @@ export function CampaignPage() {
                 <option value="status">Statut</option>
                 <option value="faction">Faction</option>
               </select>
+              {(campaign.npcs ?? []).length > 0 && (
+                <button onClick={() => exportSection('pnj', campaign.npcs ?? [])} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Exporter les PNJ en JSON">⬇ Export</button>
+              )}
+              <label className="text-stone-600 hover:text-stone-400 text-xs transition-colors cursor-pointer" title="Importer des PNJ depuis un JSON">
+                ⬆ Import<input type="file" accept=".json" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importSectionData(f, 'npcs'); e.target.value = '' }} />
+              </label>
               <button
                 onClick={handleGenerateNpc}
                 className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
@@ -2791,7 +2960,12 @@ export function CampaignPage() {
                               </div>
                             </div>
                             {expandedNpc === i && npc.notes && (
-                              <div className="px-4 pb-3 pt-0 border-t border-stone-800">
+                              <div className="px-4 pb-3 pt-2 border-t border-stone-800">
+                                <div className="flex justify-end mb-1">
+                                  <button onClick={() => copyToClipboard(`npc-${i}`, npc.notes)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Copier">
+                                    {copiedKey === `npc-${i}` ? '✓ Copié' : '📋'}
+                                  </button>
+                                </div>
                                 <MarkdownText className="text-stone-400 text-xs">{npc.notes}</MarkdownText>
                               </div>
                             )}
@@ -3041,6 +3215,12 @@ export function CampaignPage() {
                 <option value="type">Type</option>
                 <option value="status">Statut</option>
               </select>
+              {(campaign?.locations ?? []).length > 0 && (
+                <button onClick={() => exportSection('lieux', campaign?.locations ?? [])} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Exporter les lieux">⬇ Export</button>
+              )}
+              <label className="text-stone-600 hover:text-stone-400 text-xs transition-colors cursor-pointer" title="Importer des lieux">
+                ⬆ Import<input type="file" accept=".json" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importSectionData(f, 'locations'); e.target.value = '' }} />
+              </label>
               <button
                 onClick={() => { setAddingLocation(v => !v); setLocationDraft(emptyLocationDraft()) }}
                 className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
@@ -3333,6 +3513,11 @@ export function CampaignPage() {
                         </div>
                         {expandedLocation === i && loc.notes && (
                           <div className="px-4 pb-4 border-t border-stone-800 pt-3 ml-8">
+                            <div className="flex justify-end mb-1">
+                              <button onClick={() => copyToClipboard(`loc-${i}`, loc.notes)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Copier">
+                                {copiedKey === `loc-${i}` ? '✓ Copié' : '📋'}
+                              </button>
+                            </div>
                             <MarkdownText className="text-stone-400 text-xs">{loc.notes}</MarkdownText>
                           </div>
                         )}
@@ -4184,12 +4369,20 @@ export function CampaignPage() {
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Factions ({(campaign.factions ?? []).length})
             </h2>
-            <button
-              onClick={() => { setAddingFaction(v => !v); setFactionDraft(emptyFactionDraft()) }}
-              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-            >
-              {addingFaction ? 'Annuler' : '+ Faction'}
-            </button>
+            <div className="flex items-center gap-3">
+              {(campaign.factions ?? []).length > 0 && (
+                <button onClick={() => exportSection('factions', campaign.factions ?? [])} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Exporter les factions">⬇ Export</button>
+              )}
+              <label className="text-stone-600 hover:text-stone-400 text-xs transition-colors cursor-pointer" title="Importer des factions">
+                ⬆ Import<input type="file" accept=".json" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importSectionData(f, 'factions'); e.target.value = '' }} />
+              </label>
+              <button
+                onClick={() => { setAddingFaction(v => !v); setFactionDraft(emptyFactionDraft()) }}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+              >
+                {addingFaction ? 'Annuler' : '+ Faction'}
+              </button>
+            </div>
           </div>
 
           {addingFaction && (
@@ -4368,10 +4561,18 @@ export function CampaignPage() {
                         </div>
                         {expandedFaction === i && (
                           <div className="px-4 pb-4 pt-2 border-t border-stone-800">
-                            {faction.notes
-                              ? <MarkdownText className="text-stone-400 text-sm">{faction.notes}</MarkdownText>
-                              : <p className="text-stone-600 text-xs italic">Aucune note.</p>
-                            }
+                            {faction.notes ? (
+                              <>
+                                <div className="flex justify-end mb-1">
+                                  <button onClick={() => copyToClipboard(`faction-${i}`, faction.notes)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Copier">
+                                    {copiedKey === `faction-${i}` ? '✓ Copié' : '📋'}
+                                  </button>
+                                </div>
+                                <MarkdownText className="text-stone-400 text-sm">{faction.notes}</MarkdownText>
+                              </>
+                            ) : (
+                              <p className="text-stone-600 text-xs italic">Aucune note.</p>
+                            )}
                           </div>
                         )}
                       </>
@@ -4393,12 +4594,20 @@ export function CampaignPage() {
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Quêtes ({(campaign.quests ?? []).length})
             </h2>
-            <button
-              onClick={() => { setAddingQuest(v => !v); setQuestDraft(emptyQuestDraft()) }}
-              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-            >
-              {addingQuest ? 'Annuler' : '+ Quête'}
-            </button>
+            <div className="flex items-center gap-3">
+              {(campaign.quests ?? []).length > 0 && (
+                <button onClick={() => exportSection('quetes', campaign.quests ?? [])} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Exporter les quêtes">⬇ Export</button>
+              )}
+              <label className="text-stone-600 hover:text-stone-400 text-xs transition-colors cursor-pointer" title="Importer des quêtes">
+                ⬆ Import<input type="file" accept=".json" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) importSectionData(f, 'quests'); e.target.value = '' }} />
+              </label>
+              <button
+                onClick={() => { setAddingQuest(v => !v); setQuestDraft(emptyQuestDraft()) }}
+                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
+              >
+                {addingQuest ? 'Annuler' : '+ Quête'}
+              </button>
+            </div>
           </div>
 
           {addingQuest && (
@@ -4606,6 +4815,13 @@ export function CampaignPage() {
                               </button>
                               {expandedQuest === quest.id && (
                                 <div className="px-4 pb-4 border-t border-stone-800 pt-3 space-y-2">
+                                  {(quest.description || quest.notes) && (
+                                    <div className="flex justify-end">
+                                      <button onClick={() => copyToClipboard(`quest-${quest.id}`, [quest.description, quest.notes].filter(Boolean).join('\n\n'))} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Copier">
+                                        {copiedKey === `quest-${quest.id}` ? '✓ Copié' : '📋'}
+                                      </button>
+                                    </div>
+                                  )}
                                   {quest.description && (
                                     <MarkdownText className="text-stone-300 text-sm">{quest.description}</MarkdownText>
                                   )}
