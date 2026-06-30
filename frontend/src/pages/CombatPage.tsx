@@ -506,6 +506,7 @@ export function CombatPage() {
   const [savedEncounterSort, setSavedEncounterSort] = useState<'default' | 'name' | 'difficulty'>('default')
   const [combatFactionFilter, setCombatFactionFilter] = useState<'all' | 'allié' | 'ennemi' | 'neutre'>('all')
   const [combatTrackerSearch, setCombatTrackerSearch] = useState('')
+  const [encounterMonsterSort, setEncounterMonsterSort] = useState<'cr_asc' | 'cr_desc' | 'name' | 'xp'>('cr_asc')
 
   // Saving throws
   const [showSavingThrow, setShowSavingThrow] = useState(false)
@@ -3159,11 +3160,18 @@ export function CombatPage() {
                   [0, 0, 0, 0] as [number, number, number, number],
                 )
                 const difficulty = encounterEntries.length > 0 ? encounterDifficultyLabel(adjustedXp, partyThresholds) : null
-                const filteredMonsters = allMonsters.filter(m =>
-                  m.name.toLowerCase().includes(encounterSearch.toLowerCase()) &&
-                  (CR_NUM[m.cr] ?? 0) >= (CR_NUM[encounterMinCr] ?? 0) &&
-                  (CR_NUM[m.cr] ?? 0) <= (CR_NUM[encounterMaxCr] ?? 30)
-                )
+                const filteredMonsters = allMonsters
+                  .filter(m =>
+                    m.name.toLowerCase().includes(encounterSearch.toLowerCase()) &&
+                    (CR_NUM[m.cr] ?? 0) >= (CR_NUM[encounterMinCr] ?? 0) &&
+                    (CR_NUM[m.cr] ?? 0) <= (CR_NUM[encounterMaxCr] ?? 30)
+                  )
+                  .sort((a, b) => {
+                    if (encounterMonsterSort === 'name') return a.name.localeCompare(b.name, 'fr')
+                    if (encounterMonsterSort === 'cr_desc') return (CR_NUM[b.cr] ?? 0) - (CR_NUM[a.cr] ?? 0)
+                    if (encounterMonsterSort === 'xp') return b.xp - a.xp
+                    return (CR_NUM[a.cr] ?? 0) - (CR_NUM[b.cr] ?? 0)
+                  })
                 return (
                   <div className="space-y-3">
                     <div className="flex items-center justify-between">
@@ -3322,6 +3330,13 @@ export function CombatPage() {
                         <button onClick={() => { setEncounterMinCr('0'); setEncounterMaxCr('30') }}
                           className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Réinit.</button>
                       )}
+                      <select value={encounterMonsterSort} onChange={e => setEncounterMonsterSort(e.target.value as typeof encounterMonsterSort)}
+                        className="ml-auto bg-stone-800 border border-stone-700 rounded px-2 py-1 text-stone-300 text-xs focus:outline-none focus:border-violet-500 transition-colors">
+                        <option value="cr_asc">CR ↑</option>
+                        <option value="cr_desc">CR ↓</option>
+                        <option value="xp">XP ↓</option>
+                        <option value="name">Nom A→Z</option>
+                      </select>
                     </div>
 
                     {encounterSearch && (

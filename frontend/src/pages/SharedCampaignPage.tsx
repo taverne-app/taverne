@@ -302,6 +302,10 @@ export function SharedCampaignPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [expandedFactionIdx, setExpandedFactionIdx] = useState<number | null>(null)
   const [showAllSessions, setShowAllSessions] = useState(false)
+  const [factionSearch, setFactionSearch] = useState('')
+  const [factionRepFilter, setFactionRepFilter] = useState<'all' | 'allied' | 'neutral' | 'enemy'>('all')
+  const [activeQuestSearch, setActiveQuestSearch] = useState('')
+  const [milestoneSearch, setMilestoneSearch] = useState('')
   const [sessionSearch, setSessionSearch] = useState('')
   const [sessionSort, setSessionSort] = useState<'newest' | 'oldest'>('newest')
   const [npcSearch, setNpcSearch] = useState('')
@@ -456,9 +460,20 @@ export function SharedCampaignPage() {
         {/* Quêtes actives */}
         {(campaign.quests ?? []).filter(q => q.status === 'active').length > 0 && (
           <section>
-            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Quêtes en cours</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Quêtes en cours</h2>
+              {(campaign.quests ?? []).filter(q => q.status === 'active').length > 3 && (
+                <input
+                  type="text"
+                  value={activeQuestSearch}
+                  onChange={e => setActiveQuestSearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-32 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {(campaign.quests ?? []).filter(q => q.status === 'active').map(q => (
+              {(campaign.quests ?? []).filter(q => q.status === 'active' && (!activeQuestSearch || q.title.toLowerCase().includes(activeQuestSearch.toLowerCase()) || (q.giver ?? '').toLowerCase().includes(activeQuestSearch.toLowerCase()))).map(q => (
                 <div key={q.id} className="bg-stone-900 border border-amber-900/40 rounded-xl p-4">
                   <div className="flex items-start gap-2">
                     <span className="text-amber-400 text-sm shrink-0 mt-0.5">🟡</span>
@@ -553,11 +568,23 @@ export function SharedCampaignPage() {
         {/* Jalons de campagne */}
         {(campaign.campaign_milestones ?? []).length > 0 && (
           <section>
-            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Chronologie</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Chronologie</h2>
+              {(campaign.campaign_milestones ?? []).length > 4 && (
+                <input
+                  type="text"
+                  value={milestoneSearch}
+                  onChange={e => setMilestoneSearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-32 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+              )}
+            </div>
             <div className="bg-stone-900 border border-stone-800 rounded-xl divide-y divide-stone-800">
               {(campaign.campaign_milestones ?? [])
                 .slice()
                 .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
+                .filter(m => !milestoneSearch || m.title.toLowerCase().includes(milestoneSearch.toLowerCase()) || (m.notes ?? '').toLowerCase().includes(milestoneSearch.toLowerCase()))
                 .map((m, i) => {
                   const icons: Record<string, string> = { discovery: '🔍', death: '💀', arc: '🏆', combat: '⚔', other: '⭐' }
                   return (
@@ -737,9 +764,38 @@ export function SharedCampaignPage() {
         {/* Factions */}
         {(campaign.factions ?? []).length > 0 && (
           <section>
-            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Factions</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Factions</h2>
+              {(campaign.factions ?? []).length > 3 && (
+                <input
+                  type="text"
+                  value={factionSearch}
+                  onChange={e => setFactionSearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-32 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+              )}
+            </div>
+            {(campaign.factions ?? []).length > 2 && (
+              <div className="flex flex-wrap gap-1.5 mb-3">
+                {(['all', 'allied', 'neutral', 'enemy'] as const).map(f => {
+                  const facs = campaign.factions ?? []
+                  const count = f === 'all' ? facs.length : f === 'allied' ? facs.filter(fa => fa.reputation >= 2).length : f === 'neutral' ? facs.filter(fa => fa.reputation >= -1 && fa.reputation < 2).length : facs.filter(fa => fa.reputation < -1).length
+                  if (f !== 'all' && count === 0) return null
+                  const label = f === 'all' ? `Toutes (${count})` : f === 'allied' ? `🟢 Alliées (${count})` : f === 'neutral' ? `🟡 Neutres (${count})` : `🔴 Ennemies (${count})`
+                  return (
+                    <button key={f} onClick={() => setFactionRepFilter(f)} className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${factionRepFilter === f ? 'bg-amber-900/60 border-amber-600/60 text-amber-300' : 'bg-stone-900 border-stone-800 text-stone-500 hover:text-stone-300'}`}>
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
             <div className="space-y-2">
-              {(campaign.factions ?? []).map((faction, i) => {
+              {(campaign.factions ?? []).filter(faction =>
+                (factionRepFilter === 'all' || (factionRepFilter === 'allied' && faction.reputation >= 2) || (factionRepFilter === 'neutral' && faction.reputation >= -1 && faction.reputation < 2) || (factionRepFilter === 'enemy' && faction.reputation < -1)) &&
+                (!factionSearch || faction.name.toLowerCase().includes(factionSearch.toLowerCase()) || (faction.description ?? '').toLowerCase().includes(factionSearch.toLowerCase()))
+              ).map((faction, i) => {
                 const rep = faction.reputation
                 const repLabel = rep >= 4 ? 'Vénéré' : rep >= 2 ? 'Allié' : rep >= 0 ? 'Neutre' : rep >= -2 ? 'Suspect' : 'Ennemi'
                 const repColor = rep >= 2 ? 'text-emerald-400' : rep >= 0 ? 'text-stone-400' : rep >= -2 ? 'text-amber-400' : 'text-red-400'

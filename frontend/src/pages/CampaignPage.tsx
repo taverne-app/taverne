@@ -4888,13 +4888,19 @@ export function CampaignPage() {
                   className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
                 />
               </div>
-              <textarea
-                placeholder={"Notes de la session…\n\nSyntaxe : ## Titre  **gras**  *italique*  - liste  ---"}
-                value={sessionDraft.notes}
-                onChange={e => setSessionDraft(d => ({ ...d, notes: e.target.value }))}
-                rows={5}
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono"
-              />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-stone-600 text-xs">Notes</span>
+                  <MicButton onTranscript={text => setSessionDraft(d => ({ ...d, notes: d.notes ? d.notes + '\n' + text : text }))} />
+                </div>
+                <textarea
+                  placeholder={"Notes de la session…\n\nSyntaxe : ## Titre  **gras**  *italique*  - liste  ---"}
+                  value={sessionDraft.notes}
+                  onChange={e => setSessionDraft(d => ({ ...d, notes: e.target.value }))}
+                  rows={5}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono"
+                />
+              </div>
               <div className="flex justify-end">
                 <button
                   onClick={handleCreateSession}
@@ -5116,10 +5122,16 @@ export function CampaignPage() {
                           <input type="text" placeholder="Butins & récompenses" value={editSessionDraft.loot_notes} onChange={e => setEditSessionDraft(d => ({ ...d, loot_notes: e.target.value }))}
                             className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors" />
                         </div>
-                        <textarea value={editSessionDraft.notes}
-                          onChange={e => setEditSessionDraft(d => ({ ...d, notes: e.target.value }))}
-                          rows={5} placeholder={"## Titre  **gras**  *italique*  - liste"}
-                          className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-700 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono" />
+                        <div>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-stone-600 text-xs">Notes</span>
+                            <MicButton onTranscript={text => setEditSessionDraft(d => ({ ...d, notes: d.notes ? d.notes + '\n' + text : text }))} />
+                          </div>
+                          <textarea value={editSessionDraft.notes}
+                            onChange={e => setEditSessionDraft(d => ({ ...d, notes: e.target.value }))}
+                            rows={5} placeholder={"## Titre  **gras**  *italique*  - liste"}
+                            className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-700 focus:outline-none focus:border-amber-500 transition-colors resize-y font-mono" />
+                        </div>
                         <div className="flex items-center justify-between">
                           <button onClick={() => setEditingSession(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
                           <div className="flex gap-4">
