@@ -25,6 +25,7 @@ import { CONDITIONS_FR } from '../data/conditions'
 import { ConditionTag } from '../components/ConditionTag'
 import { RulesCompendium } from '../components/RulesCompendium'
 import { XP_THRESHOLDS, encounterMultiplier, encounterDifficultyLabel, difficultyColor, computeEncounterDifficulty } from '../data/encounter_difficulty'
+import { MicButton } from '../components/MicButton'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -3640,7 +3641,14 @@ export function CombatPage() {
           <div className="bg-stone-900 border border-stone-700/60 rounded-xl p-4 space-y-2">
             <div className="flex items-center justify-between">
               <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">📝 Notes de combat</h2>
-              <button onClick={() => setShowNotepad(false)} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
+              <div className="flex items-center gap-2">
+                <MicButton onTranscript={text => {
+                  const next = combatNotes ? combatNotes + '\n' + text : text
+                  setCombatNotes(next)
+                  try { localStorage.setItem(`taverne-combat-notes-${campaignId ?? 'default'}`, next) } catch { /* noop */ }
+                }} />
+                <button onClick={() => setShowNotepad(false)} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
+              </div>
             </div>
             <textarea
               value={combatNotes}

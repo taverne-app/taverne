@@ -232,6 +232,15 @@ import type { Quest } from '../api/campaigns'
 
 function QuestHistory({ quests }: { quests: Quest[] }) {
   const [open, setOpen] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'completed' | 'failed'>('all')
+
+  const filteredQuests = quests.filter(q => {
+    const matchesFilter = historyFilter === 'all' || q.status === historyFilter
+    const matchesSearch = !historySearch || q.title.toLowerCase().includes(historySearch.toLowerCase())
+    return matchesFilter && matchesSearch
+  })
+
   return (
     <section>
       <button
@@ -241,18 +250,40 @@ function QuestHistory({ quests }: { quests: Quest[] }) {
         Historique des quêtes ({quests.length}) <span>{open ? '▲' : '▼'}</span>
       </button>
       {open && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {quests.map(q => (
-            <div key={q.id} className={`bg-stone-900 border rounded-xl p-4 ${q.status === 'completed' ? 'border-emerald-900/40' : 'border-red-900/30'}`}>
-              <div className="flex items-start gap-2">
-                <span className="text-sm shrink-0 mt-0.5">{q.status === 'completed' ? '✅' : '❌'}</span>
-                <div className="min-w-0">
-                  <p className={`font-semibold text-sm leading-tight ${q.status === 'completed' ? 'text-stone-300' : 'text-stone-500 line-through'}`}>{q.title}</p>
-                  {q.giver && <p className="text-stone-600 text-xs mt-0.5">— {q.giver}</p>}
+        <div>
+          {quests.length > 3 && (
+            <div className="flex items-center gap-2 mb-3">
+              <input
+                type="text"
+                value={historySearch}
+                onChange={e => setHistorySearch(e.target.value)}
+                placeholder="Chercher une quête…"
+                className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+              />
+              {(['all', 'completed', 'failed'] as const).map(f => (
+                <button
+                  key={f}
+                  onClick={() => setHistoryFilter(f)}
+                  className={`text-xs px-2 py-1 rounded-lg border transition-colors ${historyFilter === f ? 'bg-stone-700 border-stone-600 text-stone-200' : 'bg-stone-900 border-stone-800 text-stone-500 hover:text-stone-300'}`}
+                >
+                  {f === 'all' ? `Toutes (${quests.length})` : f === 'completed' ? `✅ (${quests.filter(q => q.status === 'completed').length})` : `❌ (${quests.filter(q => q.status === 'failed').length})`}
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {filteredQuests.map(q => (
+              <div key={q.id} className={`bg-stone-900 border rounded-xl p-4 ${q.status === 'completed' ? 'border-emerald-900/40' : 'border-red-900/30'}`}>
+                <div className="flex items-start gap-2">
+                  <span className="text-sm shrink-0 mt-0.5">{q.status === 'completed' ? '✅' : '❌'}</span>
+                  <div className="min-w-0">
+                    <p className={`font-semibold text-sm leading-tight ${q.status === 'completed' ? 'text-stone-300' : 'text-stone-500 line-through'}`}>{q.title}</p>
+                    {q.giver && <p className="text-stone-600 text-xs mt-0.5">— {q.giver}</p>}
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       )}
     </section>
@@ -271,6 +302,11 @@ export function SharedCampaignPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [expandedFactionIdx, setExpandedFactionIdx] = useState<number | null>(null)
   const [showAllSessions, setShowAllSessions] = useState(false)
+  const [sessionSearch, setSessionSearch] = useState('')
+  const [sessionSort, setSessionSort] = useState<'newest' | 'oldest'>('newest')
+  const [npcSearch, setNpcSearch] = useState('')
+  const [locationSearchShared, setLocationSearchShared] = useState('')
+  const [treasurySearch, setTreasurySearch] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -444,50 +480,75 @@ export function SharedCampaignPage() {
         )}
 
         {/* Journal de session */}
-        {sessions.length > 0 && (
-          <section>
-            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">
-              Journal de session
-            </h2>
-            <div className="space-y-3">
-              {(showAllSessions ? sessions : sessions.slice(0, 5)).map(s => (
-                <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-3 mb-1">
-                    <h3 className="text-white font-semibold text-sm">{s.title}</h3>
-                    {s.session_date && (
-                      <span className="text-stone-500 text-xs shrink-0">
-                        {new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                      </span>
-                    )}
+        {sessions.length > 0 && (() => {
+          let filteredSessions = sessionSearch
+            ? sessions.filter(s => s.title.toLowerCase().includes(sessionSearch.toLowerCase()))
+            : [...sessions]
+          if (sessionSort === 'oldest') filteredSessions = filteredSessions.reverse()
+          return (
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Journal de session</h2>
+                {sessions.length > 3 && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={sessionSearch}
+                      onChange={e => setSessionSearch(e.target.value)}
+                      placeholder="Chercher…"
+                      className="w-28 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                    />
+                    <select
+                      value={sessionSort}
+                      onChange={e => setSessionSort(e.target.value as typeof sessionSort)}
+                      className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1 text-stone-300 text-xs focus:outline-none focus:border-stone-600 transition-colors"
+                    >
+                      <option value="newest">Plus récentes</option>
+                      <option value="oldest">Plus anciennes</option>
+                    </select>
                   </div>
-                  {(s.xp_awarded != null || s.loot_notes) && (
-                    <div className="flex flex-wrap gap-2 mb-2">
-                      {s.xp_awarded != null && (
-                        <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2 py-0.5">
-                          +{s.xp_awarded.toLocaleString('fr-FR')} XP
-                        </span>
-                      )}
-                      {s.loot_notes && (
-                        <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2 py-0.5">
-                          🎁 {s.loot_notes}
+                )}
+              </div>
+              <div className="space-y-3">
+                {(showAllSessions || sessionSearch ? filteredSessions : filteredSessions.slice(0, 5)).map(s => (
+                  <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3 mb-1">
+                      <h3 className="text-white font-semibold text-sm">{s.title}</h3>
+                      {s.session_date && (
+                        <span className="text-stone-500 text-xs shrink-0">
+                          {new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
                         </span>
                       )}
                     </div>
-                  )}
-                  {s.notes && <MarkdownText className="text-stone-400">{s.notes}</MarkdownText>}
-                </div>
-              ))}
-            </div>
-            {sessions.length > 5 && (
-              <button
-                onClick={() => setShowAllSessions(v => !v)}
-                className="mt-2 text-stone-500 hover:text-stone-300 text-xs transition-colors w-full text-center"
-              >
-                {showAllSessions ? '▲ Réduire' : `▼ Voir tout (${sessions.length} sessions)`}
-              </button>
-            )}
-          </section>
-        )}
+                    {(s.xp_awarded != null || s.loot_notes) && (
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {s.xp_awarded != null && (
+                          <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2 py-0.5">
+                            +{s.xp_awarded.toLocaleString('fr-FR')} XP
+                          </span>
+                        )}
+                        {s.loot_notes && (
+                          <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2 py-0.5">
+                            🎁 {s.loot_notes}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    {s.notes && <MarkdownText className="text-stone-400">{s.notes}</MarkdownText>}
+                  </div>
+                ))}
+              </div>
+              {!sessionSearch && filteredSessions.length > 5 && (
+                <button
+                  onClick={() => setShowAllSessions(v => !v)}
+                  className="mt-2 text-stone-500 hover:text-stone-300 text-xs transition-colors w-full text-center"
+                >
+                  {showAllSessions ? '▲ Réduire' : `▼ Voir tout (${filteredSessions.length} sessions)`}
+                </button>
+              )}
+            </section>
+          )
+        })()}
 
         {/* Jalons de campagne */}
         {(campaign.campaign_milestones ?? []).length > 0 && (
@@ -565,10 +626,21 @@ export function SharedCampaignPage() {
         {/* PNJ connus (alliés / neutres) */}
         {(campaign.npcs ?? []).filter(n => n.status === 'allié' || n.status === 'neutre').length > 0 && (
           <section>
-            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">PNJ connus</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">PNJ connus</h2>
+              {(campaign.npcs ?? []).filter(n => n.status === 'allié' || n.status === 'neutre').length > 4 && (
+                <input
+                  type="text"
+                  value={npcSearch}
+                  onChange={e => setNpcSearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-32 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {(campaign.npcs ?? [])
-                .filter(n => n.status === 'allié' || n.status === 'neutre')
+                .filter(n => (n.status === 'allié' || n.status === 'neutre') && (!npcSearch || n.name.toLowerCase().includes(npcSearch.toLowerCase()) || (n.role ?? '').toLowerCase().includes(npcSearch.toLowerCase())))
                 .map((npc, i) => (
                   <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
                     <div className="flex items-start gap-2">
@@ -593,10 +665,21 @@ export function SharedCampaignPage() {
         {/* Lieux connus / explorés */}
         {(campaign.locations ?? []).filter(l => l.status === 'connu' || l.status === 'exploré').length > 0 && (
           <section>
-            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Lieux</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Lieux</h2>
+              {(campaign.locations ?? []).filter(l => l.status === 'connu' || l.status === 'exploré').length > 4 && (
+                <input
+                  type="text"
+                  value={locationSearchShared}
+                  onChange={e => setLocationSearchShared(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-32 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+              )}
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {(campaign.locations ?? [])
-                .filter(l => l.status === 'connu' || l.status === 'exploré')
+                .filter(l => (l.status === 'connu' || l.status === 'exploré') && (!locationSearchShared || l.name.toLowerCase().includes(locationSearchShared.toLowerCase()) || (l.type ?? '').toLowerCase().includes(locationSearchShared.toLowerCase())))
                 .map((loc, i) => (
                   <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
                     <div className="flex items-start justify-between gap-2">
@@ -622,9 +705,20 @@ export function SharedCampaignPage() {
         {/* Trésor commun */}
         {(campaign.party_treasury ?? []).length > 0 && (
           <section>
-            <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Trésor du groupe</h2>
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Trésor du groupe</h2>
+              {(campaign.party_treasury ?? []).length > 4 && (
+                <input
+                  type="text"
+                  value={treasurySearch}
+                  onChange={e => setTreasurySearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-32 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                />
+              )}
+            </div>
             <div className="bg-stone-900 border border-stone-800 rounded-xl divide-y divide-stone-800">
-              {(campaign.party_treasury as TreasureItem[]).map((item, i) => (
+              {(campaign.party_treasury as TreasureItem[]).filter(item => !treasurySearch || item.name.toLowerCase().includes(treasurySearch.toLowerCase()) || (item.notes ?? '').toLowerCase().includes(treasurySearch.toLowerCase())).map((item, i) => (
                 <div key={i} className="flex items-center justify-between gap-3 px-4 py-3">
                   <div className="min-w-0">
                     <p className="text-stone-200 text-sm font-medium truncate">{item.name}</p>

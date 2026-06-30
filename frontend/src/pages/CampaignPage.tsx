@@ -3095,13 +3095,19 @@ export function CampaignPage() {
                   <option value="recherché">✕ Recherché</option>
                 </select>
               </div>
-              <textarea
-                placeholder="Notes (description, PNJ associés, indices…)"
-                value={locationDraft.notes}
-                onChange={e => setLocationDraft(d => ({ ...d, notes: e.target.value }))}
-                rows={3}
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
-              />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-stone-600 text-xs">Notes</span>
+                  <MicButton onTranscript={text => setLocationDraft(d => ({ ...d, notes: d.notes ? d.notes + '\n' + text : text }))} />
+                </div>
+                <textarea
+                  placeholder="Notes (description, PNJ associés, indices…)"
+                  value={locationDraft.notes}
+                  onChange={e => setLocationDraft(d => ({ ...d, notes: e.target.value }))}
+                  rows={3}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+                />
+              </div>
               <div className="flex justify-end">
                 <button
                   onClick={handleAddLocation}
@@ -4212,7 +4218,10 @@ export function CampaignPage() {
                 </div>
               </div>
               <div>
-                <label className="text-stone-500 text-xs block mb-1">Notes</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-stone-500 text-xs">Notes</label>
+                  <MicButton onTranscript={text => setFactionDraft(d => ({ ...d, notes: d.notes ? d.notes + '\n' + text : text }))} />
+                </div>
                 <textarea
                   value={factionDraft.notes}
                   onChange={e => setFactionDraft(d => ({ ...d, notes: e.target.value }))}
@@ -4421,13 +4430,19 @@ export function CampaignPage() {
                 onChange={e => setQuestDraft(d => ({ ...d, giver: e.target.value }))}
                 className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
               />
-              <textarea
-                placeholder="Description de la quête…"
-                value={questDraft.description}
-                onChange={e => setQuestDraft(d => ({ ...d, description: e.target.value }))}
-                rows={3}
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
-              />
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-stone-600 text-xs">Description</span>
+                  <MicButton onTranscript={text => setQuestDraft(d => ({ ...d, description: d.description ? d.description + '\n' + text : text }))} />
+                </div>
+                <textarea
+                  placeholder="Description de la quête…"
+                  value={questDraft.description}
+                  onChange={e => setQuestDraft(d => ({ ...d, description: e.target.value }))}
+                  rows={3}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+                />
+              </div>
               <div className="flex justify-end">
                 <button
                   onClick={handleAddQuest}
