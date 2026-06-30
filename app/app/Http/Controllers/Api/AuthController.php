@@ -26,7 +26,7 @@ class AuthController extends Controller
 
         $token = $user->createToken('taverne')->plainTextToken;
 
-        Mail::to($user)->queue(new WelcomeMail($user));
+        Mail::to($user)->send(new WelcomeMail($user));
 
         return response()->json(['token' => $token, 'user' => $user], 201);
     }
