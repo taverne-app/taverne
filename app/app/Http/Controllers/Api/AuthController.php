@@ -5,11 +5,13 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\LoginRequest;
 use App\Http\Requests\RegisterRequest;
+use App\Mail\WelcomeMail;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
@@ -23,6 +25,8 @@ class AuthController extends Controller
         ]);
 
         $token = $user->createToken('taverne')->plainTextToken;
+
+        Mail::to($user)->queue(new WelcomeMail($user));
 
         return response()->json(['token' => $token, 'user' => $user], 201);
     }

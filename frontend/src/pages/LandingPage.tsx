@@ -208,8 +208,10 @@ export function LandingPage() {
 
       {/* Footer */}
       <footer className="border-t border-stone-800 py-6">
-        <p className="text-center text-stone-600 text-xs">
-          © {new Date().getFullYear()} La Taverne — Outil de gestion de campagnes D&D 5e
+        <p className="text-center text-stone-600 text-xs flex items-center justify-center gap-3 flex-wrap">
+          <span>© {new Date().getFullYear()} La Taverne — Outil de gestion de campagnes D&D 5e</span>
+          <Link to="/legal"   className="hover:text-stone-400 transition-colors">CGV</Link>
+          <Link to="/privacy" className="hover:text-stone-400 transition-colors">Confidentialité</Link>
         </p>
       </footer>
     </div>

@@ -5,6 +5,8 @@ import { LandingPage } from './pages/LandingPage'
 import { LoginPage } from './pages/LoginPage'
 import { RegisterPage } from './pages/RegisterPage'
 import { AccountPage } from './pages/AccountPage'
+import { LegalPage } from './pages/LegalPage'
+import { PrivacyPage } from './pages/PrivacyPage'
 import { CharactersPage } from './pages/CharactersPage'
 import { CharacterPage } from './pages/CharacterPage'
 import { CombatPage } from './pages/CombatPage'
@@ -91,6 +93,8 @@ export default function App() {
           <Route path="/share/:token/live" element={<LiveCombatPage />} />
           <Route path="/share/:token" element={<SharedCampaignPage />} />
           <Route path="/share/character/:token" element={<SharedCharacterPage />} />
+          <Route path="/legal"   element={<LegalPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>

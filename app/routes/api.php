@@ -10,8 +10,8 @@ use App\Http\Controllers\Api\ShareController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
-// Auth (public)
-Route::prefix('auth')->group(function () {
+// Auth (public) — limité à 10 tentatives/minute par IP
+Route::prefix('auth')->middleware('throttle:10,1')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login',    [AuthController::class, 'login']);
 });
