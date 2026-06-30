@@ -504,6 +504,7 @@ export function CombatPage() {
   const [savedEncounterSearch, setSavedEncounterSearch] = useState('')
   const [savedEncounterSort, setSavedEncounterSort] = useState<'default' | 'name' | 'difficulty'>('default')
   const [combatFactionFilter, setCombatFactionFilter] = useState<'all' | 'allié' | 'ennemi' | 'neutre'>('all')
+  const [combatTrackerSearch, setCombatTrackerSearch] = useState('')
 
   // Saving throws
   const [showSavingThrow, setShowSavingThrow] = useState(false)
@@ -1853,6 +1854,15 @@ export function CombatPage() {
               Ordre d'initiative
             </h2>
             <div className="flex items-center gap-3">
+              {displayRows.length > 4 && (
+                <input
+                  type="text"
+                  value={combatTrackerSearch}
+                  onChange={e => setCombatTrackerSearch(e.target.value)}
+                  placeholder="Chercher…"
+                  className="w-24 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors placeholder:text-stone-600"
+                />
+              )}
               {(characters.length > 0 || combatants.length > 0) && (
                 <div className="flex gap-1.5">
                   <button
@@ -2014,7 +2024,7 @@ export function CombatPage() {
             </div>
           ) : (
             <div className="divide-y divide-stone-800">
-              {displayRows.filter(row => combatFactionFilter === 'all' || (row.kind === 'character' ? combatFactionFilter === 'allié' : row.data.faction === combatFactionFilter)).map((row, displayIdx) => {
+              {displayRows.filter(row => combatFactionFilter === 'all' || (row.kind === 'character' ? combatFactionFilter === 'allié' : row.data.faction === combatFactionFilter)).filter(row => !combatTrackerSearch || row.data.name.toLowerCase().includes(combatTrackerSearch.toLowerCase())).map((row, displayIdx) => {
                 const isActive = withRollDisplay.length > 0 && activeCombatant && rowId(row) === rowId(activeCombatant)
                 const position = withRollDisplay.findIndex(r => rowId(r) === rowId(row))
 
@@ -2042,7 +2052,7 @@ export function CombatPage() {
                     >
                       <div className="flex items-center gap-4">
                         {/* Reorder handle */}
-                        {manualOrder && (
+                        {manualOrder && !combatTrackerSearch && (
                           <div className="flex flex-col gap-0.5 shrink-0 select-none">
                             <button onClick={e => { e.stopPropagation(); moveRow(rowId(row), 'up') }} disabled={displayIdx === 0}
                               className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▲</button>

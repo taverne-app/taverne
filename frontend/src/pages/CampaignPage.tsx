@@ -38,6 +38,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
+import { MicButton } from '../components/MicButton'
 import { computeEncounterDifficulty, difficultyColor } from '../data/encounter_difficulty'
 import { CR_XP } from '../data/monsters'
 import { generateNpc, generateNpcName, NPC_RACES, type GeneratedNpc } from '../data/npc_generator'
@@ -234,6 +235,8 @@ export function CampaignPage() {
   const [editingMilestoneId, setEditingMilestoneId] = useState<string | null>(null)
   const [editMilestoneDraft, setEditMilestoneDraft] = useState<Omit<Milestone, 'id'>>(emptyMilestone())
   const [milestoneTypeFilter, setMilestoneTypeFilter] = useState<'all' | Milestone['type']>('all')
+  const [milestoneSearch, setMilestoneSearch] = useState('')
+  const [timelineSort, setTimelineSort] = useState<'newest' | 'oldest'>('newest')
 
   // Carte de campagne
   const [mapUrlDraft, setMapUrlDraft] = useState('')
@@ -2311,6 +2314,11 @@ export function CampaignPage() {
               <p className="text-stone-500 text-xs mt-0.5">Visibles uniquement par vous — non partagées</p>
             </div>
             <div className="flex items-center gap-2">
+              {!dmNotesPreview && (
+                <MicButton
+                  onTranscript={text => setDmNotesDraft(prev => prev ? prev + '\n' + text : text)}
+                />
+              )}
               {dmNotesDraft.trim() && (
                 <button
                   onClick={() => setDmNotesPreview(v => !v)}
@@ -4950,10 +4958,13 @@ export function CampaignPage() {
             const allItems: TimelineItem[] = [
               ...sessions.map(s => ({ kind: 'session' as const, sortKey: s.session_date ?? s.created_at ?? '', data: s })),
               ...milestones.map(m => ({ kind: 'milestone' as const, sortKey: m.date ?? '', data: m })),
-            ].sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+            ].sort((a, b) => timelineSort === 'oldest' ? a.sortKey.localeCompare(b.sortKey) : b.sortKey.localeCompare(a.sortKey))
             const items = milestoneTypeFilter === 'all'
               ? allItems
               : allItems.filter(item => item.kind === 'session' || item.data.type === milestoneTypeFilter)
+            const filteredItems = milestoneSearch
+              ? items.filter(item => item.data.title.toLowerCase().includes(milestoneSearch.toLowerCase()))
+              : items
             const sessionNums = new Map(sessions.map((s, si) => [s.id, si + 1]))
             const milestoneIcons: Record<Milestone['type'], string> = { discovery: '🔍', death: '💀', arc: '🏆', combat: '⚔', other: '⭐' }
             const milestoneColors: Record<Milestone['type'], string> = {
@@ -4963,6 +4974,25 @@ export function CampaignPage() {
             const usedTypes = [...new Set(milestones.map(m => m.type))] as Milestone['type'][]
             return (
             <div className="space-y-0">
+              {allItems.length > 3 && (
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    value={milestoneSearch}
+                    onChange={e => setMilestoneSearch(e.target.value)}
+                    placeholder="Rechercher…"
+                    className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
+                  />
+                  <select
+                    value={timelineSort}
+                    onChange={e => setTimelineSort(e.target.value as typeof timelineSort)}
+                    className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-stone-300 text-sm focus:outline-none focus:border-stone-600 transition-colors"
+                  >
+                    <option value="newest">Plus récent</option>
+                    <option value="oldest">Plus ancien</option>
+                  </select>
+                </div>
+              )}
               {milestones.length > 1 && usedTypes.length > 1 && (
                 <div className="flex flex-wrap gap-1.5 mb-3">
                   {(['all', ...usedTypes] as ('all' | Milestone['type'])[]).map(t => (
@@ -4980,7 +5010,7 @@ export function CampaignPage() {
                   ))}
                 </div>
               )}
-              {items.map((item, i) => (
+              {filteredItems.map((item, i) => (
                 <div key={item.kind === 'session' ? `s-${item.data.id}` : `m-${item.data.id}`} className="flex gap-3">
                   <div className="flex flex-col items-center shrink-0 w-5">
                     {item.kind === 'milestone' ? (
@@ -4988,7 +5018,7 @@ export function CampaignPage() {
                     ) : (
                       <div className={`w-3 h-3 rounded-full mt-3 border-2 border-stone-950 shrink-0 transition-colors ${expandedSession === item.data.id ? 'bg-amber-500' : 'bg-stone-600'}`} />
                     )}
-                    {i < items.length - 1 && <div className="flex-1 w-0.5 bg-stone-800 my-1 min-h-3" />}
+                    {i < filteredItems.length - 1 && <div className="flex-1 w-0.5 bg-stone-800 my-1 min-h-3" />}
                   </div>
                   {item.kind === 'milestone' ? (
                     <div className="flex-1 pb-2">

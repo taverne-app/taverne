@@ -51,6 +51,7 @@ import { SPELL_DETAILS } from '../data/spell_details'
 import { computeMulticlassSlots } from '../data/multiclass'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
+import { MicButton } from '../components/MicButton'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { ConditionTag } from '../components/ConditionTag'
 import { CONDITIONS_FR } from '../data/conditions'
@@ -668,6 +669,7 @@ export function CharacterPage() {
   const [spellNotesEdit, setSpellNotesEdit] = useState('')
   const [spellFilter, setSpellFilter] = useState<'all' | 'prepared'>('all')
   const [spellSearch, setSpellSearch] = useState('')
+  const [spellSortMode, setSpellSortMode] = useState<'default' | 'name' | 'prepared'>('default')
   const [castFeedback, setCastFeedback] = useState<{ name: string; slotLevel: number } | null>(null)
   const [showSpellBrowser, setShowSpellBrowser] = useState(false)
   const [showCompendium, setShowCompendium] = useState(false)
@@ -741,6 +743,8 @@ export function CharacterPage() {
   const [featureSourceFilter, setFeatureSourceFilter] = useState('all')
   const [macroSearch, setMacroSearch] = useState('')
   const [resourceResetFilter, setResourceResetFilter] = useState<'all' | ClassResource['reset']>('all')
+  const [skillSearch, setSkillSearch] = useState('')
+  const [skillProfFilter, setSkillProfFilter] = useState<'all' | 'prof' | 'expert'>('all')
 
   async function handleAddFeature() {
     if (!character || !featureDraft.name.trim()) return
@@ -2841,11 +2845,36 @@ export function CharacterPage() {
 
         {/* Skills */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
-          <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-4">
-            Compétences
-          </h2>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+              Compétences
+            </h2>
+            <input
+              type="text"
+              value={skillSearch}
+              onChange={e => setSkillSearch(e.target.value)}
+              placeholder="Chercher…"
+              className="w-24 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-amber-500 transition-colors placeholder:text-stone-600"
+            />
+          </div>
+          <div className="flex gap-1 mb-3">
+            {(['all', 'prof', 'expert'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setSkillProfFilter(f)}
+                className={`text-xs px-2.5 py-0.5 rounded-full border transition-colors ${skillProfFilter === f ? 'bg-amber-700/40 border-amber-600/50 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}
+              >
+                {f === 'all' ? 'Toutes' : f === 'prof' ? '● Maîtrisées' : '◆ Expertise'}
+              </button>
+            ))}
+          </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-6 gap-y-0.5">
-            {SKILL_LABELS.map(([skill, label]) => {
+            {SKILL_LABELS.filter(([skill, label]) => {
+              const entry = character.skills[skill]
+              const matchesSearch = !skillSearch || label.toLowerCase().includes(skillSearch.toLowerCase())
+              const matchesFilter = skillProfFilter === 'all' || (skillProfFilter === 'prof' && entry.proficient) || (skillProfFilter === 'expert' && entry.expert)
+              return matchesSearch && matchesFilter
+            }).map(([skill, label]) => {
               const entry = character.skills[skill]
               return (
                 <div key={skill} className="flex items-center justify-between py-1.5 border-b border-stone-800/60 group">
@@ -3496,6 +3525,17 @@ export function CharacterPage() {
                   className="w-28 bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1 text-white text-xs focus:outline-none focus:border-violet-500 transition-colors placeholder:text-stone-600"
                 />
               )}
+              {character.spellcasting.spells.length > 4 && (
+                <select
+                  value={spellSortMode}
+                  onChange={e => setSpellSortMode(e.target.value as typeof spellSortMode)}
+                  className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-stone-400 text-xs focus:outline-none focus:border-violet-500 transition-colors"
+                >
+                  <option value="default">Par défaut</option>
+                  <option value="name">Nom A→Z</option>
+                  <option value="prepared">Préparés d'abord</option>
+                </select>
+              )}
               <button
                 onClick={() => setShowCompendium(true)}
                 className="text-xs rounded-lg px-2 py-0.5 border bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300 transition-colors"
@@ -3672,6 +3712,7 @@ export function CharacterPage() {
                 const spells = character.spellcasting.spells
                   .map((s, i) => ({ ...s, _idx: i }))
                   .filter(s => s.level === lvl && (spellFilter === 'all' || s.prepared) && (!spellSearch || s.name.toLowerCase().includes(spellSearch.toLowerCase())))
+                  .sort((a, b) => spellSortMode === 'name' ? a.name.localeCompare(b.name, 'fr') : spellSortMode === 'prepared' ? (b.prepared ? 1 : 0) - (a.prepared ? 1 : 0) : 0)
                 if (spells.length === 0) return null
                 return (
                   <div key={lvl}>
@@ -4043,6 +4084,11 @@ export function CharacterPage() {
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Notes</h2>
             <div className="flex items-center gap-3">
+              {!notesPreview && (
+                <MicButton
+                  onTranscript={text => { setNotesDraft(prev => prev ? prev + '\n' + text : text); setNotesDirty(true) }}
+                />
+              )}
               {notesDirty && !notesPreview && (
                 <button onClick={handleSaveNotes} disabled={saving}
                   className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40">
@@ -4080,6 +4126,11 @@ export function CharacterPage() {
               <h2 className="text-stone-300 text-sm font-semibold">Notes MJ</h2>
               <p className="text-stone-500 text-xs mt-0.5">Privées — non diffusées en temps réel</p>
             </div>
+            {!dmNotesPreview && (
+              <MicButton
+                onTranscript={text => setDmNotesDraft(prev => prev ? prev + '\n' + text : text)}
+              />
+            )}
             {dmNotesDraft.trim() && (
               <button onClick={() => setDmNotesPreview(v => !v)}
                 className="text-stone-500 hover:text-stone-300 text-xs transition-colors">
