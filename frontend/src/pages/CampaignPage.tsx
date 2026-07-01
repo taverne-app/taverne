@@ -45,6 +45,13 @@ import { generateNpc, generateNpcName, NPC_RACES, type GeneratedNpc } from '../d
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+function uuid(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
+
 function sign(n: number) { return n >= 0 ? `+${n}` : `${n}` }
 
 function hpColor(current: number, max: number) {
@@ -216,7 +223,7 @@ export function CampaignPage() {
 
   // Scènes de préparation
   const emptyScene = (): PrepScene => ({
-    id: crypto.randomUUID(),
+    id: uuid(),
     title: '', location_name: '', npc_names: [], encounter_name: '',
     treasure: '', hook: '', notes: '', done: false,
   })
@@ -438,7 +445,7 @@ export function CampaignPage() {
 
   async function handleAddQuest() {
     if (!campaign || !questDraft.title.trim()) return
-    const quest: Quest = { id: crypto.randomUUID(), ...questDraft, title: questDraft.title.trim() }
+    const quest: Quest = { id: uuid(), ...questDraft, title: questDraft.title.trim() }
     const next = [...(campaign.quests ?? []), quest]
     const updated = await updateCampaign(campaign.id, { quests: next })
     setCampaign(updated)
@@ -476,7 +483,7 @@ export function CampaignPage() {
     if (!campaign) return
     const src = (campaign.quests ?? []).find(q => q.id === questId)
     if (!src) return
-    const copy: Quest = { ...src, id: crypto.randomUUID(), title: `${src.title} (copie)` }
+    const copy: Quest = { ...src, id: uuid(), title: `${src.title} (copie)` }
     const next = [...(campaign.quests ?? []), copy]
     const updated = await updateCampaign(campaign.id, { quests: next })
     setCampaign(updated)
@@ -891,7 +898,7 @@ export function CampaignPage() {
     const prep = campaign.session_prep ?? emptySessionPrep()
     const next: SessionPrep = {
       ...prep,
-      scenes: [...(prep.scenes ?? []), { ...sceneDraft, id: crypto.randomUUID(), title: sceneDraft.title.trim() }],
+      scenes: [...(prep.scenes ?? []), { ...sceneDraft, id: uuid(), title: sceneDraft.title.trim() }],
     }
     const updated = await updateCampaign(campaign.id, { session_prep: next })
     setCampaign(updated)
@@ -944,7 +951,7 @@ export function CampaignPage() {
     if (!campaign?.session_prep) return
     const src = campaign.session_prep.scenes.find(s => s.id === sceneId)
     if (!src) return
-    const copy = { ...src, id: crypto.randomUUID(), title: `${src.title} (copie)`, done: false }
+    const copy = { ...src, id: uuid(), title: `${src.title} (copie)`, done: false }
     const next: SessionPrep = { ...campaign.session_prep, scenes: [...campaign.session_prep.scenes, copy] }
     const updated = await updateCampaign(campaign.id, { session_prep: next })
     setCampaign(updated)
@@ -979,7 +986,7 @@ export function CampaignPage() {
     const x = ((e.clientX - rect.left) / rect.width) * 100
     const y = ((e.clientY - rect.top) / rect.height) * 100
     const pin: MapPin = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       label: pinLabelDraft.trim() || 'Lieu',
       x, y,
       color: pinColorDraft,
@@ -1017,7 +1024,7 @@ export function CampaignPage() {
 
   async function handleAddMilestone() {
     if (!campaign || !milestoneDraft.title.trim()) return
-    const milestone: Milestone = { ...milestoneDraft, id: crypto.randomUUID(), title: milestoneDraft.title.trim() }
+    const milestone: Milestone = { ...milestoneDraft, id: uuid(), title: milestoneDraft.title.trim() }
     const next = [...(campaign.campaign_milestones ?? []), milestone]
     const updated = await updateCampaign(campaign.id, { campaign_milestones: next })
     setCampaign(updated)
