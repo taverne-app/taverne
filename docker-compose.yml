@@ -83,6 +83,14 @@ services:
     networks:
       - taverne
 
+  mailpit:
+    image: axllent/mailpit:latest
+    restart: unless-stopped
+    ports:
+      - "8025:8025"
+    networks:
+      - taverne
+
   nginx:
     image: nginx:alpine
     restart: unless-stopped
