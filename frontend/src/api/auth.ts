@@ -59,6 +59,27 @@ export async function fetchCurrentUser(): Promise<User> {
   return res.json()
 }
 
+export async function forgotPassword(email: string): Promise<void> {
+  const res = await apiFetch('/password/forgot', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+}
+
+export async function resetPassword(
+  token: string,
+  email: string,
+  password: string,
+  password_confirmation: string,
+): Promise<void> {
+  const res = await apiFetch('/password/reset', {
+    method: 'POST',
+    body: JSON.stringify({ token, email, password, password_confirmation }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+}
+
 export async function logout(): Promise<void> {
   await apiFetch('/auth/logout', { method: 'POST' })
   localStorage.removeItem('token')

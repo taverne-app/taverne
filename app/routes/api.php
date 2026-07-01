@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
+use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CharacterController;
 use App\Http\Controllers\Api\CombatantController;
@@ -14,6 +15,12 @@ use Illuminate\Support\Facades\Route;
 Route::prefix('auth')->middleware('throttle:10,1')->group(function () {
     Route::post('register', [AuthController::class, 'register']);
     Route::post('login',    [AuthController::class, 'login']);
+});
+
+// Mot de passe oublié (public) — limité à 5 tentatives/minute par IP
+Route::middleware('throttle:5,1')->group(function () {
+    Route::post('password/forgot', [PasswordResetController::class, 'sendResetLink']);
+    Route::post('password/reset',  [PasswordResetController::class, 'reset']);
 });
 
 // Stripe webhook (public — signature verified inside controller)

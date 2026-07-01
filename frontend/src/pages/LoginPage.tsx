@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { login } from '../api/auth'
 import { ApiError } from '../api/client'
 import { useAuth } from '../contexts/AuthContext'
@@ -7,6 +7,8 @@ import { useAuth } from '../contexts/AuthContext'
 export function LoginPage() {
   const { setAuth } = useAuth()
   const navigate = useNavigate()
+  const [params] = useSearchParams()
+  const resetSuccess = params.get('reset') === '1'
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -41,6 +43,11 @@ export function LoginPage() {
           onSubmit={handleSubmit}
           className="bg-stone-900 rounded-xl p-6 space-y-4 border border-stone-800"
         >
+          {resetSuccess && (
+            <div className="bg-green-900/40 border border-green-700 text-green-300 text-sm rounded-lg px-4 py-2">
+              Mot de passe réinitialisé. Vous pouvez vous connecter.
+            </div>
+          )}
           {error && (
             <div className="bg-red-900/40 border border-red-700 text-red-300 text-sm rounded-lg px-4 py-2">
               {error}
@@ -60,9 +67,14 @@ export function LoginPage() {
           </div>
 
           <div>
-            <label className="block text-stone-300 text-sm font-medium mb-1.5">
-              Mot de passe
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-stone-300 text-sm font-medium">
+                Mot de passe
+              </label>
+              <Link to="/forgot-password" className="text-stone-500 hover:text-amber-400 text-xs transition-colors">
+                Mot de passe oublié ?
+              </Link>
+            </div>
             <input
               type="password"
               value={password}

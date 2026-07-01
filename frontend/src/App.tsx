@@ -7,6 +7,8 @@ import { RegisterPage } from './pages/RegisterPage'
 import { AccountPage } from './pages/AccountPage'
 import { LegalPage } from './pages/LegalPage'
 import { PrivacyPage } from './pages/PrivacyPage'
+import { ForgotPasswordPage } from './pages/ForgotPasswordPage'
+import { ResetPasswordPage } from './pages/ResetPasswordPage'
 import { CharactersPage } from './pages/CharactersPage'
 import { CharacterPage } from './pages/CharacterPage'
 import { CombatPage } from './pages/CombatPage'
@@ -26,6 +28,8 @@ export default function App() {
           <Route path="/" element={<LandingPage />} />
           <Route path="/login" element={<LoginPage />} />
           <Route path="/register" element={<RegisterPage />} />
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+          <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route
             path="/account"
             element={
