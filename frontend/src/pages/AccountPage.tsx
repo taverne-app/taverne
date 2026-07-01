@@ -11,7 +11,7 @@ const PLAN_LABELS: Record<string, string> = {
 }
 
 export function AccountPage() {
-  const { user, setAuth, clearAuth, refreshUser } = useAuth()
+  const { user, setAuth, clearAuth } = useAuth()
   const navigate = useNavigate()
 
   const [nameDraft, setNameDraft]   = useState(user?.name ?? '')

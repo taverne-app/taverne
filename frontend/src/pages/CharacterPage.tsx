@@ -355,20 +355,20 @@ export function CharacterPage() {
     if (!character) return
     const lines: string[] = []
     lines.push(`# ${character.name}`)
-    const parts = [`**Classe :** ${character.class} ${character.level}`]
+    const parts = [`**Classe :** ${character.character_class} ${character.level}`]
     if (character.race) parts.push(`**Race :** ${character.race}`)
     if (character.background) parts.push(`**Historique :** ${character.background}`)
     lines.push(parts.join(' · '))
     lines.push('')
 
     lines.push('## Points de vie')
-    lines.push(`PV ${character.current_hp} / ${character.max_hp}${character.temporary_hp ? ` (+${character.temporary_hp} tmp)` : ''}`)
+    lines.push(`PV ${character.combat.current_hp} / ${character.combat.max_hp}${character.combat.temporary_hp ? ` (+${character.combat.temporary_hp} tmp)` : ''}`)
     lines.push('')
 
     lines.push('## Caractéristiques')
     for (const [key, abbr] of ABILITY_LABELS) {
-      const ab = character.abilities[key]
-      lines.push(`- **${abbr}** ${ab.score} (${sign(ab.modifier)})`)
+      const ab = character.abilities[key] ?? 10
+      lines.push(`- **${abbr}** ${ab} (${sign(character.modifiers[key])})`)
     }
     lines.push('')
 
@@ -379,19 +379,19 @@ export function CharacterPage() {
     }
     lines.push('')
 
-    if (character.inventory.length > 0) {
+    if (character.inventory.items.length > 0) {
       lines.push('## Inventaire')
-      for (const item of character.inventory) {
+      for (const item of character.inventory.items) {
         const tags = [item.equipped && '⬤ équipé', item.magical && '✦ magique', item.attuned && '◈ accordé'].filter(Boolean).join(' ')
         lines.push(`- ${item.name}${item.quantity > 1 ? ` ×${item.quantity}` : ''}${tags ? ` — ${tags}` : ''}`)
       }
       lines.push('')
     }
 
-    if (character.spells.length > 0) {
+    if (character.spellcasting.spells.length > 0) {
       lines.push('## Sorts')
-      const byLevel = new Map<number, typeof character.spells>()
-      for (const s of character.spells) {
+      const byLevel = new Map<number, typeof character.spellcasting.spells>()
+      for (const s of character.spellcasting.spells) {
         if (!byLevel.has(s.level)) byLevel.set(s.level, [])
         byLevel.get(s.level)!.push(s)
       }

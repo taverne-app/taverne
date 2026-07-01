@@ -1856,12 +1856,12 @@ export function CampaignPage() {
             }
           })
           ;(campaign.npcs ?? []).filter(n => n.faction && n.faction.trim()).forEach(n => {
-            if (!factionNames.has(n.faction.toLowerCase())) {
+            if (!factionNames.has(n.faction!.toLowerCase())) {
               issues.push({ type: 'pnj', msg: `PNJ «${n.name}» — faction «${n.faction}» introuvable` })
             }
           })
           ;(campaign.npcs ?? []).filter(n => n.location && n.location.trim()).forEach(n => {
-            if (!locationNames.has(n.location.toLowerCase())) {
+            if (!locationNames.has(n.location!.toLowerCase())) {
               issues.push({ type: 'pnj', msg: `PNJ «${n.name}» — lieu «${n.location}» introuvable` })
             }
           })
@@ -4242,7 +4242,7 @@ export function CampaignPage() {
               .sort((a, b) => {
                 if (monsterSort === 'cr') return crNum(a.m.cr) - crNum(b.m.cr)
                 if (monsterSort === 'xp') return (a.m.xp ?? 0) - (b.m.xp ?? 0)
-                if (monsterSort === 'hp') return (a.m.max_hp ?? 0) - (b.m.max_hp ?? 0)
+                if (monsterSort === 'hp') return (a.m.hp_avg ?? 0) - (b.m.hp_avg ?? 0)
                 return a.m.name.localeCompare(b.m.name, 'fr')
               })
             if (filtered.length === 0) return (
@@ -5057,7 +5057,7 @@ export function CampaignPage() {
                 {addingMilestone ? 'Annuler' : '⭐ Jalon'}
               </button>
               <button
-                onClick={() => { setAddingSession(v => !v); setSessionDraft({ title: '', session_date: '', notes: '' }) }}
+                onClick={() => { setAddingSession(v => !v); setSessionDraft({ title: '', session_date: '', notes: '', xp_awarded: '', loot_notes: '' }) }}
                 className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
               >
                 {addingSession ? 'Annuler' : '+ Nouvelle session'}

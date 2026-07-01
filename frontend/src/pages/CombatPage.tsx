@@ -515,7 +515,7 @@ export function CombatPage() {
   const [savingThrowResults, setSavingThrowResults] = useState<{ name: string; roll: number; mod: number; total: number; success: boolean }[] | null>(null)
 
   // Combat log
-  interface CombatLogEntry { id: number; time: string; type: 'turn' | 'roll' | 'hp' | 'xp' | 'join'; text: string }
+  interface CombatLogEntry { id: number; time: string; type: 'turn' | 'roll' | 'hp' | 'xp' | 'join' | 'condition'; text: string }
   const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([])
   const [showCombatLog, setShowCombatLog] = useState(false)
   const [savingLog, setSavingLog] = useState(false)

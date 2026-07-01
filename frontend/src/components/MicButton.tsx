@@ -5,12 +5,23 @@ interface Props {
   className?: string
 }
 
-interface SpeechWindow {
-  SpeechRecognition?: new () => SpeechRecognition
-  webkitSpeechRecognition?: new () => SpeechRecognition
+interface SpeechRec {
+  lang: string
+  continuous: boolean
+  interimResults: boolean
+  onresult: ((e: SpeechRecognitionEvent) => void) | null
+  onerror: (() => void) | null
+  onend: (() => void) | null
+  start: () => void
+  stop: () => void
 }
 
-function getSpeechRecognition(): (new () => SpeechRecognition) | undefined {
+interface SpeechWindow {
+  SpeechRecognition?: new () => SpeechRec
+  webkitSpeechRecognition?: new () => SpeechRec
+}
+
+function getSpeechRecognition(): (new () => SpeechRec) | undefined {
   if (typeof window === 'undefined') return undefined
   const sw = window as unknown as SpeechWindow
   return sw.SpeechRecognition ?? sw.webkitSpeechRecognition
@@ -18,7 +29,7 @@ function getSpeechRecognition(): (new () => SpeechRecognition) | undefined {
 
 export function MicButton({ onTranscript, className = '' }: Props) {
   const [listening, setListening] = useState(false)
-  const recRef = useRef<SpeechRecognition | null>(null)
+  const recRef = useRef<SpeechRec | null>(null)
 
   useEffect(() => () => { recRef.current?.stop() }, [])
 
