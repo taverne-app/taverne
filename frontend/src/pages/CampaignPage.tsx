@@ -254,7 +254,14 @@ export function CampaignPage() {
   const [editPinDraft, setEditPinDraft] = useState<Pick<MapPin, 'label' | 'color' | 'location_name'>>({ label: '', color: 'amber', location_name: '' })
 
   // Navigation par onglets
-  const [activeTab, setActiveTab] = useState<'session' | 'monde' | 'aventure' | 'journal' | 'campagne'>('session')
+  const VALID_TABS = ['session', 'monde', 'aventure', 'journal', 'campagne'] as const
+  type Tab = typeof VALID_TABS[number]
+  const [activeTab, setActiveTab] = useState<Tab>(() => {
+    try {
+      const saved = localStorage.getItem(`taverne-campaign-tab-${id}`)
+      return VALID_TABS.includes(saved as Tab) ? (saved as Tab) : 'session'
+    } catch { return 'session' }
+  })
 
   // Tableau de bord
   const [showDashboard, setShowDashboard] = useState(true)
@@ -1361,29 +1368,50 @@ export function CampaignPage() {
       </header>
 
       {/* Onglets */}
-      <div className="border-b border-stone-800 bg-stone-900/60 sticky top-14 z-10">
-        <div className="max-w-5xl mx-auto px-4 flex gap-1">
-          {([
-            { key: 'session',  label: 'Session' },
-            { key: 'monde',    label: 'Monde' },
-            { key: 'aventure', label: 'Aventure' },
-            { key: 'journal',  label: 'Journal' },
-            { key: 'campagne', label: 'Campagne' },
-          ] as const).map(tab => (
-            <button
-              key={tab.key}
-              onClick={() => setActiveTab(tab.key)}
-              className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                activeTab === tab.key
-                  ? 'border-amber-400 text-amber-400'
-                  : 'border-transparent text-stone-400 hover:text-stone-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-      </div>
+      {(() => {
+        const activeQuests = (campaign.quests ?? []).filter(q => q.status === 'active').length
+        const badges: Partial<Record<Tab, number>> = {
+          session:  characters.length || undefined,
+          monde:    ((campaign.npcs ?? []).length + (campaign.locations ?? []).length) || undefined,
+          aventure: activeQuests || undefined,
+          journal:  sessions.length || undefined,
+        }
+        return (
+          <div className="border-b border-stone-800 bg-stone-900/60 sticky top-14 z-10">
+            <div className="max-w-5xl mx-auto px-4 flex gap-1">
+              {([
+                { key: 'session',  label: 'Session' },
+                { key: 'monde',    label: 'Monde' },
+                { key: 'aventure', label: 'Aventure' },
+                { key: 'journal',  label: 'Journal' },
+                { key: 'campagne', label: 'Campagne' },
+              ] as const).map(tab => (
+                <button
+                  key={tab.key}
+                  onClick={() => {
+                    setActiveTab(tab.key)
+                    try { localStorage.setItem(`taverne-campaign-tab-${id}`, tab.key) } catch {}
+                  }}
+                  className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
+                    activeTab === tab.key
+                      ? 'border-amber-400 text-amber-400'
+                      : 'border-transparent text-stone-400 hover:text-stone-200'
+                  }`}
+                >
+                  {tab.label}
+                  {badges[tab.key] !== undefined && (
+                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${
+                      activeTab === tab.key ? 'bg-amber-400/20 text-amber-400' : 'bg-stone-700 text-stone-400'
+                    }`}>
+                      {badges[tab.key]}
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          </div>
+        )
+      })()}
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 

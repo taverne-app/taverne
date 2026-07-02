@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom'
 import { getSharedCharacter, type Character, type AbilityName, type DiceRoll } from '../api/characters'
 import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
 import { MarkdownText } from '../components/MarkdownText'
+import { createPublicEcho, REVERB_CONFIGURED } from '../lib/echo'
 
 const ABILITY_LABELS: [AbilityName, string, string][] = [
   ['strength', 'FOR', 'Force'],
@@ -93,6 +94,8 @@ export function SharedCharacterPage() {
   const [advantage, setAdvantage] = useState<'normal' | 'adv' | 'dis'>('normal')
   const [hpInput, setHpInput] = useState('1')
   const [hpLoading, setHpLoading] = useState(false)
+  const [isMyTurn, setIsMyTurn] = useState(false)
+  const [combatRound, setCombatRound] = useState<number | null>(null)
   const rollToastRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -101,6 +104,17 @@ export function SharedCharacterPage() {
       .then(c => { setCharacter(c); document.title = `${c.name} — Taverne` })
       .catch(() => setError(true))
   }, [token])
+
+  useEffect(() => {
+    if (!character?.campaign_share_token || !REVERB_CONFIGURED) return
+    const echo = createPublicEcho()
+    echo.channel(`campaign-share.${character.campaign_share_token}`)
+      .listen('.combat.turn-updated', (e: { active_kind: string | null; active_id: number | null; round: number }) => {
+        setIsMyTurn(e.active_kind === 'character' && e.active_id === character.id)
+        setCombatRound(e.round)
+      })
+    return () => { echo.leave(`campaign-share.${character.campaign_share_token!}`); echo.disconnect() }
+  }, [character?.campaign_share_token, character?.id])
 
   async function roll(params: { sides: number; count?: number; modifier?: number; label?: string }) {
     if (!token || rolling) return
@@ -189,6 +203,26 @@ export function SharedCharacterPage() {
           </div>
         </div>
       </header>
+
+      {combatRound !== null && (
+        <div className={`border-b px-4 py-3 transition-colors ${
+          isMyTurn
+            ? 'bg-amber-950/80 border-amber-600'
+            : 'bg-stone-900/80 border-stone-800'
+        }`}>
+          <div className="max-w-2xl mx-auto flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              {isMyTurn
+                ? <span className="text-amber-400 font-semibold">⚔ C'est ton tour !</span>
+                : <span className="text-stone-400 text-sm">Combat en cours — Round {combatRound}</span>
+              }
+            </div>
+            {isMyTurn && (
+              <span className="text-amber-600 text-xs animate-pulse">Agis maintenant</span>
+            )}
+          </div>
+        </div>
+      )}
 
       <main className="max-w-2xl mx-auto pb-8 space-y-4">
 

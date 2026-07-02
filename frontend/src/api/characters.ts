@@ -136,6 +136,7 @@ export interface Character {
   tool_proficiencies: string[]
   campaign_id: number | null
   share_token: string | null
+  campaign_share_token: string | null
 }
 
 export interface CreateCharacterPayload {

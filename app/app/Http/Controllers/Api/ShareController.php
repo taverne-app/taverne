@@ -25,7 +25,7 @@ class ShareController extends Controller
 
     public function showCharacter(string $token): CharacterResource
     {
-        $character = Character::where('share_token', $token)->firstOrFail();
+        $character = Character::where('share_token', $token)->with('campaign')->firstOrFail();
 
         return new CharacterResource($character);
     }

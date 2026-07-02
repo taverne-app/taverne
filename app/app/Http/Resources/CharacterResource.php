@@ -102,8 +102,9 @@ class CharacterResource extends JsonResource
             'flaws'              => $this->flaws,
             'languages'          => $this->languages ?? [],
             'tool_proficiencies' => $this->tool_proficiencies ?? [],
-            'campaign_id'  => $this->campaign_id,
-            'share_token'  => $this->share_token,
+            'campaign_id'          => $this->campaign_id,
+            'share_token'          => $this->share_token,
+            'campaign_share_token' => $this->campaign?->share_token,
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,
         ];
