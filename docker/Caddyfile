@@ -1,0 +1,25 @@
+# Remplace VOTRE_DOMAINE par votre vrai domaine (ex: taverne.app)
+VOTRE_DOMAINE {
+
+    # API Laravel + storage public
+    handle /api/* {
+        reverse_proxy nginx:80
+    }
+    handle /storage/* {
+        reverse_proxy nginx:80
+    }
+
+    # Laravel Reverb WebSocket (protocole Pusher : /app/{key})
+    # Caddy gère automatiquement l'upgrade HTTP → WebSocket
+    handle /app/* {
+        reverse_proxy reverb:8080
+    }
+    handle /apps/* {
+        reverse_proxy reverb:8080
+    }
+
+    # Frontend React (SPA)
+    handle {
+        reverse_proxy frontend:3000
+    }
+}

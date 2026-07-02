@@ -1,0 +1,45 @@
+services:
+  # Désactive mailpit en production
+  mailpit:
+    profiles: ["dev"]
+
+  # Worker queue Laravel (emails, tâches async)
+  queue:
+    build:
+      context: ./app
+      dockerfile: ../docker/Dockerfile.app
+    restart: unless-stopped
+    command: php artisan queue:work --sleep=3 --tries=3 --max-time=3600
+    volumes:
+      - ./app:/var/www/html
+      - vendor:/var/www/html/vendor
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - taverne
+
+  # Reverse proxy Caddy — SSL automatique via Let's Encrypt
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./docker/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - nginx
+      - reverb
+      - frontend
+    networks:
+      - taverne
+
+volumes:
+  caddy_data:
+  caddy_config:
