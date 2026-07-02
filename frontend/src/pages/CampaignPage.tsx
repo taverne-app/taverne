@@ -253,6 +253,9 @@ export function CampaignPage() {
   const [editingPinId, setEditingPinId] = useState<string | null>(null)
   const [editPinDraft, setEditPinDraft] = useState<Pick<MapPin, 'label' | 'color' | 'location_name'>>({ label: '', color: 'amber', location_name: '' })
 
+  // Navigation par onglets
+  const [activeTab, setActiveTab] = useState<'session' | 'monde' | 'aventure' | 'journal' | 'campagne'>('session')
+
   // Tableau de bord
   const [showDashboard, setShowDashboard] = useState(true)
 
@@ -1357,6 +1360,31 @@ export function CampaignPage() {
         </div>
       </header>
 
+      {/* Onglets */}
+      <div className="border-b border-stone-800 bg-stone-900/60 sticky top-14 z-10">
+        <div className="max-w-5xl mx-auto px-4 flex gap-1">
+          {([
+            { key: 'session',  label: 'Session' },
+            { key: 'monde',    label: 'Monde' },
+            { key: 'aventure', label: 'Aventure' },
+            { key: 'journal',  label: 'Journal' },
+            { key: 'campagne', label: 'Campagne' },
+          ] as const).map(tab => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px ${
+                activeTab === tab.key
+                  ? 'border-amber-400 text-amber-400'
+                  : 'border-transparent text-stone-400 hover:text-stone-200'
+              }`}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 
         {/* Recherche globale */}
@@ -1505,6 +1533,7 @@ export function CampaignPage() {
           )
         })()}
 
+        {activeTab === 'session' && <>
         {/* Tableau de bord MJ */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
           <button
@@ -1750,6 +1779,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'campagne' && <>
         {/* Campaign identity */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           {editing ? (
@@ -1962,6 +1994,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'session' && <>
         {/* Characters */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -2395,6 +2430,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'journal' && <>
         {/* Statistiques de campagne */}
         {(characters.length > 0 || sessions.length > 0) && (() => {
           const totalHp = characters.reduce((s, c) => s + c.combat.current_hp, 0)
@@ -2465,6 +2503,9 @@ export function CampaignPage() {
           )
         })()}
 
+        </>}
+
+        {activeTab === 'session' && <>
         {/* Notes privées MJ */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-3">
@@ -2505,6 +2546,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'campagne' && <>
         {/* Calendrier de campagne */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 space-y-4">
           <div className="flex items-center justify-between">
@@ -2562,6 +2606,9 @@ export function CampaignPage() {
           </div>
         </div>
 
+        </>}
+
+        {activeTab === 'monde' && <>
         {/* Tracker de PNJs */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -2975,6 +3022,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'session' && <>
         {/* Trésor partagé */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -3193,6 +3243,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'monde' && <>
         {/* Lieux */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -3526,6 +3579,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'aventure' && <>
         {/* Prochaine session */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
@@ -3884,6 +3940,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'monde' && <>
         {/* Carte de campagne */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -4057,6 +4116,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'aventure' && <>
         {/* Bestiaire personnalisé */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -4359,6 +4421,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'monde' && <>
         {/* Factions */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -4584,6 +4649,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'aventure' && <>
         {/* Quêtes */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -4845,6 +4913,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'session' && <>
         {/* Tables aléatoires */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -5025,6 +5096,9 @@ export function CampaignPage() {
           )}
         </div>
 
+        </>}
+
+        {activeTab === 'journal' && <>
         {/* Sessions */}
         <div>
           <div className="flex items-center justify-between mb-4">
@@ -5569,6 +5643,7 @@ export function CampaignPage() {
             </div>
           )}
         </div>
+        </>}
       </main>
 
       {/* Add character modal */}
