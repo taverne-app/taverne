@@ -33,7 +33,6 @@ import {
   type CampaignSession,
 } from '../api/sessions'
 import { createCombatant } from '../api/combatants'
-import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
@@ -73,7 +72,7 @@ const CONDITIONS_FR: Record<string, string> = {
 
 export function CampaignPage() {
   const { id } = useParams<{ id: string }>()
-  const { token, user, clearAuth } = useAuth()
+  const { token } = useAuth()
   const navigate = useNavigate()
 
   const [campaign, setCampaign]     = useState<Campaign | null>(null)
@@ -1330,12 +1329,6 @@ export function CampaignPage() {
     } catch { alert('Fichier invalide ou format non reconnu.') }
   }
 
-  async function handleLogout() {
-    try { await logout() } catch { /* ignore */ }
-    clearAuth()
-    navigate('/login')
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-stone-950 flex items-center justify-center">
@@ -1360,10 +1353,6 @@ export function CampaignPage() {
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {saving && <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />}
-            <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
-            <button onClick={handleLogout} className="text-stone-400 hover:text-stone-200 text-sm transition-colors">
-              Déconnexion
-            </button>
           </div>
         </div>
       </header>

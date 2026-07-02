@@ -1,7 +1,6 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { updateProfile, updatePassword, logout } from '../api/auth'
+import { updateProfile, updatePassword } from '../api/auth'
 import { createPortalSession, createCheckoutSession } from '../api/billing'
 
 const PLAN_LABELS: Record<string, string> = {
@@ -11,8 +10,7 @@ const PLAN_LABELS: Record<string, string> = {
 }
 
 export function AccountPage() {
-  const { user, setAuth, clearAuth } = useAuth()
-  const navigate = useNavigate()
+  const { user, setAuth } = useAuth()
 
   const [nameDraft, setNameDraft]   = useState(user?.name ?? '')
   const [emailDraft, setEmailDraft] = useState(user?.email ?? '')
@@ -79,23 +77,11 @@ export function AccountPage() {
     } catch { setUpgradingPlan(null) }
   }
 
-  async function handleLogout() {
-    try { await logout() } catch { /* ignore */ }
-    clearAuth()
-    navigate('/login')
-  }
-
   return (
     <div className="min-h-screen bg-stone-950">
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between">
-          <Link to="/campaigns" className="text-stone-400 hover:text-stone-200 text-sm transition-colors">
-            ← Campagnes
-          </Link>
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-center">
           <span className="text-amber-400 font-bold">Mon compte</span>
-          <button onClick={handleLogout} className="text-stone-400 hover:text-stone-200 text-sm transition-colors">
-            Déconnexion
-          </button>
         </div>
       </header>
 

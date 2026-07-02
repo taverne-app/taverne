@@ -41,7 +41,6 @@ import {
   type AttackMacro,
   type ClassResource,
 } from '../api/characters'
-import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
@@ -207,7 +206,7 @@ function SaveDots({
 
 export function CharacterPage() {
   const { id } = useParams<{ id: string }>()
-  const { token, user, clearAuth } = useAuth()
+  const { token } = useAuth()
   const navigate = useNavigate()
 
   const [character, setCharacter] = useState<Character | null>(null)
@@ -1314,12 +1313,6 @@ export function CharacterPage() {
     })
   }
 
-  async function handleLogout() {
-    try { await logout() } catch { /* ignore */ }
-    clearAuth()
-    navigate('/login')
-  }
-
   if (loading) {
     return (
       <div className="min-h-screen bg-stone-950 flex items-center justify-center">
@@ -1450,13 +1443,6 @@ export function CharacterPage() {
             >
               ⎙ Imprimer
             </a>
-            <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
-            <button
-              onClick={handleLogout}
-              className="text-stone-400 hover:text-stone-200 text-sm transition-colors"
-            >
-              Déconnexion
-            </button>
           </div>
         </div>
       </header>

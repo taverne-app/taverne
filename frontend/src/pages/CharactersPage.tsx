@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { listCharacters, deleteCharacter, type Character } from '../api/characters'
-import { logout } from '../api/auth'
-import { useAuth } from '../contexts/AuthContext'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
 import { canLevelUp } from '../data/xp'
 
@@ -124,9 +122,6 @@ function CharacterCard({
 }
 
 export function CharactersPage() {
-  const { user, clearAuth } = useAuth()
-  const navigate = useNavigate()
-
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
@@ -148,42 +143,8 @@ export function CharactersPage() {
     setCharacters(cs => cs.filter(c => c.id !== id))
   }
 
-  async function handleLogout() {
-    try { await logout() } catch { /* ignore */ }
-    clearAuth()
-    navigate('/login')
-  }
-
   return (
     <div className="min-h-screen bg-stone-950">
-      {/* Header */}
-      <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="text-amber-400 font-bold text-lg">🍺 Taverne</span>
-          <div className="flex items-center gap-4">
-            <Link
-              to="/campaigns"
-              className="text-stone-400 hover:text-amber-400 text-sm transition-colors font-medium"
-            >
-              🗺 Campagnes
-            </Link>
-            <Link
-              to="/combat"
-              className="text-stone-400 hover:text-amber-400 text-sm transition-colors font-medium"
-            >
-              ⚔ Combat
-            </Link>
-            <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
-            <button
-              onClick={handleLogout}
-              className="text-stone-400 hover:text-stone-200 text-sm transition-colors"
-            >
-              Déconnexion
-            </button>
-          </div>
-        </div>
-      </header>
-
       {/* Main */}
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-4">

@@ -1,13 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { listCampaigns, createCampaign, deleteCampaign, type Campaign } from '../api/campaigns'
-import { logout } from '../api/auth'
 import { createCheckoutSession, createPortalSession } from '../api/billing'
 import { useAuth } from '../contexts/AuthContext'
 
 export function CampaignsPage() {
-  const { user, clearAuth, refreshUser } = useAuth()
-  const navigate = useNavigate()
+  const { user, refreshUser } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [upgradeSuccess, setUpgradeSuccess] = useState(false)
 
@@ -76,23 +74,11 @@ export function CampaignsPage() {
     } catch { /* ignore */ }
   }
 
-  async function handleLogout() {
-    try { await logout() } catch { /* ignore */ }
-    clearAuth()
-    navigate('/login')
-  }
-
   return (
     <div className="min-h-screen bg-stone-950">
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Link to="/characters" className="text-stone-400 hover:text-stone-200 text-sm transition-colors">
-              ← Personnages
-            </Link>
-            <span className="text-stone-700">|</span>
-            <span className="text-amber-400 font-bold">Campagnes</span>
-          </div>
+          <span className="text-amber-400 font-bold">Campagnes</span>
           <div className="flex items-center gap-3">
             {isPaid ? (
               <button
@@ -109,10 +95,6 @@ export function CampaignsPage() {
                 Gratuit — Passer Pro
               </button>
             )}
-            <Link to="/account" className="text-stone-400 hover:text-stone-200 text-sm transition-colors hidden sm:block">{user?.name}</Link>
-            <button onClick={handleLogout} className="text-stone-400 hover:text-stone-200 text-sm transition-colors">
-              Déconnexion
-            </button>
           </div>
         </div>
       </header>

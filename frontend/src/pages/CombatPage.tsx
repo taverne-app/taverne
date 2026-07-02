@@ -16,14 +16,12 @@ import {
   type CombatantFaction,
 } from '../api/combatants'
 import { createSession } from '../api/sessions'
-import { logout } from '../api/auth'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
 import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, CR_XP, type MonsterTemplate } from '../data/monsters'
 import { canLevelUp } from '../data/xp'
 import { CONDITIONS_FR } from '../data/conditions'
 import { ConditionTag } from '../components/ConditionTag'
-import { RulesCompendium } from '../components/RulesCompendium'
 import { XP_THRESHOLDS, encounterMultiplier, encounterDifficultyLabel, difficultyColor, computeEncounterDifficulty } from '../data/encounter_difficulty'
 import { MicButton } from '../components/MicButton'
 
@@ -398,7 +396,7 @@ function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, c
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function CombatPage() {
-  const { token, user, clearAuth } = useAuth()
+  const { token } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const campaignId = searchParams.get('campaign') ? Number(searchParams.get('campaign')) : null
@@ -676,6 +674,7 @@ export function CombatPage() {
   const [encounterMinCr, setEncounterMinCr] = useState('0')
   const [encounterMaxCr, setEncounterMaxCr] = useState('30')
   const [addedMonster, setAddedMonster] = useState<string | null>(null)
+  const [combatantError, setCombatantError] = useState<string | null>(null)
   const [charHpInputs, setCharHpInputs] = useState<Record<number, string>>({})
   const [concentrationPrompt, setConcentrationPrompt] = useState<{ character: Character; amount: number; dc: number } | null>(null)
   const [concentrationRoll, setConcentrationRoll] = useState<{ roll: number; mod: number; total: number; success: boolean } | null>(null)
@@ -1007,34 +1006,44 @@ export function CombatPage() {
     if (!campaignId || !combatantDraft.name.trim()) return
     const maxHp = parseInt(combatantDraft.max_hp, 10)
     if (!maxHp || maxHp < 1) return
-    const created = await createCombatant(campaignId, {
-      name: combatantDraft.name.trim(),
-      faction: combatantDraft.faction,
-      max_hp: maxHp,
-      armor_class: combatantDraft.ac ? parseInt(combatantDraft.ac, 10) || null : null,
-      initiative_roll: combatantDraft.initiative ? parseInt(combatantDraft.initiative, 10) || null : null,
-    })
-    setCombatants(prev => [...prev, created])
-    setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' })
-    setAddingCombatant(false)
-    logEvent('join', `${created.name} entre dans le combat`)
+    setCombatantError(null)
+    try {
+      const created = await createCombatant(campaignId, {
+        name: combatantDraft.name.trim(),
+        faction: combatantDraft.faction,
+        max_hp: maxHp,
+        armor_class: combatantDraft.ac ? parseInt(combatantDraft.ac, 10) || null : null,
+        initiative_roll: combatantDraft.initiative ? parseInt(combatantDraft.initiative, 10) || null : null,
+      })
+      setCombatants(prev => [...prev, created])
+      setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' })
+      setAddingCombatant(false)
+      logEvent('join', `${created.name} entre dans le combat`)
+    } catch (e) {
+      setCombatantError(e instanceof Error ? e.message : 'Erreur lors de l\'ajout')
+    }
   }
 
   async function handleAddMonster(m: MonsterTemplate) {
     if (!campaignId) return
+    setCombatantError(null)
     const hp = rollMonsterHp(m)
-    const initRoll = Math.floor(Math.random() * 20) + 1 + m.initiative_mod
-    const created = await createCombatant(campaignId, {
-      name: m.name,
-      max_hp: hp,
-      armor_class: m.ac,
-      initiative_roll: initRoll,
-    })
-    setCombatants(prev => [...prev, created])
-    setMonsterMap(prev => ({ ...prev, [created.id]: m }))
-    setAddedMonster(m.name)
-    setTimeout(() => setAddedMonster(null), 2000)
-    logEvent('join', `${m.name} entre dans le combat (${hp} PV, CA ${m.ac})`)
+    const initRoll = Math.min(30, Math.floor(Math.random() * 20) + 1 + m.initiative_mod)
+    try {
+      const created = await createCombatant(campaignId, {
+        name: m.name,
+        max_hp: hp,
+        armor_class: m.ac,
+        initiative_roll: initRoll,
+      })
+      setCombatants(prev => [...prev, created])
+      setMonsterMap(prev => ({ ...prev, [created.id]: m }))
+      setAddedMonster(m.name)
+      setTimeout(() => setAddedMonster(null), 2000)
+      logEvent('join', `${m.name} entre dans le combat (${hp} PV, CA ${m.ac})`)
+    } catch (e) {
+      setCombatantError(e instanceof Error ? e.message : 'Erreur lors de l\'ajout')
+    }
   }
 
   async function handleDeathSave(character: Character, type: 'successes' | 'failures', value: number) {
@@ -1095,12 +1104,6 @@ export function CombatPage() {
     setEncounterEntries(entries)
     setShowSavedEncounters(false)
     setShowEncounterBuilder(true)
-  }
-
-  async function handleLogout() {
-    try { await logout() } catch { /* ignore */ }
-    clearAuth()
-    navigate('/login')
   }
 
   async function handleReset() {
@@ -1479,7 +1482,6 @@ export function CombatPage() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            <RulesCompendium />
             <button
               onClick={() => setDmDiceOpen(v => !v)}
               className={`text-sm font-bold px-3 py-1 rounded-lg border transition-colors ${
@@ -1510,13 +1512,6 @@ export function CombatPage() {
                 {linkCopied ? '✓ Copié' : '⟳ Vue joueurs'}
               </button>
             )}
-            <span className="text-stone-400 text-sm hidden sm:block">{user?.name}</span>
-            <button
-              onClick={handleLogout}
-              className="text-stone-400 hover:text-stone-200 text-sm transition-colors"
-            >
-              Déconnexion
-            </button>
           </div>
         </div>
       </header>
@@ -2958,6 +2953,9 @@ export function CombatPage() {
           {/* Add combatant section */}
           {campaignId && (
             <div className="border-t border-stone-800 px-5 py-3">
+              {combatantError && (
+                <p className="text-red-400 text-xs mb-2">⚠ {combatantError}</p>
+              )}
               {!addingCombatant && !showBestiary && !showEncounterBuilder ? (
                 <div className="flex items-center gap-4 flex-wrap">
                   <button
