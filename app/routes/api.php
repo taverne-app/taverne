@@ -27,8 +27,10 @@ Route::middleware('throttle:5,1')->group(function () {
 Route::post('/billing/webhook', [BillingController::class, 'handleWebhook']);
 
 // Vues partagées (public) — ordre important : la route spécifique avant la générique
-Route::get('/share/character/{token}', [ShareController::class, 'showCharacter']);
-Route::get('/share/{token}',           [ShareController::class, 'show']);
+Route::get('/share/character/{token}',          [ShareController::class, 'showCharacter']);
+Route::patch('/share/character/{token}/hp',     [ShareController::class, 'updateHp']);
+Route::post('/share/character/{token}/roll',    [ShareController::class, 'rollDice']);
+Route::get('/share/{token}',                    [ShareController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user', fn (Request $request) => $request->user());
