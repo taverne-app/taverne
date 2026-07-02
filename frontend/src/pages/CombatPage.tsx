@@ -680,6 +680,23 @@ export function CombatPage() {
   const [concentrationRoll, setConcentrationRoll] = useState<{ roll: number; mod: number; total: number; success: boolean } | null>(null)
 
   const echoRef = useRef<ReturnType<typeof createEcho> | null>(null)
+  const restoredRef = useRef(false)
+  const withRollDisplayRef = useRef<typeof withRollDisplay>([])
+
+  // Restore combat turn state from localStorage after data loads
+  useEffect(() => {
+    if (loading || restoredRef.current || !campaignId) return
+    restoredRef.current = true
+    try {
+      const savedRound = parseInt(localStorage.getItem(`taverne-combat-round-${campaignId}`) ?? '', 10)
+      if (!isNaN(savedRound) && savedRound >= 1) setRoundNumber(savedRound)
+      const savedActiveId = localStorage.getItem(`taverne-combat-active-${campaignId}`)
+      if (savedActiveId && withRollDisplayRef.current.length > 0) {
+        const idx = withRollDisplayRef.current.findIndex(r => rowId(r) === savedActiveId)
+        if (idx >= 0) setActiveTurn(idx)
+      }
+    } catch { /* ignore */ }
+  }, [loading, campaignId])
 
   // Load characters + combatants
   useEffect(() => {
@@ -763,6 +780,7 @@ export function CombatPage() {
       ]
     : sorted
   const withRollDisplay = displayRows.filter(r => r.initiativeRoll != null)
+  withRollDisplayRef.current = withRollDisplay
 
   const activeCombatant = withRollDisplay[activeTurn % Math.max(1, withRollDisplay.length)] ?? null
 
@@ -1118,6 +1136,13 @@ export function CombatPage() {
     }
     setActiveTurn(0)
     setRoundNumber(1)
+    if (campaignId) {
+      try {
+        localStorage.removeItem(`taverne-combat-round-${campaignId}`)
+        localStorage.removeItem(`taverne-combat-active-${campaignId}`)
+      } catch { /* ignore */ }
+    }
+    restoredRef.current = false
   }
 
   async function handleClearCombatants() {
@@ -1276,6 +1301,13 @@ export function CombatPage() {
     }
 
     startTurnTimer()
+
+    if (campaignId) {
+      try {
+        localStorage.setItem(`taverne-combat-round-${campaignId}`, String(newRound))
+        if (nextRow) localStorage.setItem(`taverne-combat-active-${campaignId}`, rowId(nextRow))
+      } catch { /* ignore */ }
+    }
 
     if (campaignId && campaign?.share_token) {
       broadcastCombatTurn(campaignId, {
