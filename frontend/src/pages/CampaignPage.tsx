@@ -34,7 +34,7 @@ import {
 } from '../api/sessions'
 import { createCombatant } from '../api/combatants'
 import { useAuth } from '../contexts/AuthContext'
-import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
 import { MicButton } from '../components/MicButton'
@@ -316,7 +316,7 @@ export function CampaignPage() {
   // Real-time WS subscription per character
   const charIds = characters.map(c => c.id).join(',')
   useEffect(() => {
-    if (!token || characters.length === 0 || !REVERB_CONFIGURED) return
+    if (!token || characters.length === 0 || !REALTIME_CONFIGURED) return
     const echo = createEcho(token)
     characters.forEach(c => {
       echo.private(`character.${c.id}`).listen('.character.updated', (e: { character: Character }) => {

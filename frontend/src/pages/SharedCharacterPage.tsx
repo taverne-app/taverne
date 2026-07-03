@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { getSharedCharacter, type Character, type AbilityName, type DiceRoll } from '../api/characters'
 import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
 import { MarkdownText } from '../components/MarkdownText'
-import { createPublicEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 
 const ABILITY_LABELS: [AbilityName, string, string][] = [
   ['strength', 'FOR', 'Force'],
@@ -106,7 +106,7 @@ export function SharedCharacterPage() {
   }, [token])
 
   useEffect(() => {
-    if (!character?.campaign_share_token || !REVERB_CONFIGURED) return
+    if (!character?.campaign_share_token || !REALTIME_CONFIGURED) return
     const echo = createPublicEcho()
     echo.channel(`campaign-share.${character.campaign_share_token}`)
       .listen('.combat.turn-updated', (e: { active_kind: string | null; active_id: number | null; round: number }) => {

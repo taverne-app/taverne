@@ -4,7 +4,7 @@ import { getSharedCampaign } from '../api/share'
 import type { Campaign, CampaignSession, TreasureItem } from '../api/campaigns'
 import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
-import { createPublicEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MarkdownText } from '../components/MarkdownText'
 
 const CONDITIONS_FR: Record<string, string> = {
@@ -328,7 +328,7 @@ export function SharedCampaignPage() {
   }, [token])
 
   useEffect(() => {
-    if (!token || (characters.length === 0 && combatants.length === 0) || !REVERB_CONFIGURED) return
+    if (!token || (characters.length === 0 && combatants.length === 0) || !REALTIME_CONFIGURED) return
     const echo = createPublicEcho()
     echo.channel(`campaign-share.${token}`)
       .listen('.character.updated', (e: { character: Character }) => {

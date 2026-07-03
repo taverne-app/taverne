@@ -42,7 +42,7 @@ import {
   type ClassResource,
 } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
-import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
@@ -283,7 +283,7 @@ export function CharacterPage() {
   }, [id, navigate])
 
   useEffect(() => {
-    if (!id || !token || !REVERB_CONFIGURED) return
+    if (!id || !token || !REALTIME_CONFIGURED) return
     const echo = createEcho(token)
     echo
       .private(`character.${id}`)
@@ -1276,7 +1276,7 @@ export function CharacterPage() {
 
   // WS: also capture dice.rolled events
   useEffect(() => {
-    if (!id || !token || !REVERB_CONFIGURED) return
+    if (!id || !token || !REALTIME_CONFIGURED) return
     const echo = createEcho(token)
     echo.private(`character.${id}`).listen('.dice.rolled', (e: DiceRoll) => {
       setRollHistory(h => [e, ...h].slice(0, 30))

@@ -4,7 +4,7 @@ import { getSharedCampaign } from '../api/share'
 import type { Campaign } from '../api/campaigns'
 import type { Combatant } from '../api/combatants'
 import type { Character } from '../api/characters'
-import { createPublicEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -46,7 +46,7 @@ export function LiveCombatPage() {
   }, [token])
 
   useEffect(() => {
-    if (!token || !REVERB_CONFIGURED) return
+    if (!token || !REALTIME_CONFIGURED) return
     const echo = createPublicEcho()
     echo.channel(`campaign-share.${token}`)
       .listen('.combat.turn-updated', (e: LiveState) => {
@@ -131,7 +131,7 @@ export function LiveCombatPage() {
             )}
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {REVERB_CONFIGURED && (
+            {REALTIME_CONFIGURED && (
               <div className={`flex items-center gap-1.5 text-xs ${connected ? 'text-emerald-400' : 'text-stone-600'}`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${connected ? 'bg-emerald-400 animate-pulse' : 'bg-stone-600'}`} />
                 {connected ? 'En direct' : 'Attente…'}

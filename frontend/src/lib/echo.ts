@@ -1,22 +1,26 @@
 import Echo from 'laravel-echo'
 import Pusher from 'pusher-js'
 
-export const REVERB_CONFIGURED = !!import.meta.env.VITE_REVERB_APP_KEY
+export const REALTIME_CONFIGURED = !!import.meta.env.VITE_ABLY_KEY
 
-const reverbBase = {
-  broadcaster: 'reverb' as const,
-  key: import.meta.env.VITE_REVERB_APP_KEY as string,
-  wsHost: import.meta.env.VITE_REVERB_HOST as string,
-  wsPort: Number(import.meta.env.VITE_REVERB_PORT ?? 8080),
-  wssPort: Number(import.meta.env.VITE_REVERB_PORT ?? 8080),
-  forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'http') === 'https',
+// Ably exposes a Pusher-compatible endpoint — no extra npm package needed.
+// Key format: the full Ably key "appId.keyId:secret" — only the public part
+// (before ":") goes in VITE_ABLY_KEY; the full key stays server-side.
+const ablyBase = {
+  broadcaster: 'pusher' as const,
+  key: import.meta.env.VITE_ABLY_KEY as string,
+  wsHost: 'realtime-pusher.ably.io',
+  wsPort: 443,
+  wssPort: 443,
+  forceTLS: true,
+  disableStats: true,
   enabledTransports: ['ws', 'wss'] as ['ws', 'wss'],
   Pusher,
 }
 
-export function createEcho(token: string): Echo<'reverb'> {
-  return new Echo<'reverb'>({
-    ...reverbBase,
+export function createEcho(token: string): Echo<'pusher'> {
+  return new Echo<'pusher'>({
+    ...ablyBase,
     authEndpoint: '/api/broadcasting/auth',
     auth: {
       headers: {
@@ -27,6 +31,6 @@ export function createEcho(token: string): Echo<'reverb'> {
   })
 }
 
-export function createPublicEcho(): Echo<'reverb'> {
-  return new Echo<'reverb'>(reverbBase)
+export function createPublicEcho(): Echo<'pusher'> {
+  return new Echo<'pusher'>(ablyBase)
 }

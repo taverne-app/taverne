@@ -17,7 +17,7 @@ import {
 } from '../api/combatants'
 import { createSession } from '../api/sessions'
 import { useAuth } from '../contexts/AuthContext'
-import { createEcho, REVERB_CONFIGURED } from '../lib/echo'
+import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, CR_XP, type MonsterTemplate } from '../data/monsters'
 import { canLevelUp } from '../data/xp'
 import { CONDITIONS_FR } from '../data/conditions'
@@ -719,7 +719,7 @@ export function CombatPage() {
 
   // WS subscriptions
   useEffect(() => {
-    if (!token || (characters.length === 0 && combatants.length === 0) || !REVERB_CONFIGURED) return
+    if (!token || (characters.length === 0 && combatants.length === 0) || !REALTIME_CONFIGURED) return
 
     const echo = createEcho(token)
     echoRef.current = echo
