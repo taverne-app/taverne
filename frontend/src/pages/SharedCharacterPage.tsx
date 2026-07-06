@@ -186,16 +186,9 @@ export function SharedCharacterPage() {
 
   return (
     <div
-      className="min-h-screen bg-stone-950 text-white"
-      style={{ isolation: 'isolate' }}
+      className="min-h-screen text-white"
+      style={{ backgroundColor: tod.bgColor, transition: 'background-color 3000ms ease' }}
     >
-      {/* Ambiance — moment de la journée */}
-      {tod.overlay && (
-        <div
-          className="fixed inset-0 pointer-events-none transition-all duration-[3000ms]"
-          style={{ backgroundColor: tod.overlay, zIndex: -1 }}
-        />
-      )}
       {/* Header */}
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
