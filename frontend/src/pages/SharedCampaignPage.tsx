@@ -30,27 +30,30 @@ function CharacterCard({ c }: { c: Character }) {
   const isUnconscious = c.state.conditions.includes('unconscious')
 
   return (
-    <div className={`bg-stone-900 border rounded-2xl p-5 transition-colors ${isDying ? 'border-red-800' : 'border-stone-800'}`}>
+    <div
+      className={`border rounded-2xl p-5 transition-colors shadow-[0_4px_24px_rgba(0,0,0,0.4)] ${isDying ? 'border-red-300' : 'border-amber-200/70'}`}
+      style={{ background: 'linear-gradient(160deg, #fdfcf8 0%, #f5ead0 100%)' }}
+    >
       {/* Name + class */}
       <div className="mb-4 flex items-start gap-3">
         {c.portrait_url && (
           <img
             src={c.portrait_url}
             alt={c.name}
-            className="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-stone-700"
+            className="w-14 h-14 rounded-full object-cover shrink-0 border-2 border-amber-200"
             onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
           />
         )}
         <div className="min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className={`font-bold text-xl leading-tight ${isDying ? 'text-red-400' : 'text-white'}`}>
+            <h2 className={`font-bold text-xl leading-tight ${isDying ? 'text-red-600' : 'text-stone-900'}`}>
               {c.name}
             </h2>
             {c.combat.inspiration && (
-              <span className="text-amber-400 text-sm" title="Inspiration">✦</span>
+              <span className="text-amber-600 text-sm" title="Inspiration">✦</span>
             )}
             {(isDying || isUnconscious) && (
-              <span className="text-sm font-normal text-red-400">
+              <span className="text-sm font-normal text-red-500">
                 {isDying ? '— Mourant' : '— Inconscient'}
               </span>
             )}
@@ -59,7 +62,7 @@ function CharacterCard({ c }: { c: Character }) {
             {c.race} · {c.character_class} · Niveau {c.level}
           </p>
           {c.state.concentrating_on && (
-            <span className="inline-flex items-center gap-1 mt-1 text-xs bg-violet-900/50 border border-violet-700/50 text-violet-300 rounded-full px-2 py-0.5">
+            <span className="inline-flex items-center gap-1 mt-1 text-xs bg-violet-100/80 border border-violet-400/50 text-violet-800 rounded-full px-2 py-0.5">
               ◈ {c.state.concentrating_on}
             </span>
           )}
@@ -69,16 +72,16 @@ function CharacterCard({ c }: { c: Character }) {
       {/* HP section */}
       <div className="mb-4">
         <div className="flex items-baseline justify-between mb-2">
-          <span className="text-stone-400 text-sm font-medium">Points de vie</span>
-          <span className={`text-2xl font-bold tabular-nums ${isDying ? 'text-red-400' : 'text-white'}`}>
+          <span className="text-stone-600 text-sm font-medium">Points de vie</span>
+          <span className={`text-2xl font-bold tabular-nums ${isDying ? 'text-red-600' : 'text-stone-900'}`}>
             {c.combat.current_hp}
             <span className="text-stone-500 text-base font-normal"> / {c.combat.max_hp}</span>
             {c.combat.temporary_hp > 0 && (
-              <span className="text-sky-400 text-base font-semibold ml-1">+{c.combat.temporary_hp}</span>
+              <span className="text-sky-600 text-base font-semibold ml-1">+{c.combat.temporary_hp}</span>
             )}
           </span>
         </div>
-        <div className="h-3 bg-stone-700 rounded-full overflow-hidden">
+        <div className="h-3 bg-amber-200 rounded-full overflow-hidden">
           <div
             className={`h-full rounded-full transition-all duration-500 ${hpColor(c.combat.current_hp, c.combat.max_hp)}`}
             style={{ width: `${hpPct}%` }}
@@ -88,17 +91,17 @@ function CharacterCard({ c }: { c: Character }) {
 
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-2 mb-4">
-        <div className="bg-stone-800 rounded-xl py-2.5 text-center">
+        <div className="bg-amber-100/80 rounded-xl py-2.5 text-center">
           <p className="text-stone-500 text-xs mb-0.5">CA</p>
-          <p className="text-white font-bold text-xl">{c.combat.armor_class}</p>
+          <p className="text-stone-900 font-bold text-xl">{c.combat.armor_class}</p>
         </div>
-        <div className="bg-stone-800 rounded-xl py-2.5 text-center">
+        <div className="bg-amber-100/80 rounded-xl py-2.5 text-center">
           <p className="text-stone-500 text-xs mb-0.5">Initiative</p>
-          <p className="text-white font-bold text-xl">{sign(c.combat.initiative)}</p>
+          <p className="text-stone-900 font-bold text-xl">{sign(c.combat.initiative)}</p>
         </div>
-        <div className="bg-stone-800 rounded-xl py-2.5 text-center">
+        <div className="bg-amber-100/80 rounded-xl py-2.5 text-center">
           <p className="text-stone-500 text-xs mb-0.5">Maîtrise</p>
-          <p className="text-white font-bold text-xl">+{c.proficiency_bonus}</p>
+          <p className="text-stone-900 font-bold text-xl">+{c.proficiency_bonus}</p>
         </div>
       </div>
 
@@ -107,14 +110,14 @@ function CharacterCard({ c }: { c: Character }) {
         <div className="flex flex-wrap gap-2 mb-3">
           {c.resources.map((r, i) => (
             <div key={i} className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 ${
-              r.current === 0 ? 'bg-stone-800 border-stone-700' : 'bg-stone-800 border-stone-600'
+              r.current === 0 ? 'bg-amber-50 border-amber-200' : 'bg-amber-100/60 border-amber-300/60'
             }`}>
-              <span className={`text-xs font-medium ${r.current === 0 ? 'text-stone-600' : 'text-stone-300'}`}>
+              <span className={`text-xs font-medium ${r.current === 0 ? 'text-stone-500' : 'text-stone-700'}`}>
                 {r.name}
               </span>
               <div className="flex gap-0.5">
                 {Array.from({ length: r.max }, (_, j) => (
-                  <div key={j} className={`w-2 h-2 rounded-full ${j < r.current ? 'bg-amber-400' : 'bg-stone-700'}`} />
+                  <div key={j} className={`w-2 h-2 rounded-full ${j < r.current ? 'bg-amber-500' : 'bg-stone-300'}`} />
                 ))}
               </div>
             </div>
@@ -128,7 +131,7 @@ function CharacterCard({ c }: { c: Character }) {
           {c.state.conditions.map(cond => (
             <span
               key={cond}
-              className="text-sm bg-purple-900/50 border border-purple-700 text-purple-300 rounded-lg px-2.5 py-1"
+              className="text-sm bg-purple-100/80 border border-purple-400/50 text-purple-800 rounded-lg px-2.5 py-1"
             >
               {CONDITIONS_FR[cond] ?? cond}
             </span>
@@ -138,25 +141,25 @@ function CharacterCard({ c }: { c: Character }) {
 
       {/* Death saves */}
       {isDying && (c.state.death_saves_successes > 0 || c.state.death_saves_failures > 0) && (
-        <div className="mt-3 pt-3 border-t border-stone-800 flex items-center gap-4 text-sm">
+        <div className="mt-3 pt-3 border-t border-amber-200/60 flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1.5">
-            <span className="text-emerald-400">Succès</span>
+            <span className="text-emerald-600">Succès</span>
             <div className="flex gap-1">
               {[0, 1, 2].map(i => (
                 <div
                   key={i}
-                  className={`w-3 h-3 rounded-full border ${i < c.state.death_saves_successes ? 'bg-emerald-500 border-emerald-500' : 'border-stone-600'}`}
+                  className={`w-3 h-3 rounded-full border ${i < c.state.death_saves_successes ? 'bg-emerald-500 border-emerald-500' : 'border-stone-400'}`}
                 />
               ))}
             </div>
           </div>
           <div className="flex items-center gap-1.5">
-            <span className="text-red-400">Échecs</span>
+            <span className="text-red-500">Échecs</span>
             <div className="flex gap-1">
               {[0, 1, 2].map(i => (
                 <div
                   key={i}
-                  className={`w-3 h-3 rounded-full border ${i < c.state.death_saves_failures ? 'bg-red-500 border-red-500' : 'border-stone-600'}`}
+                  className={`w-3 h-3 rounded-full border ${i < c.state.death_saves_failures ? 'bg-red-500 border-red-500' : 'border-stone-400'}`}
                 />
               ))}
             </div>

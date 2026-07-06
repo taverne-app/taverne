@@ -245,6 +245,24 @@ export function SharedCharacterPage() {
         >
           <div className="p-4 space-y-4">
 
+            {/* Portrait header */}
+            {character.portrait_url && (
+              <div className="flex flex-col items-center pb-2 border-b border-amber-200/60">
+                <img
+                  src={character.portrait_url}
+                  alt={character.name}
+                  className="w-28 h-36 rounded-xl object-cover object-top border-2 border-amber-200 shadow-lg mb-3"
+                  onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
+                />
+                <p className={`font-bold text-lg text-center leading-tight ${isDying ? 'text-red-600' : 'text-stone-900'}`}>
+                  {character.name}
+                </p>
+                <p className="text-stone-500 text-xs text-center mt-1">
+                  {character.race} · {character.character_class}{character.subclass ? ` (${character.subclass})` : ''} · Niv. {character.level}
+                </p>
+              </div>
+            )}
+
             {/* Dice result toast */}
             <div ref={rollToastRef}>
               {lastRoll ? (
