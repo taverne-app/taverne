@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCharacter, type Character, type AbilityName, type DiceRoll } from '../api/characters'
 import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
 import { MarkdownText } from '../components/MarkdownText'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
+import { TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
 
 const ABILITY_LABELS: [AbilityName, string, string][] = [
   ['strength', 'FOR', 'Force'],
@@ -96,12 +97,17 @@ export function SharedCharacterPage() {
   const [hpLoading, setHpLoading] = useState(false)
   const [isMyTurn, setIsMyTurn] = useState(false)
   const [combatRound, setCombatRound] = useState<number | null>(null)
+  const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('none')
   const rollToastRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!token) return
     getSharedCharacter(token)
-      .then(c => { setCharacter(c); document.title = `${c.name} — Taverne` })
+      .then(c => {
+        setCharacter(c)
+        setTimeOfDay((c.campaign_time_of_day as TimeOfDay) ?? 'none')
+        document.title = `${c.name} — Taverne`
+      })
       .catch(() => setError(true))
   }, [token])
 
@@ -112,6 +118,9 @@ export function SharedCharacterPage() {
       .listen('.combat.turn-updated', (e: { active_kind: string | null; active_id: number | null; round: number }) => {
         setIsMyTurn(e.active_kind === 'character' && e.active_id === character.id)
         setCombatRound(e.round)
+      })
+      .listen('.campaign.time-updated', (e: { time_of_day: string | null }) => {
+        setTimeOfDay((e.time_of_day as TimeOfDay) ?? 'none')
       })
     return () => { echo.leave(`campaign-share.${character.campaign_share_token!}`); echo.disconnect() }
   }, [character?.campaign_share_token, character?.id])
@@ -157,6 +166,14 @@ export function SharedCharacterPage() {
   const hpPct = Math.max(0, Math.min(100, (character.combat.current_hp / character.combat.max_hp) * 100))
   const isDying = character.combat.current_hp <= 0
 
+  const tod = TIME_OF_DAY_CONFIG[timeOfDay]
+  // When the overlay is dark, shift dim stone colors 1 level lighter so labels stay readable
+  const darkAdaptVars = tod.isDark ? {
+    '--color-stone-500': 'var(--color-stone-400)',
+    '--color-stone-600': 'var(--color-stone-500)',
+    '--color-stone-800': 'var(--color-stone-700)',
+  } : {}
+
   const slots = Object.entries(character.spellcasting.slots)
     .filter(([, s]) => s.max > 0)
     .sort(([a], [b]) => Number(a) - Number(b))
@@ -174,7 +191,17 @@ export function SharedCharacterPage() {
   const equippedItems = character.inventory.items.filter(i => i.equipped)
 
   return (
-    <div className="min-h-screen bg-stone-950 text-white">
+    <div
+      className="min-h-screen bg-stone-950 text-white"
+      style={{ isolation: 'isolate', ...darkAdaptVars } as React.CSSProperties}
+    >
+      {/* Ambiance — moment de la journée */}
+      {tod.overlay && (
+        <div
+          className="fixed inset-0 pointer-events-none transition-all duration-[3000ms]"
+          style={{ backgroundColor: tod.overlay, zIndex: -1 }}
+        />
+      )}
       {/* Header */}
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">

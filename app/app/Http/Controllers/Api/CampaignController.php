@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\CampaignTimeUpdated;
 use App\Events\CombatTurnUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CampaignResource;
@@ -139,6 +140,24 @@ class CampaignController extends Controller
         $campaign->update(['share_token' => null]);
 
         return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
+    }
+
+    public function setTimeOfDay(Request $request, Campaign $campaign): JsonResponse
+    {
+        $this->authorize($request, $campaign);
+
+        $validated = $request->validate([
+            'time_of_day' => ['nullable', 'string', 'in:none,dawn,morning,noon,afternoon,dusk,night,midnight'],
+        ]);
+
+        $timeOfDay = $validated['time_of_day'] === 'none' ? null : ($validated['time_of_day'] ?? null);
+        $campaign->update(['time_of_day' => $timeOfDay]);
+
+        if ($campaign->share_token) {
+            CampaignTimeUpdated::dispatch($campaign->share_token, $timeOfDay);
+        }
+
+        return response()->json(['time_of_day' => $timeOfDay]);
     }
 
     public function broadcastTurn(Request $request, Campaign $campaign): JsonResponse

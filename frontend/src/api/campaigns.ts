@@ -148,6 +148,7 @@ export interface Campaign {
   campaign_milestones: Milestone[]
   quests: Quest[]
   share_token: string | null
+  time_of_day: string | null
   characters: Character[]
   combatants?: Combatant[]
   sessions?: CampaignSession[]
@@ -213,4 +214,12 @@ export async function broadcastCombatTurn(
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+export async function setCampaignTimeOfDay(campaignId: number, timeOfDay: string | null): Promise<void> {
+  const res = await apiFetch(`/campaigns/${campaignId}/time-of-day`, {
+    method: 'PATCH',
+    body: JSON.stringify({ time_of_day: timeOfDay }),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
 }

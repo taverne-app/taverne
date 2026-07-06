@@ -35,6 +35,8 @@ import {
 import { createCombatant } from '../api/combatants'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
+import { TIME_OF_DAY, TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
+import { setCampaignTimeOfDay } from '../api/campaigns'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
 import { MicButton } from '../components/MicButton'
@@ -79,6 +81,7 @@ export function CampaignPage() {
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading]       = useState(true)
   const [saving, setSaving]         = useState(false)
+  const [todSaving, setTodSaving]   = useState(false)
 
   // Inline name/description editing
   const [editing, setEditing]       = useState(false)
@@ -377,6 +380,16 @@ export function CampaignPage() {
       setCharacters(updated.characters)
       setConfirmRemove(null)
     } finally { setSaving(false) }
+  }
+
+  async function handleSetTimeOfDay(value: TimeOfDay) {
+    if (!campaign || todSaving) return
+    setTodSaving(true)
+    const tod = value === 'none' ? null : value
+    setCampaign(c => c ? { ...c, time_of_day: tod } : null)
+    try { await setCampaignTimeOfDay(campaign.id, tod) }
+    catch { setCampaign(c => c ? { ...c, time_of_day: campaign.time_of_day } : null) }
+    finally { setTodSaving(false) }
   }
 
   async function handleShare() {
@@ -1562,6 +1575,35 @@ export function CampaignPage() {
         })()}
 
         {activeTab === 'session' && <>
+        {/* Moment de la journée */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
+          <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">Ambiance — moment de la journée</p>
+          <div className="grid grid-cols-4 gap-2">
+            {TIME_OF_DAY.map(tod => {
+              const cfg = TIME_OF_DAY_CONFIG[tod]
+              const active = (campaign?.time_of_day ?? 'none') === tod
+              return (
+                <button
+                  key={tod}
+                  onClick={() => handleSetTimeOfDay(tod)}
+                  disabled={todSaving}
+                  className={`flex flex-col items-center gap-1 py-2 px-1 rounded-lg border text-xs transition-colors ${
+                    active
+                      ? 'bg-amber-900/60 border-amber-600 text-amber-300'
+                      : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-300'
+                  }`}
+                >
+                  <span className="text-lg leading-none">{cfg.emoji}</span>
+                  <span>{cfg.label}</span>
+                </button>
+              )
+            })}
+          </div>
+          {campaign?.share_token && (
+            <p className="text-stone-600 text-xs mt-2">Visible en temps réel sur les fiches joueurs</p>
+          )}
+        </div>
+
         {/* Tableau de bord MJ */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
           <button

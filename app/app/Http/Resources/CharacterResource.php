@@ -105,6 +105,7 @@ class CharacterResource extends JsonResource
             'campaign_id'          => $this->campaign_id,
             'share_token'          => $this->share_token,
             'campaign_share_token' => $this->campaign?->share_token,
+            'campaign_time_of_day' => $this->campaign?->time_of_day,
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,
         ];

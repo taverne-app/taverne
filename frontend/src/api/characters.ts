@@ -137,6 +137,7 @@ export interface Character {
   campaign_id: number | null
   share_token: string | null
   campaign_share_token: string | null
+  campaign_time_of_day: string | null
 }
 
 export interface CreateCharacterPayload {
