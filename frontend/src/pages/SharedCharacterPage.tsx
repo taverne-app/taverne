@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCharacter, type Character, type AbilityName, type DiceRoll } from '../api/characters'
 import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
@@ -167,12 +167,6 @@ export function SharedCharacterPage() {
   const isDying = character.combat.current_hp <= 0
 
   const tod = TIME_OF_DAY_CONFIG[timeOfDay]
-  // When the overlay is dark, shift dim stone colors 1 level lighter so labels stay readable
-  const darkAdaptVars = tod.isDark ? {
-    '--color-stone-500': 'var(--color-stone-400)',
-    '--color-stone-600': 'var(--color-stone-500)',
-    '--color-stone-800': 'var(--color-stone-700)',
-  } : {}
 
   const slots = Object.entries(character.spellcasting.slots)
     .filter(([, s]) => s.max > 0)
@@ -193,7 +187,7 @@ export function SharedCharacterPage() {
   return (
     <div
       className="min-h-screen bg-stone-950 text-white"
-      style={{ isolation: 'isolate', ...darkAdaptVars } as React.CSSProperties}
+      style={{ isolation: 'isolate' }}
     >
       {/* Ambiance — moment de la journée */}
       {tod.overlay && (
