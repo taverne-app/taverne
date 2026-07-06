@@ -185,10 +185,7 @@ export function SharedCharacterPage() {
   const equippedItems = character.inventory.items.filter(i => i.equipped)
 
   return (
-    <div
-      className="min-h-screen text-white"
-      style={{ backgroundColor: tod.bgColor, transition: 'background-color 3000ms ease' }}
-    >
+    <div className="min-h-screen bg-stone-950 text-white">
       {/* Header — dark chrome */}
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
@@ -243,8 +240,8 @@ export function SharedCharacterPage() {
 
         {/* Parchment card */}
         <div
-          className="mx-4 mt-4 rounded-2xl overflow-hidden border border-amber-300/25 shadow-[0_12px_56px_rgba(0,0,0,0.55),_0_2px_8px_rgba(0,0,0,0.3)]"
-          style={{ background: 'linear-gradient(165deg, #fdf8ef 0%, #f5e6c8 45%, #ede0ba 100%)' }}
+          className="mx-4 mt-4 rounded-2xl overflow-hidden border border-stone-300/30 shadow-[0_12px_56px_rgba(0,0,0,0.55),_0_2px_8px_rgba(0,0,0,0.3)]"
+          style={{ backgroundColor: tod.parchmentColor, transition: 'background-color 3000ms ease' }}
         >
           <div className="p-4 space-y-4">
 
