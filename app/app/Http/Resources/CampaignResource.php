@@ -28,6 +28,7 @@ class CampaignResource extends JsonResource
             'campaign_milestones'   => $this->campaign_milestones ?? [],
             'quests'                => $this->quests ?? [],
             'share_token'      => $this->share_token,
+            'time_of_day'      => $this->time_of_day,
             'characters'  => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'  => CombatantResource::collection($this->whenLoaded('combatants')),
             'sessions'    => SessionResource::collection($this->whenLoaded('sessions')),
