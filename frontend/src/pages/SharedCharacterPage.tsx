@@ -46,6 +46,93 @@ function hpColor(current: number, max: number) {
   return 'bg-red-500'
 }
 
+type Theme = 'A' | 'B'
+type ThemeChoice = 'dark' | 'light' | 'system'
+
+function resolveTheme(choice: ThemeChoice): Theme {
+  if (choice === 'dark') return 'A'
+  if (choice === 'light') return 'B'
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'A' : 'B'
+}
+
+function buildTheme(t: Theme, parchmentColor: string) {
+  if (t === 'A') return {
+    cardStyle: {} as React.CSSProperties,
+    cardClass: 'bg-stone-900 border-stone-700',
+    text: 'text-white',
+    textMuted: 'text-stone-400',
+    textBody: 'text-stone-300',
+    textAccent: 'text-amber-400',
+    dyingText: 'text-red-400',
+    tempHp: 'text-sky-400',
+    inspiration: 'text-amber-400',
+    section: 'bg-stone-800 border-stone-700',
+    sectionHeader: 'text-amber-400 text-xs font-semibold uppercase tracking-widest',
+    innerBorder: 'border-stone-700',
+    advantageBorder: 'border-stone-700',
+    advantageInactive: 'bg-stone-800 text-stone-400',
+    cell: 'bg-stone-700 border-stone-600',
+    cellHover: 'hover:bg-stone-600 hover:border-stone-500',
+    skillHover: 'hover:bg-stone-700/70',
+    hpBg: 'bg-stone-700',
+    input: 'bg-stone-700 border-stone-600 text-white focus:border-stone-400',
+    profDot: 'bg-amber-400',
+    expertDot: 'bg-amber-300',
+    unprofDot: 'bg-stone-600',
+    rollPlaceholder: 'border-stone-700 bg-stone-800/40 text-stone-500',
+    portraitBorder: 'border-b border-stone-700',
+    portraitImgBorder: 'border-stone-600',
+    footer: 'text-stone-600',
+    conditionBadge: 'bg-purple-900/40 border-purple-500/50 text-purple-300',
+    concentrationBadge: 'bg-violet-900/40 border-violet-500/50 text-violet-300',
+    spellPrepared: 'bg-violet-900/40 border-violet-500/50 text-violet-300',
+    spellUnprepared: 'bg-stone-700 border-stone-600 text-stone-400',
+    spellConcentration: 'text-violet-400',
+    spellDmg: 'text-indigo-400',
+    slotEmpty: 'border-stone-500',
+    detailsSummary: 'text-stone-500 hover:text-stone-300 transition-colors',
+    magicalItem: 'text-violet-400',
+  }
+
+  return {
+    cardStyle: { backgroundColor: parchmentColor } as React.CSSProperties,
+    cardClass: 'border-stone-200',
+    text: 'text-stone-900',
+    textMuted: 'text-stone-500',
+    textBody: 'text-stone-600',
+    textAccent: 'text-amber-700',
+    dyingText: 'text-red-600',
+    tempHp: 'text-sky-600',
+    inspiration: 'text-amber-700',
+    section: 'bg-white border-stone-200',
+    sectionHeader: 'text-stone-500 text-xs font-bold uppercase tracking-widest',
+    innerBorder: 'border-stone-200',
+    advantageBorder: 'border-stone-300',
+    advantageInactive: 'bg-stone-50 text-stone-500',
+    cell: 'bg-stone-50 border-stone-200',
+    cellHover: 'hover:bg-stone-100 hover:border-stone-300',
+    skillHover: 'hover:bg-stone-100',
+    hpBg: 'bg-stone-200',
+    input: 'bg-white border-stone-400 text-stone-900 focus:border-stone-600',
+    profDot: 'bg-amber-500',
+    expertDot: 'bg-amber-400',
+    unprofDot: 'bg-stone-300',
+    rollPlaceholder: 'border-stone-200 bg-stone-50 text-stone-400',
+    portraitBorder: 'border-b border-stone-200',
+    portraitImgBorder: 'border-amber-200',
+    footer: 'text-stone-400',
+    conditionBadge: 'bg-purple-100/80 border-purple-400/50 text-purple-800',
+    concentrationBadge: 'bg-violet-100/60 border-violet-400/50 text-violet-800',
+    spellPrepared: 'bg-violet-100/60 border-violet-500/50 text-violet-900',
+    spellUnprepared: 'bg-stone-50 border-stone-200 text-stone-500',
+    spellConcentration: 'text-violet-600',
+    spellDmg: 'text-indigo-700',
+    slotEmpty: 'border-stone-300',
+    detailsSummary: 'text-stone-500 hover:text-stone-700 transition-colors',
+    magicalItem: 'text-violet-600',
+  }
+
+}
 
 function RollToast({ roll, onDismiss }: { roll: DiceRoll; onDismiss: () => void }) {
   const isNat20 = roll.sides === 20 && (roll.advantage ? Math.max(...roll.rolls) : roll.rolls[0]) === 20
@@ -98,7 +185,27 @@ export function SharedCharacterPage() {
   const [isMyTurn, setIsMyTurn] = useState(false)
   const [combatRound, setCombatRound] = useState<number | null>(null)
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('none')
+  const [themeChoice, setThemeChoice] = useState<ThemeChoice>(() =>
+    (localStorage.getItem('shared-theme') as ThemeChoice) ?? 'system'
+  )
+  const [theme, setTheme] = useState<Theme>(() =>
+    resolveTheme((localStorage.getItem('shared-theme') as ThemeChoice) ?? 'system')
+  )
   const rollToastRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (themeChoice !== 'system') return
+    const mq = window.matchMedia('(prefers-color-scheme: dark)')
+    const handler = (e: MediaQueryListEvent) => setTheme(e.matches ? 'A' : 'B')
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [themeChoice])
+
+  function chooseTheme(choice: ThemeChoice) {
+    setThemeChoice(choice)
+    localStorage.setItem('shared-theme', choice)
+    setTheme(resolveTheme(choice))
+  }
 
   useEffect(() => {
     if (!token) return
@@ -165,8 +272,8 @@ export function SharedCharacterPage() {
 
   const hpPct = Math.max(0, Math.min(100, (character.combat.current_hp / character.combat.max_hp) * 100))
   const isDying = character.combat.current_hp <= 0
-
   const tod = TIME_OF_DAY_CONFIG[timeOfDay]
+  const th = buildTheme(theme, tod.parchmentColor)
 
   const slots = Object.entries(character.spellcasting.slots)
     .filter(([, s]) => s.max > 0)
@@ -186,7 +293,7 @@ export function SharedCharacterPage() {
 
   return (
     <div className="min-h-screen bg-stone-950 text-white">
-      {/* Header — dark chrome */}
+      {/* Header — always dark */}
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
           {character.portrait_url && (
@@ -215,79 +322,87 @@ export function SharedCharacterPage() {
         </div>
       </header>
 
-      {/* Combat banner — dark */}
+      {/* Combat banner */}
       {combatRound !== null && (
         <div className={`border-b px-4 py-3 transition-colors ${
-          isMyTurn
-            ? 'bg-amber-950/80 border-amber-600'
-            : 'bg-stone-900/80 border-stone-800'
+          isMyTurn ? 'bg-amber-950/80 border-amber-600' : 'bg-stone-900/80 border-stone-800'
         }`}>
           <div className="max-w-2xl mx-auto flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {isMyTurn
-                ? <span className="text-amber-400 font-semibold">⚔ C'est ton tour !</span>
-                : <span className="text-stone-400 text-sm">Combat en cours — Round {combatRound}</span>
-              }
-            </div>
-            {isMyTurn && (
-              <span className="text-amber-600 text-xs animate-pulse">Agis maintenant</span>
-            )}
+            {isMyTurn
+              ? <span className="text-amber-400 font-semibold">⚔ C'est ton tour !</span>
+              : <span className="text-stone-400 text-sm">Combat en cours — Round {combatRound}</span>
+            }
+            {isMyTurn && <span className="text-amber-600 text-xs animate-pulse">Agis maintenant</span>}
           </div>
         </div>
       )}
 
       <main className="max-w-2xl mx-auto pb-10">
 
-        {/* Parchment card */}
+        {/* Theme switcher */}
+        <div className="px-4 pt-3 flex items-center gap-2">
+          <span className="text-stone-600 text-xs shrink-0">Thème :</span>
+          {([['dark', 'Sombre'], ['light', 'Clair'], ['system', 'Système']] as const).map(([choice, label]) => (
+            <button
+              key={choice}
+              onClick={() => chooseTheme(choice)}
+              className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
+                themeChoice === choice ? 'bg-amber-500 text-white' : 'bg-stone-800 text-stone-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Main card */}
         <div
-          className="mx-4 mt-4 rounded-2xl overflow-hidden border border-stone-300/30 shadow-[0_12px_56px_rgba(0,0,0,0.55),_0_2px_8px_rgba(0,0,0,0.3)]"
-          style={{ backgroundColor: tod.parchmentColor, transition: 'background-color 3000ms ease' }}
+          className={`mx-4 mt-3 rounded-2xl overflow-hidden border shadow-[0_12px_56px_rgba(0,0,0,0.55),_0_2px_8px_rgba(0,0,0,0.3)] ${th.cardClass}`}
+          style={th.cardStyle}
         >
           <div className="p-4 space-y-4">
 
-            {/* Portrait header */}
+            {/* Portrait */}
             {character.portrait_url && (
-              <div className="flex flex-col items-center pb-2 border-b border-amber-200/60">
+              <div className={`flex flex-col items-center pb-2 ${th.portraitBorder}`}>
                 <img
                   src={character.portrait_url}
                   alt={character.name}
-                  className="w-28 h-36 rounded-xl object-cover object-top border-2 border-amber-200 shadow-lg mb-3"
+                  className={`w-28 h-36 rounded-xl object-cover object-top border-2 shadow-lg mb-3 ${th.portraitImgBorder}`}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
-                <p className={`font-bold text-lg text-center leading-tight ${isDying ? 'text-red-600' : 'text-stone-900'}`}>
+                <p className={`font-bold text-lg text-center leading-tight ${isDying ? th.dyingText : th.text}`}>
                   {character.name}
                 </p>
-                <p className="text-stone-500 text-xs text-center mt-1">
+                <p className={`text-xs text-center mt-1 ${th.textMuted}`}>
                   {character.race} · {character.character_class}{character.subclass ? ` (${character.subclass})` : ''} · Niv. {character.level}
                 </p>
               </div>
             )}
 
-            {/* Dice result toast */}
+            {/* Roll toast */}
             <div ref={rollToastRef}>
               {lastRoll ? (
                 <RollToast roll={lastRoll} onDismiss={() => setLastRoll(null)} />
               ) : (
-                <div className="rounded-xl border border-amber-200/70 bg-amber-50/40 p-3 text-center text-stone-500 text-xs">
+                <div className={`rounded-xl border p-3 text-center text-xs ${th.rollPlaceholder}`}>
                   Clique sur un modificateur pour lancer les dés ⚅
                 </div>
               )}
             </div>
 
             {/* Advantage toggle */}
-            <div className="flex rounded-lg overflow-hidden border border-amber-300/70 text-xs font-semibold">
+            <div className={`flex rounded-lg overflow-hidden border text-xs font-semibold ${th.advantageBorder}`}>
               {([['dis', '↓ Désavantage'], ['normal', 'Normal'], ['adv', '↑ Avantage']] as const).map(([val, label]) => (
                 <button
                   key={val}
                   onClick={() => setAdvantage(val)}
                   className={`flex-1 py-2 transition-colors ${
                     advantage === val
-                      ? val === 'adv'
-                        ? 'bg-emerald-600 text-white'
-                        : val === 'dis'
-                          ? 'bg-red-700 text-white'
-                          : 'bg-stone-600 text-white'
-                      : 'bg-amber-50 text-stone-500 hover:text-stone-700'
+                      ? val === 'adv' ? 'bg-emerald-600 text-white'
+                        : val === 'dis' ? 'bg-red-700 text-white'
+                        : 'bg-stone-600 text-white'
+                      : th.advantageInactive
                   }`}
                 >
                   {label}
@@ -295,22 +410,22 @@ export function SharedCharacterPage() {
               ))}
             </div>
 
-            {/* HP management */}
-            <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-              <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Points de vie</h2>
+            {/* HP */}
+            <div className={`border rounded-xl p-4 ${th.section}`}>
+              <h2 className={`${th.sectionHeader} mb-3`}>Points de vie</h2>
               <div className="flex items-center gap-3 mb-3">
-                <span className={`text-3xl font-bold ${isDying ? 'text-red-600' : 'text-stone-900'}`}>
+                <span className={`text-3xl font-bold ${isDying ? th.dyingText : th.text}`}>
                   {character.combat.current_hp}
                 </span>
-                <span className="text-stone-500 text-lg">/ {character.combat.max_hp}</span>
+                <span className={`text-lg ${th.textMuted}`}>/ {character.combat.max_hp}</span>
                 {character.combat.temporary_hp > 0 && (
-                  <span className="text-sky-600 text-sm font-semibold">+{character.combat.temporary_hp} tmp</span>
+                  <span className={`text-sm font-semibold ${th.tempHp}`}>+{character.combat.temporary_hp} tmp</span>
                 )}
                 {character.combat.inspiration && (
-                  <span className="text-amber-700 text-xs font-semibold ml-auto">✦ Inspiration</span>
+                  <span className={`text-xs font-semibold ml-auto ${th.inspiration}`}>✦ Inspiration</span>
                 )}
               </div>
-              <div className="h-3 bg-amber-200 rounded-full overflow-hidden mb-4">
+              <div className={`h-3 rounded-full overflow-hidden mb-4 ${th.hpBg}`}>
                 <div
                   className={`h-full rounded-full transition-all ${hpColor(character.combat.current_hp, character.combat.max_hp)}`}
                   style={{ width: `${hpPct}%` }}
@@ -318,32 +433,24 @@ export function SharedCharacterPage() {
               </div>
               <div className="flex gap-2 items-center">
                 <input
-                  type="number"
-                  min={1}
-                  max={999}
+                  type="number" min={1} max={999}
                   value={hpInput}
                   onChange={e => setHpInput(e.target.value)}
-                  className="w-20 bg-white border border-amber-400 rounded-lg px-3 py-2 text-stone-900 text-center text-sm font-bold focus:outline-none focus:border-amber-600"
+                  className={`w-20 border rounded-lg px-3 py-2 text-center text-sm font-bold focus:outline-none ${th.input}`}
                 />
-                <button
-                  onClick={() => handleHp('damage')}
-                  disabled={hpLoading}
-                  className="flex-1 py-2 bg-red-100 hover:bg-red-200/80 border border-red-400 text-red-700 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-                >
+                <button onClick={() => handleHp('damage')} disabled={hpLoading}
+                  className="flex-1 py-2 bg-red-100 hover:bg-red-200/80 border border-red-400 text-red-700 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
                   Dégâts
                 </button>
-                <button
-                  onClick={() => handleHp('heal')}
-                  disabled={hpLoading}
-                  className="flex-1 py-2 bg-emerald-100 hover:bg-emerald-200/80 border border-emerald-500 text-emerald-700 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-                >
+                <button onClick={() => handleHp('heal')} disabled={hpLoading}
+                  className="flex-1 py-2 bg-emerald-100 hover:bg-emerald-200/80 border border-emerald-500 text-emerald-700 text-sm font-semibold rounded-lg transition-colors disabled:opacity-50">
                   Soins
                 </button>
               </div>
               {character.state.conditions.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-amber-200/60 flex flex-wrap gap-1.5">
+                <div className={`mt-3 pt-3 border-t ${th.innerBorder} flex flex-wrap gap-1.5`}>
                   {character.state.conditions.map(c => (
-                    <span key={c} className="text-xs bg-purple-100/80 border border-purple-400/50 text-purple-800 rounded px-2 py-0.5">
+                    <span key={c} className={`text-xs border rounded px-2 py-0.5 ${th.conditionBadge}`}>
                       {CONDITIONS_FR[c] ?? c}
                       {character.state.condition_durations[c] ? ` (${character.state.condition_durations[c]}R)` : ''}
                     </span>
@@ -352,71 +459,64 @@ export function SharedCharacterPage() {
               )}
             </div>
 
-            {/* Combat stats + initiative */}
-            <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-              <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Combat</h2>
+            {/* Combat stats */}
+            <div className={`border rounded-xl p-4 ${th.section}`}>
+              <h2 className={`${th.sectionHeader} mb-3`}>Combat</h2>
               <div className="grid grid-cols-4 gap-2 text-center text-xs">
-                {[
-                  ['CA', String(character.combat.armor_class)],
-                  ['Vitesse', `${character.combat.speed} m`],
-                  ['Perc.', String(character.passive_perception)],
-                ].map(([label, value]) => (
-                  <div key={label} className="bg-amber-100/60 rounded-lg p-2">
-                    <p className="text-stone-500 mb-0.5">{label}</p>
-                    <p className="font-bold text-stone-900">{value}</p>
+                {[['CA', String(character.combat.armor_class)], ['Vitesse', `${character.combat.speed} m`], ['Perc.', String(character.passive_perception)]].map(([label, value]) => (
+                  <div key={label} className={`border rounded-lg p-2 ${th.cell}`}>
+                    <p className={th.textMuted}>{label}</p>
+                    <p className={`font-bold ${th.text}`}>{value}</p>
                   </div>
                 ))}
                 <button
                   onClick={() => roll({ sides: 20, modifier: character.combat.initiative, label: 'Initiative' })}
                   disabled={rolling}
-                  className="bg-amber-100/60 hover:bg-amber-200/70 hover:border-amber-500 border border-amber-200/60 rounded-lg p-2 transition-colors disabled:opacity-50"
+                  className={`border rounded-lg p-2 transition-colors disabled:opacity-50 ${th.cell} ${th.cellHover}`}
                 >
-                  <p className="text-stone-500 text-xs mb-0.5">Init.</p>
-                  <p className="font-bold text-amber-700">{sign(character.combat.initiative)}</p>
+                  <p className={`text-xs mb-0.5 ${th.textMuted}`}>Init.</p>
+                  <p className={`font-bold ${th.textAccent}`}>{sign(character.combat.initiative)}</p>
                 </button>
               </div>
               {character.state.concentrating_on && (
-                <div className="mt-3 pt-3 border-t border-amber-200/60">
-                  <span className="text-xs bg-violet-100/60 border border-violet-400/50 text-violet-800 rounded px-2 py-1">
+                <div className={`mt-3 pt-3 border-t ${th.innerBorder}`}>
+                  <span className={`text-xs border rounded px-2 py-1 ${th.concentrationBadge}`}>
                     ◈ Concentration : {character.state.concentrating_on}
                   </span>
                 </div>
               )}
             </div>
 
-            {/* Abilities + saving throws */}
-            <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-              <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Caractéristiques</h2>
+            {/* Abilities + saves */}
+            <div className={`border rounded-xl p-4 ${th.section}`}>
+              <h2 className={`${th.sectionHeader} mb-3`}>Caractéristiques</h2>
               <div className="grid grid-cols-6 gap-2 text-center">
                 {ABILITY_LABELS.map(([key, abbr, fullName]) => (
-                  <button
-                    key={key}
+                  <button key={key}
                     onClick={() => roll({ sides: 20, modifier: character.modifiers[key], label: `Jet de ${fullName}` })}
                     disabled={rolling}
-                    className="bg-amber-100/60 hover:bg-amber-200/70 hover:border-amber-500 border border-amber-200/60 rounded-lg p-2 transition-colors disabled:opacity-50"
+                    className={`border rounded-lg p-2 transition-colors disabled:opacity-50 ${th.cell} ${th.cellHover}`}
                   >
-                    <p className="text-stone-500 text-xs mb-1">{abbr}</p>
-                    <p className="font-bold text-stone-900 text-lg leading-none">{character.abilities[key] ?? 10}</p>
-                    <p className="text-amber-700 text-xs mt-1">{sign(character.modifiers[key])}</p>
+                    <p className={`text-xs mb-1 ${th.textMuted}`}>{abbr}</p>
+                    <p className={`font-bold text-lg leading-none ${th.text}`}>{character.abilities[key] ?? 10}</p>
+                    <p className={`text-xs mt-1 ${th.textAccent}`}>{sign(character.modifiers[key])}</p>
                   </button>
                 ))}
               </div>
-
-              <div className="mt-3 pt-3 border-t border-amber-200/60">
-                <p className="text-stone-500 text-xs mb-2">Jets de sauvegarde</p>
+              <div className={`mt-3 pt-3 border-t ${th.innerBorder}`}>
+                <p className={`text-xs mb-2 ${th.textMuted}`}>Jets de sauvegarde</p>
                 <div className="grid grid-cols-3 sm:grid-cols-6 gap-1.5">
                   {ABILITY_LABELS.map(([key, abbr, fullName]) => {
                     const st = character.saving_throws[key]
                     return (
-                      <button
-                        key={key}
+                      <button key={key}
                         onClick={() => roll({ sides: 20, modifier: st?.modifier ?? 0, label: `Save ${fullName}` })}
                         disabled={rolling}
-                        className="flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-amber-200/50 transition-colors disabled:opacity-50"
+                        className={`flex items-center gap-1 px-2 py-1 rounded-lg transition-colors disabled:opacity-50 ${th.skillHover}`}
                       >
-                        <span className={`w-2 h-2 rounded-full shrink-0 ${st?.proficient ? 'bg-amber-500' : 'bg-stone-300'}`} />
-                        <span className="text-stone-600 text-xs">{abbr}</span>
-                        <span className={`text-xs font-semibold ml-auto ${st?.proficient ? 'text-stone-900' : 'text-stone-500'}`}>
+                        <span className={`w-2 h-2 rounded-full shrink-0 ${st?.proficient ? th.profDot : th.unprofDot}`} />
+                        <span className={`text-xs ${th.textMuted}`}>{abbr}</span>
+                        <span className={`text-xs font-semibold ml-auto ${st?.proficient ? th.text : th.textMuted}`}>
                           {sign(st?.modifier ?? 0)}
                         </span>
                       </button>
@@ -427,56 +527,47 @@ export function SharedCharacterPage() {
             </div>
 
             {/* Skills */}
-            <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-              <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Compétences</h2>
+            <div className={`border rounded-xl p-4 ${th.section}`}>
+              <h2 className={`${th.sectionHeader} mb-3`}>Compétences</h2>
               <div className="grid grid-cols-2 gap-0.5">
                 {allSkills.map(([key, v]) => (
-                  <button
-                    key={key}
+                  <button key={key}
                     onClick={() => roll({ sides: 20, modifier: v.modifier, label: SKILL_LABELS[key] ?? key })}
                     disabled={rolling}
-                    className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-amber-200/50 transition-colors text-left disabled:opacity-50"
+                    className={`flex items-center gap-2 px-2 py-1.5 rounded-lg transition-colors text-left disabled:opacity-50 ${th.skillHover}`}
                   >
-                    <span className={`w-2 h-2 rounded-full shrink-0 ${v.expert ? 'bg-amber-500' : v.proficient ? 'bg-stone-400' : 'bg-stone-300'}`} />
-                    <span className={`text-xs truncate ${v.proficient || v.expert ? 'text-stone-800' : 'text-stone-500'}`}>{SKILL_LABELS[key] ?? key}</span>
-                    <span className={`text-xs font-semibold ml-auto ${v.proficient || v.expert ? 'text-stone-900' : 'text-stone-500'}`}>{sign(v.modifier)}</span>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${v.expert ? th.expertDot : v.proficient ? th.profDot : th.unprofDot}`} />
+                    <span className={`text-xs truncate ${v.proficient || v.expert ? th.text : th.textMuted}`}>{SKILL_LABELS[key] ?? key}</span>
+                    <span className={`text-xs font-semibold ml-auto ${v.proficient || v.expert ? th.text : th.textMuted}`}>{sign(v.modifier)}</span>
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Attack macros */}
+            {/* Attacks */}
             {character.attack_macros.length > 0 && (
-              <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-                <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Attaques</h2>
+              <div className={`border rounded-xl p-4 ${th.section}`}>
+                <h2 className={`${th.sectionHeader} mb-3`}>Attaques</h2>
                 <div className="space-y-2">
                   {character.attack_macros.map((macro, i) => (
-                    <div key={i} className="bg-amber-100/60 rounded-lg px-3 py-2 flex items-center gap-3">
+                    <div key={i} className={`border rounded-lg px-3 py-2 flex items-center gap-3 ${th.cell}`}>
                       <div className="flex-1 min-w-0">
-                        <p className="text-stone-800 text-sm font-medium truncate">{macro.name}</p>
-                        {macro.range && <p className="text-stone-500 text-xs">{macro.range}</p>}
+                        <p className={`text-sm font-medium truncate ${th.text}`}>{macro.name}</p>
+                        {macro.range && <p className={`text-xs ${th.textMuted}`}>{macro.range}</p>}
                       </div>
                       <div className="flex gap-2 shrink-0">
                         {macro.attack_bonus != null && (
-                          <button
-                            onClick={() => roll({ sides: 20, modifier: macro.attack_bonus!, label: `Attaque — ${macro.name}` })}
-                            disabled={rolling}
-                            className="text-xs px-2 py-1 rounded bg-rose-100 hover:bg-rose-200/80 border border-rose-400 text-rose-700 transition-colors disabled:opacity-50"
-                          >
+                          <button onClick={() => roll({ sides: 20, modifier: macro.attack_bonus!, label: `Attaque — ${macro.name}` })} disabled={rolling}
+                            className="text-xs px-2 py-1 rounded bg-rose-100 hover:bg-rose-200/80 border border-rose-400 text-rose-700 transition-colors disabled:opacity-50">
                             {sign(macro.attack_bonus)} att.
                           </button>
                         )}
                         {macro.damage_dice && (
-                          <button
-                            onClick={() => {
-                              const m = macro.damage_dice.match(/^(\d+)d(\d+)([+-]\d+)?$/)
-                              if (m) {
-                                roll({ count: parseInt(m[1]), sides: parseInt(m[2]), modifier: m[3] ? parseInt(m[3]) : 0, label: `Dégâts — ${macro.name}` })
-                              }
-                            }}
-                            disabled={rolling}
-                            className="text-xs px-2 py-1 rounded bg-orange-100 hover:bg-orange-200/80 border border-orange-400 text-orange-700 transition-colors disabled:opacity-50"
-                          >
+                          <button onClick={() => {
+                            const m = macro.damage_dice.match(/^(\d+)d(\d+)([+-]\d+)?$/)
+                            if (m) roll({ count: parseInt(m[1]), sides: parseInt(m[2]), modifier: m[3] ? parseInt(m[3]) : 0, label: `Dégâts — ${macro.name}` })
+                          }} disabled={rolling}
+                            className="text-xs px-2 py-1 rounded bg-orange-100 hover:bg-orange-200/80 border border-orange-400 text-orange-700 transition-colors disabled:opacity-50">
                             {macro.damage_dice}
                           </button>
                         )}
@@ -487,16 +578,16 @@ export function SharedCharacterPage() {
               </div>
             )}
 
-            {/* Spell slots + spells */}
+            {/* Spells */}
             {slots.length > 0 && (
-              <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-                <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Magie</h2>
-                <div className="flex items-center gap-3 mb-3 text-xs text-stone-600">
+              <div className={`border rounded-xl p-4 ${th.section}`}>
+                <h2 className={`${th.sectionHeader} mb-3`}>Magie</h2>
+                <div className={`flex items-center gap-3 mb-3 text-xs ${th.textMuted}`}>
                   {character.spellcasting.ability && (
                     <>
-                      <span>Caract. : <span className="text-stone-900 font-semibold">{character.spellcasting.ability.toUpperCase()}</span></span>
-                      <span>DD <span className="text-stone-900 font-semibold">{character.spellcasting.save_dc}</span></span>
-                      <span>Att. <span className="text-stone-900 font-semibold">{sign(character.spellcasting.attack_bonus)}</span></span>
+                      <span>Caract. : <span className={`font-semibold ${th.text}`}>{character.spellcasting.ability.toUpperCase()}</span></span>
+                      <span>DD <span className={`font-semibold ${th.text}`}>{character.spellcasting.save_dc}</span></span>
+                      <span>Att. <span className={`font-semibold ${th.text}`}>{sign(character.spellcasting.attack_bonus)}</span></span>
                     </>
                   )}
                 </div>
@@ -505,36 +596,33 @@ export function SharedCharacterPage() {
                     const available = slot.max - slot.used
                     return (
                       <div key={lvl} className="flex items-center gap-3">
-                        <span className="text-stone-500 text-xs w-14 shrink-0">Niv. {lvl}</span>
+                        <span className={`text-xs w-14 shrink-0 ${th.textMuted}`}>Niv. {lvl}</span>
                         <div className="flex gap-1.5">
                           {Array.from({ length: slot.max }, (_, i) => (
-                            <span key={i} className={`w-4 h-4 rounded-full border-2 ${i < available ? 'bg-violet-500 border-violet-400' : 'bg-transparent border-stone-400'}`} />
+                            <span key={i} className={`w-4 h-4 rounded-full border-2 ${i < available ? 'bg-violet-500 border-violet-400' : `bg-transparent ${th.slotEmpty}`}`} />
                           ))}
                         </div>
-                        <span className="text-stone-500 text-xs">{available}/{slot.max}</span>
+                        <span className={`text-xs ${th.textMuted}`}>{available}/{slot.max}</span>
                       </div>
                     )
                   })}
                 </div>
                 {Object.keys(spellsByLevel).length > 0 && (
-                  <div className="space-y-3 border-t border-amber-200/60 pt-3">
-                    {Object.entries(spellsByLevel)
-                      .sort(([a], [b]) => Number(a) - Number(b))
-                      .map(([lvl, spells]) => (
-                        <div key={lvl}>
-                          <p className="text-stone-500 text-xs font-semibold mb-1.5">{SPELL_LEVEL_LABELS[Number(lvl)] ?? `Niv. ${lvl}`}</p>
-                          <div className="flex flex-wrap gap-1.5">
-                            {spells.map((spell, i) => (
-                              <div key={i} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${spell.prepared ? 'bg-violet-100/60 border-violet-500/50 text-violet-900' : 'bg-amber-50 border-amber-200 text-stone-500'}`}>
-                                {spell.concentration && <span className="text-violet-600">◈</span>}
-                                <span className="font-medium">{spell.name}</span>
-                                {spell.damage_dice && <span className="text-indigo-700">{spell.damage_dice}</span>}
-                              </div>
-                            ))}
-                          </div>
+                  <div className={`space-y-3 border-t ${th.innerBorder} pt-3`}>
+                    {Object.entries(spellsByLevel).sort(([a], [b]) => Number(a) - Number(b)).map(([lvl, spells]) => (
+                      <div key={lvl}>
+                        <p className={`text-xs font-semibold mb-1.5 ${th.textMuted}`}>{SPELL_LEVEL_LABELS[Number(lvl)] ?? `Niv. ${lvl}`}</p>
+                        <div className="flex flex-wrap gap-1.5">
+                          {spells.map((spell, i) => (
+                            <div key={i} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${spell.prepared ? th.spellPrepared : th.spellUnprepared}`}>
+                              {spell.concentration && <span className={th.spellConcentration}>◈</span>}
+                              <span className="font-medium">{spell.name}</span>
+                              {spell.damage_dice && <span className={th.spellDmg}>{spell.damage_dice}</span>}
+                            </div>
+                          ))}
                         </div>
-                      ))
-                    }
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -542,18 +630,18 @@ export function SharedCharacterPage() {
 
             {/* Resources */}
             {character.resources.length > 0 && (
-              <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-                <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Ressources</h2>
+              <div className={`border rounded-xl p-4 ${th.section}`}>
+                <h2 className={`${th.sectionHeader} mb-3`}>Ressources</h2>
                 <div className="space-y-2">
                   {character.resources.map((r, i) => {
                     const pct = r.max > 0 ? (r.current / r.max) * 100 : 0
                     return (
                       <div key={i}>
                         <div className="flex items-center justify-between mb-1">
-                          <span className="text-stone-700 text-sm">{r.name}</span>
-                          <span className="text-stone-500 text-xs font-mono">{r.current}/{r.max}</span>
+                          <span className={`text-sm ${th.text}`}>{r.name}</span>
+                          <span className={`text-xs font-mono ${th.textMuted}`}>{r.current}/{r.max}</span>
                         </div>
-                        <div className="h-1.5 bg-amber-200 rounded-full overflow-hidden">
+                        <div className={`h-1.5 rounded-full overflow-hidden ${th.hpBg}`}>
                           <div className="h-full bg-amber-600 rounded-full" style={{ width: `${pct}%` }} />
                         </div>
                       </div>
@@ -565,29 +653,29 @@ export function SharedCharacterPage() {
 
             {/* Inventory */}
             {equippedItems.length > 0 && (
-              <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-                <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Équipement</h2>
+              <div className={`border rounded-xl p-4 ${th.section}`}>
+                <h2 className={`${th.sectionHeader} mb-3`}>Équipement</h2>
                 <div className="space-y-1">
                   {equippedItems.map((item, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
-                      <span className="text-emerald-600 text-xs shrink-0">●</span>
-                      <span className="text-stone-800 flex-1 truncate">{item.name}</span>
-                      {item.quantity > 1 && <span className="text-stone-500 text-xs shrink-0">×{item.quantity}</span>}
-                      {item.magical && <span className="text-violet-600 text-xs shrink-0">✦</span>}
+                      <span className="text-emerald-500 text-xs shrink-0">●</span>
+                      <span className={`flex-1 truncate ${th.text}`}>{item.name}</span>
+                      {item.quantity > 1 && <span className={`text-xs shrink-0 ${th.textMuted}`}>×{item.quantity}</span>}
+                      {item.magical && <span className={`text-xs shrink-0 ${th.magicalItem}`}>✦</span>}
                     </div>
                   ))}
                 </div>
                 {character.inventory.items.filter(i => !i.equipped).length > 0 && (
                   <details className="mt-3">
-                    <summary className="text-stone-500 text-xs cursor-pointer hover:text-stone-700 transition-colors">
+                    <summary className={`text-xs cursor-pointer ${th.detailsSummary}`}>
                       + {character.inventory.items.filter(i => !i.equipped).length} objets non équipés
                     </summary>
                     <div className="mt-2 space-y-1">
                       {character.inventory.items.filter(i => !i.equipped).map((item, i) => (
                         <div key={i} className="flex items-center gap-2 text-sm">
-                          <span className="text-stone-400 text-xs shrink-0">○</span>
-                          <span className="text-stone-600 flex-1 truncate">{item.name}</span>
-                          {item.quantity > 1 && <span className="text-stone-500 text-xs shrink-0">×{item.quantity}</span>}
+                          <span className={`text-xs shrink-0 ${th.textMuted}`}>○</span>
+                          <span className={`flex-1 truncate ${th.textMuted}`}>{item.name}</span>
+                          {item.quantity > 1 && <span className={`text-xs shrink-0 ${th.textMuted}`}>×{item.quantity}</span>}
                         </div>
                       ))}
                     </div>
@@ -598,16 +686,17 @@ export function SharedCharacterPage() {
 
             {/* Currency */}
             {hasCurrency && (
-              <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-                <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Monnaie</h2>
+              <div className={`border rounded-xl p-4 ${th.section}`}>
+                <h2 className={`${th.sectionHeader} mb-3`}>Monnaie</h2>
                 <div className="flex flex-wrap gap-3">
-                  {([['pp', 'Platine'], ['po', 'Or'], ['pe', 'Électrum'], ['pa', 'Argent'], ['pc', 'Cuivre']] as const).map(([key, label]) => {
+                  {(['pp', 'po', 'pe', 'pa', 'pc'] as const).map(key => {
+                    const labels: Record<string, string> = { pp: 'Platine', po: 'Or', pe: 'Électrum', pa: 'Argent', pc: 'Cuivre' }
                     const val = currency[key]
                     if (!val) return null
                     return (
                       <div key={key} className="text-center">
-                        <p className="text-stone-500 text-xs">{label}</p>
-                        <p className="text-stone-900 font-bold">{val}</p>
+                        <p className={`text-xs ${th.textMuted}`}>{labels[key]}</p>
+                        <p className={`font-bold ${th.text}`}>{val}</p>
                       </div>
                     )
                   })}
@@ -617,16 +706,16 @@ export function SharedCharacterPage() {
 
             {/* Features */}
             {character.features.length > 0 && (
-              <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-                <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Traits & capacités</h2>
+              <div className={`border rounded-xl p-4 ${th.section}`}>
+                <h2 className={`${th.sectionHeader} mb-3`}>Traits & capacités</h2>
                 <div className="space-y-3">
                   {character.features.map((f, i) => (
                     <div key={i}>
                       <div className="flex items-baseline gap-2 mb-0.5">
-                        <p className="text-stone-800 text-sm font-medium">{f.name}</p>
-                        {f.source && <p className="text-stone-500 text-xs">{f.source}</p>}
+                        <p className={`text-sm font-medium ${th.text}`}>{f.name}</p>
+                        {f.source && <p className={`text-xs ${th.textMuted}`}>{f.source}</p>}
                       </div>
-                      {f.description && <p className="text-stone-600 text-xs leading-relaxed">{f.description}</p>}
+                      {f.description && <p className={`text-xs leading-relaxed ${th.textBody}`}>{f.description}</p>}
                     </div>
                   ))}
                 </div>
@@ -635,19 +724,18 @@ export function SharedCharacterPage() {
 
             {/* Notes */}
             {character.notes && (
-              <div className="bg-white/30 border border-amber-200/60 rounded-xl p-4">
-                <h2 className="text-amber-900/70 text-xs font-semibold uppercase tracking-widest mb-3">Notes</h2>
-                <MarkdownText className="text-stone-700">{character.notes}</MarkdownText>
+              <div className={`border rounded-xl p-4 ${th.section}`}>
+                <h2 className={`${th.sectionHeader} mb-3`}>Notes</h2>
+                <MarkdownText className={th.textBody}>{character.notes}</MarkdownText>
               </div>
             )}
 
-            <p className="text-center text-amber-800/40 text-xs pt-2 pb-2">
+            <p className={`text-center text-xs pt-2 pb-2 ${th.footer}`}>
               Fiche joueur — Taverne
             </p>
 
           </div>
         </div>
-
       </main>
     </div>
   )
