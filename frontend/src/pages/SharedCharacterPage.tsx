@@ -7,6 +7,9 @@ import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
 import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
 import { RulesCompendium } from '../components/RulesCompendium'
+import { SharedSidebar } from '../components/SharedSidebar'
+import { useSharedTheme, type Theme } from '../lib/sharedTheme'
+import { rememberSharedSheet } from '../lib/sharedSheets'
 
 const ABILITY_LABELS: [AbilityName, string, string][] = [
   ['strength', 'FOR', 'Force'],
@@ -46,15 +49,6 @@ function hpColor(current: number, max: number) {
   if (pct > 0.5) return 'bg-emerald-500'
   if (pct > 0.25) return 'bg-amber-500'
   return 'bg-red-500'
-}
-
-type Theme = 'A' | 'B'
-type ThemeChoice = 'dark' | 'light' | 'system'
-
-function resolveTheme(choice: ThemeChoice): Theme {
-  if (choice === 'dark') return 'A'
-  if (choice === 'light') return 'B'
-  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'A' : 'B'
 }
 
 function buildTheme(t: Theme, parchmentColor: string) {
@@ -187,27 +181,8 @@ export function SharedCharacterPage() {
   const [isMyTurn, setIsMyTurn] = useState(false)
   const [combatRound, setCombatRound] = useState<number | null>(null)
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('none')
-  const [themeChoice, setThemeChoice] = useState<ThemeChoice>(() =>
-    (localStorage.getItem('shared-theme') as ThemeChoice) ?? 'system'
-  )
-  const [theme, setTheme] = useState<Theme>(() =>
-    resolveTheme((localStorage.getItem('shared-theme') as ThemeChoice) ?? 'system')
-  )
+  const { theme } = useSharedTheme()
   const rollToastRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    if (themeChoice !== 'system') return
-    const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const handler = (e: MediaQueryListEvent) => setTheme(e.matches ? 'A' : 'B')
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [themeChoice])
-
-  function chooseTheme(choice: ThemeChoice) {
-    setThemeChoice(choice)
-    localStorage.setItem('shared-theme', choice)
-    setTheme(resolveTheme(choice))
-  }
 
   useEffect(() => {
     if (!token) return
@@ -216,6 +191,7 @@ export function SharedCharacterPage() {
         setCharacter(c)
         setTimeOfDay((c.campaign_time_of_day as TimeOfDay) ?? 'none')
         document.title = `${c.name} — Taverne`
+        rememberSharedSheet({ token, name: c.name, campaignShareToken: c.campaign_share_token })
       })
       .catch(() => setError(true))
   }, [token])
@@ -294,7 +270,9 @@ export function SharedCharacterPage() {
   const equippedItems = character.inventory.items.filter(i => i.equipped)
 
   return (
-    <div className="min-h-screen bg-stone-950 text-white">
+    <>
+    <SharedSidebar campaignShareToken={character.campaign_share_token} currentToken={token} />
+    <div className="ml-14 min-h-screen bg-stone-950 text-white">
       {/* Header — always dark */}
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
@@ -307,7 +285,7 @@ export function SharedCharacterPage() {
             />
           )}
           <div className="min-w-0 flex-1">
-            <h1 className={`font-bold text-base leading-tight truncate ${isDying ? 'text-red-400' : 'text-white'}`}>
+            <h1 className={`font-display font-semibold text-base leading-tight truncate tracking-wide ${isDying ? 'text-red-400' : 'text-white'}`}>
               {character.name}
             </h1>
             <p className="text-stone-500 text-xs truncate">
@@ -341,22 +319,6 @@ export function SharedCharacterPage() {
 
       <main className="max-w-2xl mx-auto pb-10">
 
-        {/* Theme switcher */}
-        <div className="px-4 pt-3 flex items-center gap-2">
-          <span className="text-stone-600 text-xs shrink-0">Thème :</span>
-          {([['dark', 'Sombre'], ['light', 'Clair'], ['system', 'Système']] as const).map(([choice, label]) => (
-            <button
-              key={choice}
-              onClick={() => chooseTheme(choice)}
-              className={`text-xs px-3 py-1 rounded-full font-semibold transition-colors ${
-                themeChoice === choice ? 'bg-amber-500 text-white' : 'bg-stone-800 text-stone-400 hover:text-white'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
         {/* Main card */}
         <div
           className={`mx-4 mt-3 rounded-2xl overflow-hidden border shadow-[0_12px_56px_rgba(0,0,0,0.55),_0_2px_8px_rgba(0,0,0,0.3)] ${th.cardClass}`}
@@ -373,7 +335,7 @@ export function SharedCharacterPage() {
                   className={`w-28 h-36 rounded-xl object-cover object-top border-2 shadow-lg mb-3 ${th.portraitImgBorder}`}
                   onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                 />
-                <p className={`font-bold text-lg text-center leading-tight ${isDying ? th.dyingText : th.text}`}>
+                <p className={`font-display font-semibold text-lg text-center leading-tight tracking-wide ${isDying ? th.dyingText : th.text}`}>
                   {character.name}
                 </p>
                 <p className={`text-xs text-center mt-1 ${th.textMuted}`}>
@@ -742,5 +704,6 @@ export function SharedCharacterPage() {
       <FloatingDiceRoller />
       <RulesCompendium />
     </div>
+    </>
   )
 }

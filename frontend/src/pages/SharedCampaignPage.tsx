@@ -8,6 +8,7 @@ import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MarkdownText } from '../components/MarkdownText'
 import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
 import { RulesCompendium } from '../components/RulesCompendium'
+import { SharedSidebar } from '../components/SharedSidebar'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -383,14 +384,16 @@ export function SharedCampaignPage() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-950">
+    <>
+    <SharedSidebar campaignShareToken={token} />
+    <div className="ml-14 min-h-screen bg-stone-950">
       {/* Header */}
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-6xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <span className="text-amber-400 font-bold text-lg shrink-0">🍺 Taverne</span>
+            <span className="text-amber-400 font-display font-semibold tracking-widest shrink-0">🍺 Taverne</span>
             <span className="text-stone-700">|</span>
-            <span className="text-white font-semibold truncate">{campaign.name}</span>
+            <span className="text-white font-display font-semibold tracking-wide truncate">{campaign.name}</span>
             <span className="shrink-0 text-xs bg-emerald-900/50 border border-emerald-700 text-emerald-400 rounded-full px-2.5 py-0.5">
               En direct
             </span>
@@ -1005,5 +1008,6 @@ export function SharedCampaignPage() {
       <FloatingDiceRoller />
       <RulesCompendium />
     </div>
+    </>
   )
 }

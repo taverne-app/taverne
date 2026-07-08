@@ -1372,7 +1372,7 @@ export function CampaignPage() {
               ← Campagnes
             </Link>
             <span className="text-stone-700">|</span>
-            <span className="text-amber-400 font-bold truncate">{campaign.name}</span>
+            <span className="text-amber-400 font-display font-semibold tracking-wide truncate">{campaign.name}</span>
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {saving && <div className="w-4 h-4 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />}

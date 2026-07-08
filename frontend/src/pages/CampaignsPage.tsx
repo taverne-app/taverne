@@ -76,29 +76,6 @@ export function CampaignsPage() {
 
   return (
     <div className="min-h-screen bg-stone-950">
-      <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-          <span className="text-amber-400 font-bold">Campagnes</span>
-          <div className="flex items-center gap-3">
-            {isPaid ? (
-              <button
-                onClick={handlePortal}
-                className="text-amber-400 hover:text-amber-300 text-xs font-medium border border-amber-800 rounded-full px-2.5 py-0.5 transition-colors"
-              >
-                {user?.plan === 'guild' ? 'Guilde' : 'Aventurier'} ✦
-              </button>
-            ) : (
-              <button
-                onClick={() => setShowUpgradeModal(true)}
-                className="text-stone-400 hover:text-amber-400 text-xs border border-stone-700 hover:border-amber-700 rounded-full px-2.5 py-0.5 transition-colors"
-              >
-                Gratuit — Passer Pro
-              </button>
-            )}
-          </div>
-        </div>
-      </header>
-
       <main className="max-w-4xl mx-auto px-4 py-8">
         {upgradeSuccess && (
           <div className="mb-5 bg-amber-950/50 border border-amber-700 rounded-xl px-4 py-3 flex items-center justify-between gap-3">
@@ -110,8 +87,25 @@ export function CampaignsPage() {
         )}
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-white text-xl font-semibold">Mes campagnes</h1>
-            <p className="text-stone-500 text-sm mt-0.5">
+            <div className="flex items-center gap-3 mb-0.5">
+              <h1 className="text-white text-xl font-display font-semibold tracking-wide">Mes campagnes</h1>
+              {isPaid ? (
+                <button
+                  onClick={handlePortal}
+                  className="text-amber-400 hover:text-amber-300 text-xs font-medium border border-amber-800 rounded-full px-2.5 py-0.5 transition-colors"
+                >
+                  {user?.plan === 'guild' ? 'Guilde' : 'Aventurier'} ✦
+                </button>
+              ) : (
+                <button
+                  onClick={() => setShowUpgradeModal(true)}
+                  className="text-stone-500 hover:text-amber-400 text-xs border border-stone-700 hover:border-amber-700 rounded-full px-2.5 py-0.5 transition-colors"
+                >
+                  Gratuit — Passer Pro
+                </button>
+              )}
+            </div>
+            <p className="text-stone-500 text-sm">
               {campaigns.length} campagne{campaigns.length !== 1 ? 's' : ''}
             </p>
           </div>

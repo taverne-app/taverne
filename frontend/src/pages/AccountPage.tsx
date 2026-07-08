@@ -2,6 +2,13 @@ import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { updateProfile, updatePassword } from '../api/auth'
 import { createPortalSession, createCheckoutSession } from '../api/billing'
+import { useSharedTheme, type ThemeChoice } from '../lib/sharedTheme'
+
+const THEME_OPTIONS: [ThemeChoice, string, string][] = [
+  ['dark', 'Sombre', 'Fond sombre, idéal en soirée'],
+  ['light', 'Clair', 'Parchemin clair, teinté selon l\'heure'],
+  ['system', 'Système', 'Suit le réglage de l\'appareil'],
+]
 
 const PLAN_LABELS: Record<string, string> = {
   free:        'Gratuit',
@@ -11,6 +18,7 @@ const PLAN_LABELS: Record<string, string> = {
 
 export function AccountPage() {
   const { user, setAuth } = useAuth()
+  const { themeChoice, chooseTheme } = useSharedTheme()
 
   const [nameDraft, setNameDraft]   = useState(user?.name ?? '')
   const [emailDraft, setEmailDraft] = useState(user?.email ?? '')
@@ -132,6 +140,30 @@ export function AccountPage() {
                 </button>
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Apparence */}
+        <section className="bg-stone-900 border border-stone-800 rounded-2xl p-6 space-y-4">
+          <div>
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Apparence</h2>
+            <p className="text-stone-500 text-sm mt-1">Thème des fiches partagées aux joueurs.</p>
+          </div>
+          <div className="grid grid-cols-3 gap-2">
+            {THEME_OPTIONS.map(([choice, label, desc]) => (
+              <button
+                key={choice}
+                onClick={() => chooseTheme(choice)}
+                className={`rounded-xl border p-3 text-left transition-colors ${
+                  themeChoice === choice
+                    ? 'border-amber-500 bg-amber-500/10'
+                    : 'border-stone-700 hover:border-stone-600'
+                }`}
+              >
+                <p className={`text-sm font-semibold ${themeChoice === choice ? 'text-amber-400' : 'text-stone-200'}`}>{label}</p>
+                <p className="text-stone-500 text-xs mt-0.5 leading-snug">{desc}</p>
+              </button>
+            ))}
           </div>
         </section>
 

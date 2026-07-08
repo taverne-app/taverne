@@ -5,6 +5,7 @@ import type { Campaign } from '../api/campaigns'
 import type { Combatant } from '../api/combatants'
 import type { Character } from '../api/characters'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
+import { SharedSidebar } from '../components/SharedSidebar'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -118,7 +119,9 @@ export function LiveCombatPage() {
   if (!campaign) return null
 
   return (
-    <div className="min-h-screen bg-stone-950 text-white">
+    <>
+    <SharedSidebar campaignShareToken={token} />
+    <div className="ml-14 min-h-screen bg-stone-950 text-white">
       <header className="sticky top-0 z-10 border-b border-stone-800 bg-stone-950/90 backdrop-blur-sm px-4 py-3">
         <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
           <div className="flex items-center gap-2 min-w-0">
@@ -242,5 +245,6 @@ export function LiveCombatPage() {
         )}
       </main>
     </div>
+    </>
   )
 }

@@ -1340,7 +1340,7 @@ export function CharacterPage() {
               ← Retour
             </Link>
             <span className="text-stone-700">|</span>
-            <span className="text-amber-400 font-bold truncate">{character.name}</span>
+            <span className="text-amber-400 font-display font-semibold tracking-wide truncate">{character.name}</span>
           </div>
           <div className="flex items-center gap-4 shrink-0">
             {saving && (

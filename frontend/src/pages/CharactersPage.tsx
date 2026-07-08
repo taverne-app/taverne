@@ -149,7 +149,7 @@ export function CharactersPage() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-white text-xl font-semibold">Mes personnages</h1>
+            <h1 className="text-white text-xl font-display font-semibold tracking-wide">Mes personnages</h1>
             <p className="text-stone-500 text-sm mt-0.5">
               {characters.length} personnage{characters.length !== 1 ? 's' : ''}
             </p>

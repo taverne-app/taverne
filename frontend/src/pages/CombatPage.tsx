@@ -1427,48 +1427,30 @@ export function CombatPage() {
   return (
     <div className="min-h-screen bg-stone-950">
       {/* Header */}
-      <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <Link
-              to={campaign ? `/campaigns/${campaign.id}` : '/characters'}
-              className="text-stone-400 hover:text-stone-200 transition-colors text-sm shrink-0"
+      <main className="max-w-5xl mx-auto px-4 py-8 space-y-4">
+        <div className="flex items-center justify-between">
+          <h1 className="text-white text-xl font-display font-semibold tracking-wide">Combat</h1>
+          {campaign?.share_token && (
+            <button
+              onClick={() => {
+                const url = `${window.location.origin}/share/${campaign.share_token}/live`
+                if (navigator.clipboard) {
+                  navigator.clipboard.writeText(url).catch(() => {})
+                }
+                setLinkCopied(true)
+                setTimeout(() => setLinkCopied(false), 2000)
+              }}
+              className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
+                linkCopied
+                  ? 'bg-emerald-700/30 border-emerald-600 text-emerald-400'
+                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
+              }`}
+              title="Copier le lien combat live (lecture seule pour les joueurs)"
             >
-              {campaign ? `← ${campaign.name}` : '← Personnages'}
-            </Link>
-            <span className="text-stone-700">|</span>
-            <span className="text-amber-400 font-bold">⚔ Combat Tracker</span>
-            {campaign && (
-              <span className="text-stone-500 text-sm hidden sm:block truncate">— {campaign.name}</span>
-            )}
-          </div>
-          <div className="flex items-center gap-3 shrink-0">
-            {campaign?.share_token && (
-              <button
-                onClick={() => {
-                  const url = `${window.location.origin}/share/${campaign.share_token}/live`
-                  if (navigator.clipboard) {
-                    navigator.clipboard.writeText(url).catch(() => {})
-                  }
-                  setLinkCopied(true)
-                  setTimeout(() => setLinkCopied(false), 2000)
-                }}
-                className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
-                  linkCopied
-                    ? 'bg-emerald-700/30 border-emerald-600 text-emerald-400'
-                    : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
-                }`}
-                title="Copier le lien combat live (lecture seule pour les joueurs)"
-              >
-                {linkCopied ? '✓ Copié' : '⟳ Vue joueurs'}
-              </button>
-            )}
-          </div>
+              {linkCopied ? '✓ Copié' : '⟳ Vue joueurs'}
+            </button>
+          )}
         </div>
-      </header>
-
-
-      <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
 
         {/* Turn controls */}
         {withRollDisplay.length > 0 && (

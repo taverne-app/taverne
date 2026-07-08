@@ -23,7 +23,7 @@ export function Sidebar() {
       {/* Logo */}
       <div className="h-14 flex items-center px-4 border-b border-stone-800 shrink-0">
         <span className="text-xl shrink-0">🍺</span>
-        <span className="ml-3 text-amber-400 font-bold text-sm opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150">
+        <span className="ml-3 text-amber-400 font-display font-semibold text-sm tracking-widest opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150">
           La Taverne
         </span>
       </div>
