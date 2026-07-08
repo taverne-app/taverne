@@ -485,14 +485,6 @@ export function CombatPage() {
   const [dragOverId, setDragOverId] = useState<string | null>(null)
 
   // DM dice roller
-  const [dmDiceOpen, setDmDiceOpen] = useState(false)
-  const [dmDiceSides, setDmDiceSides] = useState(20)
-  const [dmDiceCount, setDmDiceCount] = useState('1')
-  const [dmDiceMod, setDmDiceMod] = useState('')
-  const [dmDiceAdv, setDmDiceAdv] = useState<'none' | 'adv' | 'dis'>('none')
-  const [dmDiceResult, setDmDiceResult] = useState<{ label: string; detail: string; total: number } | null>(null)
-  const [dmDiceExpr, setDmDiceExpr] = useState('')
-  const dmDiceTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Encounter builder
   const [showEncounterBuilder, setShowEncounterBuilder] = useState(false)
@@ -599,69 +591,6 @@ export function CombatPage() {
   const [renamingCombatantId, setRenamingCombatantId] = useState<number | null>(null)
   const [renameDraft, setRenameDraft] = useState('')
 
-  function handleDmRoll() {
-    const sides = dmDiceSides
-    const count = Math.max(1, parseInt(dmDiceCount, 10) || 1)
-    const mod = parseInt(dmDiceMod, 10) || 0
-    let rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1)
-    let chosen = rolls
-    let advLabel = ''
-    if (sides === 20 && count === 1 && dmDiceAdv !== 'none') {
-      const r2 = Math.floor(Math.random() * 20) + 1
-      rolls = [rolls[0], r2]
-      chosen = dmDiceAdv === 'adv' ? [Math.max(...rolls)] : [Math.min(...rolls)]
-      advLabel = dmDiceAdv === 'adv' ? ' (avantage)' : ' (désavantage)'
-    }
-    const total = chosen.reduce((s, r) => s + r, 0) + mod
-    const detail = `[${rolls.join(', ')}]${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}${advLabel}`
-    const label = `MJ — ${count}d${sides}${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}`
-    if (dmDiceTimer.current) clearTimeout(dmDiceTimer.current)
-    setDmDiceResult({ label, detail, total })
-    dmDiceTimer.current = setTimeout(() => setDmDiceResult(null), 8000)
-    logEvent('roll', `${label} → ${total} (${detail})`)
-  }
-
-  function handleDmRollExpr() {
-    const raw = dmDiceExpr.trim().toLowerCase().replace(/\s+/g, '')
-    if (!raw) return
-    // Parse: (count)d(sides)(kh/kl N)(+/- mod)
-    const m = raw.match(/^(\d*)d(\d+|%)(kh(\d+)|kl(\d+)|dh(\d+)|dl(\d+))?([+-]\d+)?$/)
-    if (!m) return
-    const count = m[1] ? Math.max(1, parseInt(m[1])) : 1
-    const sides = m[2] === '%' ? 100 : parseInt(m[2])
-    const mod = m[8] ? parseInt(m[8]) : 0
-    const keepMode = m[3]
-      ? (m[3].startsWith('kh') || m[3].startsWith('dh') ? 'high' : 'low')
-      : null
-    // kh = keep highest, kl = keep lowest, dh = drop highest, dl = drop lowest
-    const keepN = keepMode
-      ? (() => {
-          const n = parseInt(m[4] ?? m[5] ?? m[6] ?? m[7])
-          const isKeep = m[3].startsWith('k')
-          return isKeep ? n : count - n
-        })()
-      : null
-    const rolls = Array.from({ length: count }, () => Math.floor(Math.random() * sides) + 1)
-    let keptIndices: Set<number>
-    let kept: number[]
-    if (keepMode !== null && keepN !== null) {
-      const indices = rolls.map((_, i) => i)
-      indices.sort((a, b) => keepMode === 'high' ? rolls[b] - rolls[a] : rolls[a] - rolls[b])
-      keptIndices = new Set(indices.slice(0, keepN))
-      kept = indices.slice(0, keepN).map(i => rolls[i])
-    } else {
-      keptIndices = new Set(rolls.map((_, i) => i))
-      kept = rolls
-    }
-    const total = kept.reduce((s, r) => s + r, 0) + mod
-    const detailParts = rolls.map((r, i) => keptIndices.has(i) ? String(r) : `(${r})`)
-    const detail = `[${detailParts.join('+')}]${mod !== 0 ? (mod >= 0 ? `+${mod}` : `${mod}`) : ''}`
-    const label = `MJ — ${raw.replace('%', '100')}`
-    if (dmDiceTimer.current) clearTimeout(dmDiceTimer.current)
-    setDmDiceResult({ label, detail, total })
-    dmDiceTimer.current = setTimeout(() => setDmDiceResult(null), 8000)
-    logEvent('roll', `${label} → ${total} (${detail})`)
-  }
 
   // Add combatant form
   const [addingCombatant, setAddingCombatant] = useState(false)
@@ -1514,16 +1443,6 @@ export function CombatPage() {
             )}
           </div>
           <div className="flex items-center gap-3 shrink-0">
-            <button
-              onClick={() => setDmDiceOpen(v => !v)}
-              className={`text-sm font-bold px-3 py-1 rounded-lg border transition-colors ${
-                dmDiceOpen
-                  ? 'bg-rose-600 border-rose-500 text-white'
-                  : 'bg-stone-800 border-stone-700 text-stone-300 hover:border-stone-500'
-              }`}
-            >
-              ⚅ Dés
-            </button>
             {campaign?.share_token && (
               <button
                 onClick={() => {
@@ -1548,104 +1467,6 @@ export function CombatPage() {
         </div>
       </header>
 
-      {/* DM dice panel — fixed bottom overlay */}
-      {dmDiceOpen && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-stone-900 border-t border-stone-700 shadow-2xl">
-          <div className="max-w-5xl mx-auto px-4 py-4 space-y-3">
-            {/* Free expression input */}
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={dmDiceExpr}
-                onChange={e => setDmDiceExpr(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleDmRollExpr()}
-                placeholder="Expression libre : 4d6kh3, 2d20+5, d%…"
-                className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm font-mono placeholder:text-stone-600 focus:outline-none focus:border-rose-500"
-              />
-              <button
-                onClick={handleDmRollExpr}
-                disabled={!dmDiceExpr.trim()}
-                className="bg-rose-700 hover:bg-rose-600 disabled:opacity-40 text-white font-bold text-sm rounded-lg px-4 py-2 transition-colors shrink-0"
-              >
-                ↵
-              </button>
-            </div>
-            <div className="flex items-center gap-4 flex-wrap">
-              {/* Dice selector */}
-              <div className="flex gap-1.5 flex-wrap">
-                {[4, 6, 8, 10, 12, 20, 100].map(s => (
-                  <button
-                    key={s}
-                    onClick={() => { setDmDiceSides(s); if (s !== 20) setDmDiceAdv('none') }}
-                    className={`w-9 h-9 rounded-lg border text-xs font-bold transition-colors ${
-                      dmDiceSides === s
-                        ? 'bg-rose-600 border-rose-500 text-white'
-                        : 'bg-stone-800 border-stone-700 text-stone-300 hover:border-stone-500'
-                    }`}
-                  >
-                    d{s}
-                  </button>
-                ))}
-              </div>
-              {/* Count */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-stone-500 text-xs">×</span>
-                <input
-                  type="number" min={1} max={20} value={dmDiceCount}
-                  onChange={e => setDmDiceCount(e.target.value)}
-                  className="w-12 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-              {/* Modifier */}
-              <div className="flex items-center gap-1.5">
-                <span className="text-stone-500 text-xs">Mod.</span>
-                <input
-                  type="number" value={dmDiceMod} onChange={e => setDmDiceMod(e.target.value)}
-                  placeholder="0"
-                  className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-rose-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-              {/* Advantage (d20 only) */}
-              {dmDiceSides === 20 && (
-                <div className="flex gap-1">
-                  {(['none', 'adv', 'dis'] as const).map(mode => (
-                    <button key={mode} onClick={() => setDmDiceAdv(mode)}
-                      className={`px-2.5 py-1 rounded-lg border text-xs font-medium transition-colors ${
-                        dmDiceAdv === mode
-                          ? mode === 'adv' ? 'bg-emerald-700 border-emerald-600 text-white'
-                          : mode === 'dis' ? 'bg-red-800 border-red-700 text-white'
-                          : 'bg-stone-600 border-stone-500 text-white'
-                          : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
-                      }`}
-                    >
-                      {mode === 'none' ? 'Normal' : mode === 'adv' ? 'Avantage' : 'Désav.'}
-                    </button>
-                  ))}
-                </div>
-              )}
-              {/* Roll button */}
-              <button
-                onClick={handleDmRoll}
-                className="bg-rose-600 hover:bg-rose-500 text-white font-bold text-sm rounded-lg px-5 py-2 transition-colors"
-              >
-                Lancer
-              </button>
-              {/* Close */}
-              <button onClick={() => setDmDiceOpen(false)} className="ml-auto text-stone-500 hover:text-stone-300 text-lg transition-colors">×</button>
-            </div>
-            {/* Result */}
-            {dmDiceResult && (
-              <div className="flex items-center gap-4 bg-stone-800 rounded-xl px-4 py-2">
-                <span className="text-rose-300 font-black text-4xl tabular-nums">{dmDiceResult.total}</span>
-                <div>
-                  <p className="text-stone-400 text-xs">{dmDiceResult.label}</p>
-                  <p className="text-stone-500 text-xs font-mono">{dmDiceResult.detail}</p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-4">
 

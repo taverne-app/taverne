@@ -1360,16 +1360,6 @@ export function CharacterPage() {
               </button>
             )}
             <button
-              onClick={() => setDiceOpen(v => !v)}
-              className={`text-sm font-bold px-3 py-1 rounded-lg border transition-colors ${
-                diceOpen
-                  ? 'bg-rose-600 border-rose-500 text-white'
-                  : 'bg-stone-800 border-stone-700 text-stone-300 hover:border-stone-500'
-              }`}
-            >
-              ⚅ Dés
-            </button>
-            <button
               onClick={async () => {
                 let c = character
                 if (!c.share_token) {

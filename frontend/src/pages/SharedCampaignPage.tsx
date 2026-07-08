@@ -6,6 +6,8 @@ import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MarkdownText } from '../components/MarkdownText'
+import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
+import { RulesCompendium } from '../components/RulesCompendium'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -1000,6 +1002,8 @@ export function SharedCampaignPage() {
           )
         })()}
       </main>
+      <FloatingDiceRoller />
+      <RulesCompendium />
     </div>
   )
 }

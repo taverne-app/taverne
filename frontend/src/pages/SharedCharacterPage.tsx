@@ -5,6 +5,8 @@ import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
 import { MarkdownText } from '../components/MarkdownText'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
+import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
+import { RulesCompendium } from '../components/RulesCompendium'
 
 const ABILITY_LABELS: [AbilityName, string, string][] = [
   ['strength', 'FOR', 'Force'],
@@ -737,6 +739,8 @@ export function SharedCharacterPage() {
           </div>
         </div>
       </main>
+      <FloatingDiceRoller />
+      <RulesCompendium />
     </div>
   )
 }
