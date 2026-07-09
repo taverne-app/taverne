@@ -1334,7 +1334,7 @@ export function CharacterPage() {
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
             <Link
-              to="/characters"
+              to={character.campaign_id ? `/characters?campaign=${character.campaign_id}` : '/characters'}
               className="text-stone-400 hover:text-stone-200 transition-colors text-sm shrink-0"
             >
               ← Retour

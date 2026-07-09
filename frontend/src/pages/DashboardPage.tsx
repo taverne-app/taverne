@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import { listCampaigns, type Campaign } from '../api/campaigns'
 import { listCharacters, type Character } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
+import { useCampaigns } from '../contexts/CampaignContext'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
 import { canLevelUp } from '../data/xp'
 
@@ -113,6 +114,7 @@ function CampaignCard({ campaign }: { campaign: Campaign }) {
 
 export function DashboardPage() {
   const { user } = useAuth()
+  const { current: currentCampaign } = useCampaigns()
   const [campaigns, setCampaigns] = useState<Campaign[]>([])
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
@@ -196,7 +198,7 @@ export function DashboardPage() {
               <section>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-stone-300 font-semibold">Campagnes actives</h2>
-                  <Link to="/campaigns" className="text-stone-500 hover:text-amber-400 text-sm transition-colors">
+                  <Link to="/campaigns?all=1" className="text-stone-500 hover:text-amber-400 text-sm transition-colors">
                     Toutes les campagnes →
                   </Link>
                 </div>
@@ -230,8 +232,9 @@ export function DashboardPage() {
         )}
       </main>
 
-      {showCreate && (
+      {showCreate && currentCampaign && (
         <CreateCharacterModal
+          campaignId={currentCampaign.id}
           onCreated={() => {
             setShowCreate(false)
             Promise.all([listCampaigns(), listCharacters()])

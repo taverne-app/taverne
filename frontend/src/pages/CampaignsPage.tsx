@@ -1,16 +1,17 @@
 import { useEffect, useState } from 'react'
-import { Link, useSearchParams } from 'react-router-dom'
-import { listCampaigns, createCampaign, deleteCampaign, type Campaign } from '../api/campaigns'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { createCampaign, deleteCampaign } from '../api/campaigns'
 import { createCheckoutSession, createPortalSession } from '../api/billing'
 import { useAuth } from '../contexts/AuthContext'
+import { useCampaigns } from '../contexts/CampaignContext'
 
 export function CampaignsPage() {
   const { user, refreshUser } = useAuth()
+  const { campaigns, loading, reload, select } = useCampaigns()
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const [upgradeSuccess, setUpgradeSuccess] = useState(false)
 
-  const [campaigns, setCampaigns] = useState<Campaign[]>([])
-  const [loading, setLoading]     = useState(true)
   const [creating, setCreating]   = useState(false)
   const [nameDraft, setNameDraft] = useState('')
   const [descDraft, setDescDraft] = useState('')
@@ -22,13 +23,16 @@ export function CampaignsPage() {
   const atCampaignLimit = user?.plan === 'free' && campaigns.length >= 1
   const isPaid = user?.plan === 'adventurer' || user?.plan === 'guild'
 
-  async function load() {
-    setLoading(true)
-    try { setCampaigns(await listCampaigns()) } finally { setLoading(false) }
-  }
+  // Un seul chemin à prendre : on l'emprunte. `?all=1` (switcher, gestion) force la liste.
+  const showAll = searchParams.get('all') === '1'
 
   useEffect(() => {
-    load()
+    if (loading || showAll || campaigns.length !== 1) return
+    select(campaigns[0].id)
+    navigate(`/campaigns/${campaigns[0].id}`, { replace: true })
+  }, [loading, showAll, campaigns, select, navigate])
+
+  useEffect(() => {
     if (searchParams.get('upgraded') === '1') {
       refreshUser().then(() => {
         setUpgradeSuccess(true)
@@ -44,16 +48,18 @@ export function CampaignsPage() {
     setSaving(true)
     try {
       const c = await createCampaign(nameDraft.trim(), descDraft.trim() || undefined)
-      setCampaigns(cs => [...cs, c].sort((a, b) => a.name.localeCompare(b.name)))
+      await reload()
       setCreating(false)
       setNameDraft('')
       setDescDraft('')
+      select(c.id)
+      navigate(`/campaigns/${c.id}`)
     } finally { setSaving(false) }
   }
 
   async function handleDelete(id: number) {
     await deleteCampaign(id)
-    setCampaigns(cs => cs.filter(c => c.id !== id))
+    await reload()
     setConfirmDelete(null)
   }
 
@@ -176,7 +182,7 @@ export function CampaignsPage() {
           <div className="space-y-3">
             {campaigns.map(c => (
               <div key={c.id} className="bg-stone-900 border border-stone-800 rounded-xl p-4 hover:border-stone-700 transition-colors group relative">
-                <Link to={`/campaigns/${c.id}`} className="absolute inset-0 rounded-xl" />
+                <Link to={`/campaigns/${c.id}`} onClick={() => select(c.id)} className="absolute inset-0 rounded-xl" />
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <h3 className="text-white font-semibold text-base truncate">{c.name}</h3>
@@ -190,6 +196,9 @@ export function CampaignsPage() {
                   <div className="flex items-center gap-1 shrink-0 relative z-10">
                     {confirmDelete === c.id ? (
                       <>
+                        <span className="text-stone-500 text-xs text-right leading-tight">
+                          Supprime aussi<br />ses {c.characters.length} personnage{c.characters.length !== 1 ? 's' : ''}
+                        </span>
                         <button
                           onClick={() => setConfirmDelete(null)}
                           className="text-stone-500 hover:text-stone-300 text-xs transition-colors px-2 py-1"

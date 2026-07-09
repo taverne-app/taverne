@@ -1368,7 +1368,7 @@ export function CampaignPage() {
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-5xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0">
-            <Link to="/campaigns" className="text-stone-400 hover:text-stone-200 text-sm shrink-0 transition-colors">
+            <Link to="/campaigns?all=1" className="text-stone-400 hover:text-stone-200 text-sm shrink-0 transition-colors">
               ← Campagnes
             </Link>
             <span className="text-stone-700">|</span>
@@ -1894,12 +1894,6 @@ export function CampaignPage() {
                 )}
               </div>
               <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
-                <Link
-                  to={`/combat?campaign=${campaign.id}`}
-                  className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 text-sm font-medium rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  ⚔ Combat
-                </Link>
                 <button
                   onClick={handleExportCampaign}
                   title="Exporter la campagne en JSON"

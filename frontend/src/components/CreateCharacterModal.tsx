@@ -3,6 +3,7 @@ import { createCharacter, updateAbilities, updateProficiencies, type Character }
 import { ApiError } from '../api/client'
 
 interface Props {
+  campaignId: number
   onCreated: () => void
   onClose: () => void
 }
@@ -54,7 +55,7 @@ function sign(n: number): string {
 
 // ── Wizard ────────────────────────────────────────────────────────────────────
 
-export function CreateCharacterModal({ onCreated, onClose }: Props) {
+export function CreateCharacterModal({ campaignId, onCreated, onClose }: Props) {
   const [step, setStep] = useState(1)
   const [loading, setLoading] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -175,6 +176,7 @@ export function CreateCharacterModal({ onCreated, onClose }: Props) {
         max_hp: hp,
         armor_class: ac,
         level,
+        campaign_id: campaignId,
       })
 
       // Patch abilities if assigned

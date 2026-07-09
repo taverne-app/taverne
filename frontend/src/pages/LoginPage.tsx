@@ -22,7 +22,7 @@ export function LoginPage() {
     try {
       const { token, user } = await login(email, password)
       setAuth(token, user)
-      navigate('/characters')
+      navigate('/campaigns')
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'Identifiants invalides.')
     } finally {

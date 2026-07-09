@@ -2,6 +2,7 @@
 
 namespace Database\Factories;
 
+use App\Models\Campaign;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
@@ -35,6 +36,8 @@ class CharacterFactory extends Factory
 
         return [
             'user_id'         => User::factory(),
+            // Un personnage appartient toujours à une campagne, celle de son propriétaire.
+            'campaign_id'     => fn (array $attrs) => Campaign::factory()->create(['user_id' => $attrs['user_id']])->id,
             'name'            => $this->faker->firstName().' '.$this->faker->lastName(),
             'race'            => $this->faker->randomElement(self::$races),
             'character_class' => $this->faker->randomElement(self::$classes),

@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class StoreCharacterRequest extends FormRequest
 {
@@ -34,7 +35,10 @@ class StoreCharacterRequest extends FormRequest
             'armor_class'      => ['integer', 'min:1', 'max:30'],
             'speed'            => ['integer', 'min:0'],
 
-            'campaign_id'      => ['nullable', 'integer', 'exists:campaigns,id'],
+            'campaign_id'      => [
+                'required', 'integer',
+                Rule::exists('campaigns', 'id')->where('user_id', $this->user()->id),
+            ],
             'notes'            => ['nullable', 'string'],
         ];
     }

@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { CampaignProvider } from './contexts/CampaignContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ErrorBoundary } from './components/ErrorBoundary'
 import { LandingPage } from './pages/LandingPage'
@@ -25,6 +26,7 @@ export default function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
+        <CampaignProvider>
         <ErrorBoundary>
         <Routes>
           <Route path="/" element={<LandingPage />} />
@@ -67,7 +69,7 @@ export default function App() {
           <Route
             path="/campaigns"
             element={
-              <ProtectedRoute>
+              <ProtectedRoute bare>
                 <CampaignsPage />
               </ProtectedRoute>
             }
@@ -104,6 +106,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         </ErrorBoundary>
+        </CampaignProvider>
       </BrowserRouter>
     </AuthProvider>
   )

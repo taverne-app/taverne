@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { listCharacters, setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, updateConcentration, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
+import { setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, updateConcentration, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
 import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter, type CustomMonster, type MonsterAttack } from '../api/campaigns'
 import {
   listCombatants,
@@ -17,6 +17,7 @@ import {
 } from '../api/combatants'
 import { createSession } from '../api/sessions'
 import { useAuth } from '../contexts/AuthContext'
+import { useCampaigns } from '../contexts/CampaignContext'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, CR_XP, type MonsterTemplate } from '../data/monsters'
 import { canLevelUp } from '../data/xp'
@@ -26,6 +27,7 @@ import { XP_THRESHOLDS, encounterMultiplier, encounterDifficultyLabel, difficult
 import { MicButton } from '../components/MicButton'
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 function sign(n: number) {
   return n >= 0 ? `+${n}` : `${n}`
@@ -400,10 +402,12 @@ export function CombatPage() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const campaignId = searchParams.get('campaign') ? Number(searchParams.get('campaign')) : null
+  const { currentId: currentCampaignId, loading: campaignsLoading } = useCampaigns()
 
   const [characters, setCharacters] = useState<Character[]>([])
   const [combatants, setCombatants] = useState<Combatant[]>([])
   const [campaign, setCampaign] = useState<Campaign | null>(null)
+  // Set only when no combat could be resolved and the DM must pick a campaign.
   const allMonsters: MonsterTemplate[] = [
     ...MONSTERS,
     ...(campaign?.custom_monsters ?? []).map(m => ({
@@ -627,23 +631,25 @@ export function CombatPage() {
     } catch { /* ignore */ }
   }, [loading, campaignId])
 
+  // A combat always belongs to a campaign; reached without one in the URL, we
+  // fall back on the campaign the DM is currently inside.
+  useEffect(() => {
+    if (campaignId || campaignsLoading) return
+    if (currentCampaignId) navigate(`/combat?campaign=${currentCampaignId}`, { replace: true })
+    else navigate('/campaigns?all=1', { replace: true })
+  }, [campaignId, campaignsLoading, currentCampaignId, navigate])
+
   // Load characters + combatants
   useEffect(() => {
-    if (campaignId) {
-      Promise.all([getCampaign(campaignId), listCombatants(campaignId)])
-        .then(([c, cbs]) => {
-          setCampaign(c)
-          setCharacters(c.characters)
-          setCombatants(cbs)
-        })
-        .catch(() => navigate('/campaigns'))
-        .finally(() => setLoading(false))
-    } else {
-      listCharacters()
-        .then(setCharacters)
-        .catch(() => navigate('/characters'))
-        .finally(() => setLoading(false))
-    }
+    if (!campaignId) return
+    Promise.all([getCampaign(campaignId), listCombatants(campaignId)])
+      .then(([c, cbs]) => {
+        setCampaign(c)
+        setCharacters(c.characters)
+        setCombatants(cbs)
+      })
+      .catch(() => navigate('/campaigns?all=1'))
+      .finally(() => setLoading(false))
   }, [campaignId, navigate])
 
   // WS subscriptions

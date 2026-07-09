@@ -23,7 +23,7 @@ export function RegisterPage() {
     try {
       const { token, user } = await register(name, email, password)
       setAuth(token, user)
-      navigate('/characters')
+      navigate('/campaigns')
     } catch (err) {
       if (err instanceof ApiError && err.status === 422) {
         setErrors((err.data.errors as Record<string, string[]>) ?? {})

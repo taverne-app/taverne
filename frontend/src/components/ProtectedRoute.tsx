@@ -4,9 +4,11 @@ import { AppLayout } from './AppLayout'
 import { FloatingDiceRoller } from './FloatingDiceRoller'
 import { RulesCompendium } from './RulesCompendium'
 
-export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+/** `bare` renders without the sidebar — used by the campaign list, which sits above any campaign. */
+export function ProtectedRoute({ children, bare = false }: { children: React.ReactNode; bare?: boolean }) {
   const { token } = useAuth()
   if (!token) return <Navigate to="/login" replace />
+  if (bare) return <>{children}</>
   return (
     <AppLayout>
       {children}

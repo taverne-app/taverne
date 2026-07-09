@@ -147,6 +147,7 @@ export interface CreateCharacterPayload {
   max_hp: number
   armor_class: number
   level?: number
+  campaign_id: number
 }
 
 export interface IdentityPayload {
@@ -176,8 +177,8 @@ export async function updateIdentity(id: number, payload: IdentityPayload): Prom
   return (await res.json()).data
 }
 
-export async function listCharacters(): Promise<Character[]> {
-  const res = await apiFetch('/characters')
+export async function listCharacters(campaignId?: number): Promise<Character[]> {
+  const res = await apiFetch(campaignId ? `/characters?campaign=${campaignId}` : '/characters')
   if (!res.ok) throw new ApiError(res.status, await res.json())
   const json = await res.json()
   return json.data

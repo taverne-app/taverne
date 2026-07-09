@@ -19,6 +19,7 @@ class CharacterController extends Controller
     {
         $characters = $request->user()
             ->characters()
+            ->when($request->integer('campaign'), fn ($q, $id) => $q->where('campaign_id', $id))
             ->orderBy('name')
             ->get();
 

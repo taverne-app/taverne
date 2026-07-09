@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { listCharacters, deleteCharacter, type Character } from '../api/characters'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useCampaigns } from '../contexts/CampaignContext'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
 import { canLevelUp } from '../data/xp'
 
@@ -122,21 +123,31 @@ function CharacterCard({
 }
 
 export function CharactersPage() {
+  const { current, loading: campaignLoading } = useCampaigns()
+  const navigate = useNavigate()
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [search, setSearch] = useState('')
 
-  async function load() {
+  const campaignId = current?.id
+
+  const load = useCallback(async () => {
+    if (!campaignId) return
     setLoading(true)
     try {
-      setCharacters(await listCharacters())
+      setCharacters(await listCharacters(campaignId))
     } finally {
       setLoading(false)
     }
-  }
+  }, [campaignId])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
+
+  // Un personnage vit dans une campagne : sans campagne courante, on renvoie à la liste.
+  useEffect(() => {
+    if (!campaignLoading && !campaignId) navigate('/campaigns?all=1', { replace: true })
+  }, [campaignLoading, campaignId, navigate])
 
   async function handleDelete(id: number) {
     await deleteCharacter(id)
@@ -149,9 +160,10 @@ export function CharactersPage() {
       <main className="max-w-5xl mx-auto px-4 py-8">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h1 className="text-white text-xl font-display font-semibold tracking-wide">Mes personnages</h1>
+            <h1 className="text-white text-xl font-display font-semibold tracking-wide">Personnages</h1>
             <p className="text-stone-500 text-sm mt-0.5">
               {characters.length} personnage{characters.length !== 1 ? 's' : ''}
+              {current && <> · {current.name}</>}
             </p>
           </div>
           <button
@@ -204,8 +216,9 @@ export function CharactersPage() {
         )}
       </main>
 
-      {showCreate && (
+      {showCreate && campaignId && (
         <CreateCharacterModal
+          campaignId={campaignId}
           onCreated={() => { setShowCreate(false); load() }}
           onClose={() => setShowCreate(false)}
         />

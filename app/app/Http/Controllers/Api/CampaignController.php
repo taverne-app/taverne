@@ -20,7 +20,7 @@ class CampaignController extends Controller
         $campaigns = $request->user()
             ->campaigns()
             ->with(['characters', 'combatants'])
-            ->orderBy('name')
+            ->orderByDesc('updated_at')
             ->get();
 
         return CampaignResource::collection($campaigns);

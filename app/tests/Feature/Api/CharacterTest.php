@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Models\Campaign;
 use App\Models\Character;
 use App\Models\User;
 use Tests\TestCase;
@@ -32,6 +33,8 @@ class CharacterTest extends TestCase
 
     public function test_store_creates_character_with_full_hp(): void
     {
+        $campaign = Campaign::factory()->create(['user_id' => $this->user->id]);
+
         $response = $this->actingAs($this->user)
             ->postJson('/api/characters', [
                 'name'            => 'Legolas',
@@ -39,13 +42,62 @@ class CharacterTest extends TestCase
                 'character_class' => 'Rôdeur',
                 'max_hp'          => 45,
                 'armor_class'     => 16,
+                'campaign_id'     => $campaign->id,
             ]);
 
         $response->assertStatus(201)
             ->assertJsonPath('data.name', 'Legolas')
             ->assertJsonPath('data.combat.current_hp', 45);
 
-        $this->assertDatabaseHas('characters', ['name' => 'Legolas', 'user_id' => $this->user->id]);
+        $this->assertDatabaseHas('characters', [
+            'name'        => 'Legolas',
+            'user_id'     => $this->user->id,
+            'campaign_id' => $campaign->id,
+        ]);
+    }
+
+    public function test_store_requires_a_campaign(): void
+    {
+        $this->actingAs($this->user)
+            ->postJson('/api/characters', [
+                'name'            => 'Orphelin',
+                'race'            => 'Elfe',
+                'character_class' => 'Rôdeur',
+                'max_hp'          => 45,
+                'armor_class'     => 16,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('campaign_id');
+    }
+
+    public function test_store_rejects_a_campaign_owned_by_someone_else(): void
+    {
+        $other = Campaign::factory()->create();
+
+        $this->actingAs($this->user)
+            ->postJson('/api/characters', [
+                'name'            => 'Intrus',
+                'race'            => 'Orc',
+                'character_class' => 'Barbare',
+                'max_hp'          => 45,
+                'armor_class'     => 16,
+                'campaign_id'     => $other->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('campaign_id');
+    }
+
+    public function test_index_can_be_scoped_to_a_campaign(): void
+    {
+        $a = Campaign::factory()->create(['user_id' => $this->user->id]);
+        $b = Campaign::factory()->create(['user_id' => $this->user->id]);
+        Character::factory(2)->create(['user_id' => $this->user->id, 'campaign_id' => $a->id]);
+        Character::factory(1)->create(['user_id' => $this->user->id, 'campaign_id' => $b->id]);
+
+        $this->actingAs($this->user)
+            ->getJson('/api/characters?campaign='.$a->id)
+            ->assertOk()
+            ->assertJsonCount(2, 'data');
     }
 
     public function test_store_validates_required_fields(): void

@@ -89,6 +89,9 @@ class Character extends Model
         'tool_proficiencies',
     ];
 
+    /** Jouer un personnage remonte sa campagne en tête de la liste. */
+    protected $touches = ['campaign'];
+
     protected $casts = [
         'inspiration'        => 'boolean',
         'conditions'          => 'array',

@@ -21,6 +21,9 @@ class Combatant extends Model
         'condition_durations',
     ];
 
+    /** Un combat en cours remonte sa campagne en tête de la liste. */
+    protected $touches = ['campaign'];
+
     protected $casts = [
         'conditions'          => 'array',
         'condition_durations' => 'array',
