@@ -154,7 +154,12 @@ export function LiveCombatPage() {
 
       <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
         {battleMap && (battleMap.image_url || battleMap.tokens.length > 0) && (
-          <BattleMapBoard map={battleMap} combatants={combatants} characters={characters} />
+          <BattleMapBoard
+            map={battleMap}
+            combatants={combatants}
+            characters={characters}
+            activeRef={liveState.active_kind && liveState.active_id ? { kind: liveState.active_kind as 'combatant' | 'character', id: liveState.active_id } : null}
+          />
         )}
 
         {rows.length === 0 ? (

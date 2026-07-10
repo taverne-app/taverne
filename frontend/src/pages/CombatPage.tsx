@@ -1723,6 +1723,7 @@ export function CombatPage() {
                 characters={characters}
                 editable
                 onChange={handleBattleMapChange}
+                activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
               />
             </div>
           )}

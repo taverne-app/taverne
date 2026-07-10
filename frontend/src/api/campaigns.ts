@@ -125,13 +125,21 @@ export interface BattleToken {
   y: number
   color: TokenColor
   size: 'sm' | 'md' | 'lg'
+  /** DM-only token (ambush, hidden trap) — never sent to the players' view. */
+  hidden?: boolean
 }
 
 export interface BattleMap {
   image_url: string
-  /** Null in v1 — reserved so a tactical grid can be switched on without a migration. */
+  /** Null = no grid. When set, tokens snap to cells and distances are measured. */
   grid: { cols: number; rows: number } | null
   tokens: BattleToken[]
+}
+
+/** The combatant/character whose turn it is, so its token can be highlighted. */
+export interface ActiveRef {
+  kind: 'combatant' | 'character'
+  id: number
 }
 
 export interface Milestone {
