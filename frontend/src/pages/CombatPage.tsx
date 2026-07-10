@@ -409,6 +409,9 @@ export function CombatPage() {
   const [combatants, setCombatants] = useState<Combatant[]>([])
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [showBattleMap, setShowBattleMap] = useState(false)
+  // The docked active-combatant panel is the primary surface now; the full
+  // initiative list stays as a collapsible fallback (repliée par défaut).
+  const [showInitList, setShowInitList] = useState(false)
   // Set only when no combat could be resolved and the DM must pick a campaign.
   const allMonsters: MonsterTemplate[] = [
     ...MONSTERS,
@@ -1446,7 +1449,7 @@ export function CombatPage() {
   return (
     <div className="min-h-screen bg-stone-950">
       {/* Header */}
-      <main className="max-w-5xl mx-auto px-4 py-8 space-y-4">
+      <main className="max-w-5xl mx-auto px-4 py-8 pb-44 space-y-4">
         <div className="flex items-center justify-between">
           <h1 className="text-white text-xl font-display font-semibold tracking-wide">Combat</h1>
           {campaign?.share_token && (
@@ -1732,9 +1735,15 @@ export function CombatPage() {
         {/* Initiative table */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3 border-b border-stone-800">
-            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+            <button
+              onClick={() => setShowInitList(v => !v)}
+              className="text-stone-400 hover:text-stone-200 text-xs font-semibold uppercase tracking-widest flex items-center gap-2 transition-colors"
+              title="Liste détaillée — filet de secours ; les actions du tour sont dans la barre du bas"
+            >
+              <span>{showInitList ? '▾' : '▸'}</span>
               Ordre d'initiative
-            </h2>
+              <span className="text-stone-600 normal-case tracking-normal font-normal">({withRollDisplay.length})</span>
+            </button>
             <div className="flex items-center gap-3">
               {displayRows.length > 4 && (
                 <input
@@ -1904,7 +1913,7 @@ export function CombatPage() {
                 Créer un personnage
               </Link>
             </div>
-          ) : (
+          ) : showInitList ? (
             <div className="divide-y divide-stone-800">
               {displayRows.filter(row => combatFactionFilter === 'all' || (row.kind === 'character' ? combatFactionFilter === 'allié' : row.data.faction === combatFactionFilter)).filter(row => !combatTrackerSearch || row.data.name.toLowerCase().includes(combatTrackerSearch.toLowerCase())).map((row, displayIdx) => {
                 const isActive = withRollDisplay.length > 0 && activeCombatant && rowId(row) === rowId(activeCombatant)
@@ -2774,7 +2783,7 @@ export function CombatPage() {
                 )
               })}
             </div>
-          )}
+          ) : null}
 
           {/* AoE damage bar */}
           {aoeMode && (
@@ -3687,6 +3696,155 @@ export function CombatPage() {
           </div>
         )}
       </main>
+
+      {/* ─────────── Dock du combattant actif ─────────── */}
+      {activeCombatant && (() => {
+        const key = rowId(activeCombatant)
+        const acts = getActions(key)
+        const econ = (['action', 'bonus', 'reaction'] as const).map(type => {
+          const used = acts[type]
+          return (
+            <button
+              key={type}
+              onClick={() => toggleAction(key, type)}
+              title={type === 'action' ? 'Action' : type === 'bonus' ? 'Action bonus' : 'Réaction'}
+              className={`w-7 h-7 rounded text-xs font-bold border transition-colors ${
+                used ? 'bg-stone-800 border-stone-700 text-stone-600 line-through'
+                  : type === 'action' ? 'bg-amber-600/20 border-amber-600/50 text-amber-400 hover:bg-amber-600/30'
+                  : type === 'bonus' ? 'bg-sky-600/20 border-sky-600/50 text-sky-400 hover:bg-sky-600/30'
+                  : 'bg-rose-600/20 border-rose-600/50 text-rose-400 hover:bg-rose-600/30'
+              }`}
+            >{type === 'action' ? 'A' : type === 'bonus' ? 'B' : 'R'}</button>
+          )
+        })
+        const turnNav = (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <button onClick={prevTurn} className="bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 rounded px-2 py-1.5 text-sm transition-colors" title="Tour précédent">←</button>
+            <span className="text-stone-500 text-xs tabular-nums w-16 text-center">R{roundNumber} · {activeTurn + 1}/{withRollDisplay.length}</span>
+            <button onClick={nextTurn} className="bg-amber-600 hover:bg-amber-500 text-white font-semibold rounded px-3 py-1.5 text-sm transition-colors">Suivant →</button>
+          </div>
+        )
+
+        if (activeCombatant.kind === 'character') {
+          const ch = activeCombatant.data
+          const dying = ch.combat.current_hp <= 0
+          const damageSpells = ch.spellcasting.ability ? ch.spellcasting.spells.filter(s => s.damage_dice && (s.prepared || s.level === 0)) : []
+          const addable = Object.entries(CONDITIONS_FR).filter(([k]) => !ch.state.conditions.includes(k))
+          return (
+            <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-amber-700/40 bg-stone-900/95 backdrop-blur shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
+              <div className="max-w-5xl mx-auto px-4 py-2.5 space-y-2">
+                {macroResult && (
+                  <div className="text-center text-sm">
+                    <span className="text-stone-400">{macroResult.label} → </span>
+                    <span className="text-amber-300 font-bold text-base">{macroResult.total}</span>
+                    <span className="text-stone-600 text-xs ml-2">({macroResult.detail})</span>
+                  </div>
+                )}
+                <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+                  {turnNav}
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className="w-8 h-8 rounded-full bg-amber-500/20 border border-amber-500/60 text-amber-300 text-sm font-bold flex items-center justify-center shrink-0">{ch.combat.initiative_roll ?? '—'}</span>
+                    <div className="min-w-0 leading-tight">
+                      <p className="text-white font-semibold truncate">{ch.name}</p>
+                      <p className="text-stone-500 text-xs truncate">{ch.race} · {ch.character_class} Niv.{ch.level}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-sm font-bold ${dying ? 'text-red-400' : 'text-white'}`}>{ch.combat.current_hp}</span>
+                    <span className="text-stone-500 text-xs">/{ch.combat.max_hp}{ch.combat.temporary_hp > 0 && <span className="text-sky-400 font-semibold"> +{ch.combat.temporary_hp}</span>}</span>
+                    <input type="number" min={1} value={charHpInputs[ch.id] ?? ''} onChange={e => setCharHpInputs(p => ({ ...p, [ch.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') handleCharacterHp(ch, 'damage') }} placeholder="PV" className="w-12 bg-stone-800 border border-stone-700 rounded px-1 py-1 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    <button onClick={() => handleCharacterHp(ch, 'damage')} className="bg-red-900/60 hover:bg-red-800/80 border border-red-700/50 text-red-300 text-xs rounded px-2 py-1 transition-colors">Dmg</button>
+                    <button onClick={() => handleCharacterHp(ch, 'heal')} className="bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-700/50 text-emerald-300 text-xs rounded px-2 py-1 transition-colors">Soin</button>
+                    <input type="number" min={0} value={charTempHpInputs[ch.id] ?? ''} onChange={e => setCharTempHpInputs(p => ({ ...p, [ch.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') handleSetCharacterTempHp(ch) }} placeholder="tmp" className="w-12 bg-stone-800 border border-stone-700 rounded px-1 py-1 text-white text-xs text-center focus:outline-none focus:border-sky-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    <button onClick={() => handleSetCharacterTempHp(ch)} className="bg-sky-900/60 hover:bg-sky-800/80 border border-sky-700/50 text-sky-300 text-xs rounded px-2 py-1 transition-colors">Tmp</button>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <button onClick={() => handleToggleInspiration(ch)} title={ch.combat.inspiration ? "Retirer l'inspiration" : "Accorder l'inspiration"} className={`w-7 h-7 rounded text-xs border transition-colors ${ch.combat.inspiration ? 'bg-amber-500/30 border-amber-500 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-600 hover:text-amber-500'}`}>✦</button>
+                    {econ}
+                  </div>
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {ch.state.conditions.map(c => (
+                      <button key={c} onClick={() => handleToggleCharacterCondition(ch.id, c)} title="Retirer" className="text-xs bg-purple-900/50 border border-purple-700/50 text-purple-300 rounded px-1.5 py-0.5 hover:bg-red-900/40 hover:border-red-700/40 hover:text-red-300 transition-colors">{CONDITIONS_FR[c] ?? c} ×</button>
+                    ))}
+                    {addable.length > 0 && (
+                      <select value="" onChange={e => { if (e.target.value) handleToggleCharacterCondition(ch.id, e.target.value) }} title="Ajouter un état" className="text-xs bg-stone-800 border border-stone-700 text-stone-500 rounded px-1 py-1 focus:outline-none cursor-pointer">
+                        <option value="">+ état</option>
+                        {addable.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                      </select>
+                    )}
+                  </div>
+                  {dying && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="flex items-center gap-0.5" title="Réussites">
+                        {[1, 2, 3].map(n => <button key={n} onClick={() => handleDeathSave(ch, 'successes', ch.state.death_saves_successes >= n ? n - 1 : n)} className={`w-4 h-4 rounded-full border ${ch.state.death_saves_successes >= n ? 'bg-emerald-500 border-emerald-400' : 'border-stone-600 hover:border-emerald-500'}`} />)}
+                      </span>
+                      <span className="flex items-center gap-0.5" title="Échecs">
+                        {[1, 2, 3].map(n => <button key={n} onClick={() => handleDeathSave(ch, 'failures', ch.state.death_saves_failures >= n ? n - 1 : n)} className={`w-4 h-4 rounded-full border ${ch.state.death_saves_failures >= n ? 'bg-red-500 border-red-400' : 'border-stone-600 hover:border-red-500'}`} />)}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                {(ch.attack_macros.length > 0 || damageSpells.length > 0) && (
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {ch.attack_macros.map((macro, mi) => (
+                      <span key={`m${mi}`} className="inline-flex items-center gap-0.5">
+                        <button onClick={() => handleRollMacro(ch, macro, 'attack')} className="text-xs bg-rose-900/50 border border-rose-700/40 text-rose-300 rounded-l px-1.5 py-0.5 hover:bg-rose-800/60 transition-colors">{macro.name}</button>
+                        <button onClick={() => handleRollMacro(ch, macro, 'damage')} title={`Dégâts: ${macro.damage_dice}`} className="text-xs bg-orange-900/50 border border-orange-700/40 text-orange-300 rounded-r px-1.5 py-0.5 hover:bg-orange-800/60 transition-colors">{macro.damage_dice}</button>
+                      </span>
+                    ))}
+                    {damageSpells.map((spell, si) => (
+                      <span key={`s${si}`} className="inline-flex items-center gap-0.5">
+                        <button onClick={() => handleRollSpell(ch, spell, 'attack')} className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors">✦ {spell.name}</button>
+                        <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${spell.damage_dice}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{spell.damage_dice}</button>
+                      </span>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          )
+        }
+
+        const cb = activeCombatant.data
+        const dying = cb.current_hp <= 0
+        const addable = Object.entries(CONDITIONS_FR).filter(([k]) => !cb.conditions.includes(k))
+        const factionLabel = cb.faction === 'allié' ? 'Allié' : cb.faction === 'neutre' ? 'Neutre' : 'Ennemi'
+        return (
+          <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-amber-700/40 bg-stone-900/95 backdrop-blur shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
+            <div className="max-w-5xl mx-auto px-4 py-2.5">
+              <div className="flex items-center gap-x-3 gap-y-2 flex-wrap">
+                {turnNav}
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`w-8 h-8 rounded-full text-sm font-bold flex items-center justify-center shrink-0 border ${cb.faction === 'ennemi' ? 'bg-red-900/40 border-red-700/50 text-red-300' : cb.faction === 'allié' ? 'bg-emerald-900/40 border-emerald-700/50 text-emerald-300' : 'bg-stone-800 border-stone-700 text-stone-300'}`}>{cb.initiative_roll ?? '—'}</span>
+                  <div className="min-w-0 leading-tight">
+                    <p className="text-white font-semibold truncate">{cb.name}</p>
+                    <p className="text-stone-500 text-xs truncate">{factionLabel}{cb.armor_class ? ` · CA ${cb.armor_class}` : ''}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className={`text-sm font-bold ${dying ? 'text-red-400' : 'text-white'}`}>{cb.current_hp}</span>
+                  <span className="text-stone-500 text-xs">/{cb.max_hp}</span>
+                  <input type="number" min={1} value={combatantHpInputs[cb.id] ?? ''} onChange={e => setCombatantHpInputs(p => ({ ...p, [cb.id]: e.target.value }))} onKeyDown={e => { if (e.key === 'Enter') handleCombatantHp(cb.id, 'damage') }} placeholder="PV" className="w-12 bg-stone-800 border border-stone-700 rounded px-1 py-1 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                  <button onClick={() => handleCombatantHp(cb.id, 'damage')} className="bg-red-900/60 hover:bg-red-800/80 border border-red-700/50 text-red-300 text-xs rounded px-2 py-1 transition-colors">Dmg</button>
+                  <button onClick={() => handleCombatantHp(cb.id, 'heal')} className="bg-emerald-900/60 hover:bg-emerald-800/80 border border-emerald-700/50 text-emerald-300 text-xs rounded px-2 py-1 transition-colors">Soin</button>
+                </div>
+                <div className="flex items-center gap-1 shrink-0">{econ}</div>
+                <div className="flex items-center gap-1 flex-wrap">
+                  {cb.conditions.map(c => (
+                    <button key={c} onClick={() => handleToggleCombatantCondition(cb.id, c)} title="Retirer" className="text-xs bg-purple-900/50 border border-purple-700/50 text-purple-300 rounded px-1.5 py-0.5 hover:bg-red-900/40 hover:border-red-700/40 hover:text-red-300 transition-colors">{CONDITIONS_FR[c] ?? c} ×</button>
+                  ))}
+                  {addable.length > 0 && (
+                    <select value="" onChange={e => { if (e.target.value) handleToggleCombatantCondition(cb.id, e.target.value) }} title="Ajouter un état" className="text-xs bg-stone-800 border border-stone-700 text-stone-500 rounded px-1 py-1 focus:outline-none cursor-pointer">
+                      <option value="">+ état</option>
+                      {addable.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                    </select>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      })()}
 
       {/* Modal jet de concentration */}
       {concentrationPrompt && (
