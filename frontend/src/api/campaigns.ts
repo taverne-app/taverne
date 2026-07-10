@@ -113,6 +113,27 @@ export interface CampaignMap {
   pins: MapPin[]
 }
 
+export type TokenColor = 'amber' | 'red' | 'blue' | 'green' | 'purple' | 'sky'
+
+export interface BattleToken {
+  id: string
+  /** A token either mirrors a live combatant/character, or stands alone (décor, PNJ). */
+  ref_type: 'combatant' | 'character' | null
+  ref_id: number | null
+  label: string
+  x: number
+  y: number
+  color: TokenColor
+  size: 'sm' | 'md' | 'lg'
+}
+
+export interface BattleMap {
+  image_url: string
+  /** Null in v1 — reserved so a tactical grid can be switched on without a migration. */
+  grid: { cols: number; rows: number } | null
+  tokens: BattleToken[]
+}
+
 export interface Milestone {
   id: string
   date: string
@@ -145,6 +166,7 @@ export interface Campaign {
   factions: Faction[]
   random_tables: RandomTable[]
   campaign_map: CampaignMap | null
+  battle_map: BattleMap | null
   campaign_milestones: Milestone[]
   quests: Quest[]
   share_token: string | null
@@ -177,7 +199,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; campaign_milestones?: Milestone[]; quests?: Quest[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; battle_map?: BattleMap | null; campaign_milestones?: Milestone[]; quests?: Quest[] }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

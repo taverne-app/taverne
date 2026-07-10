@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, updateConcentration, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
-import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter, type CustomMonster, type MonsterAttack } from '../api/campaigns'
+import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter, type CustomMonster, type MonsterAttack, type BattleMap } from '../api/campaigns'
+import { BattleMapBoard } from '../components/BattleMapBoard'
 import {
   listCombatants,
   createCombatant,
@@ -407,6 +408,7 @@ export function CombatPage() {
   const [characters, setCharacters] = useState<Character[]>([])
   const [combatants, setCombatants] = useState<Combatant[]>([])
   const [campaign, setCampaign] = useState<Campaign | null>(null)
+  const [showBattleMap, setShowBattleMap] = useState(false)
   // Set only when no combat could be resolved and the DM must pick a campaign.
   const allMonsters: MonsterTemplate[] = [
     ...MONSTERS,
@@ -1029,6 +1031,17 @@ export function CombatPage() {
     })
     setCampaign(updated)
     setSaveEncounterName('')
+  }
+
+  async function handleBattleMapChange(next: BattleMap) {
+    if (!campaignId) return
+    // Optimistic: the token already moved on screen; persisting also broadcasts
+    // it to the players' live view. We keep the local state even if the write
+    // is slow — the next edit or refetch reconciles.
+    setCampaign(prev => prev ? { ...prev, battle_map: next } : prev)
+    try {
+      await updateCampaign(campaignId, { battle_map: next })
+    } catch { /* garder l'état optimiste */ }
   }
 
   async function handleDeleteSavedEncounter(index: number) {
@@ -1684,6 +1697,36 @@ export function CombatPage() {
             </div>
           </div>
         )}
+
+        {/* Battle map */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+          <button
+            onClick={() => setShowBattleMap(v => !v)}
+            className="w-full flex items-center justify-between px-5 py-3 hover:bg-stone-800/40 transition-colors"
+          >
+            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
+              🗺 Battle map
+              {(campaign?.battle_map?.tokens.length ?? 0) > 0 && (
+                <span className="text-[10px] bg-stone-700 text-stone-300 rounded-full px-1.5 py-0.5 font-normal">{campaign?.battle_map?.tokens.length}</span>
+              )}
+              {!campaign?.share_token && (
+                <span className="text-[10px] text-stone-600 font-normal normal-case tracking-normal">— partagez la campagne pour la diffuser aux joueurs</span>
+              )}
+            </h2>
+            <span className="text-stone-500 text-xs">{showBattleMap ? '▲' : '▼'}</span>
+          </button>
+          {showBattleMap && (
+            <div className="px-5 pb-5 border-t border-stone-800 pt-4">
+              <BattleMapBoard
+                map={campaign?.battle_map ?? null}
+                combatants={combatants}
+                characters={characters}
+                editable
+                onChange={handleBattleMapChange}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Initiative table */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">

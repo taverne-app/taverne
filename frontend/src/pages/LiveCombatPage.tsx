@@ -1,11 +1,12 @@
 import { useEffect, useState, useMemo } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCampaign } from '../api/share'
-import type { Campaign } from '../api/campaigns'
+import type { Campaign, BattleMap } from '../api/campaigns'
 import type { Combatant } from '../api/combatants'
 import type { Character } from '../api/characters'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { SharedSidebar } from '../components/SharedSidebar'
+import { BattleMapBoard } from '../components/BattleMapBoard'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -29,6 +30,7 @@ export function LiveCombatPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [characters, setCharacters] = useState<Character[]>([])
   const [combatants, setCombatants] = useState<Combatant[]>([])
+  const [battleMap, setBattleMap] = useState<BattleMap | null>(null)
   const [liveState, setLiveState] = useState<LiveState>({ active_kind: null, active_id: null, round: 1 })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -41,6 +43,7 @@ export function LiveCombatPage() {
         setCampaign(c)
         setCharacters(c.characters ?? [])
         setCombatants((c as Campaign & { combatants?: Combatant[] }).combatants ?? [])
+        setBattleMap(c.battle_map ?? null)
       })
       .catch(() => setError('Campagne introuvable ou lien révoqué.'))
       .finally(() => setLoading(false))
@@ -60,6 +63,10 @@ export function LiveCombatPage() {
       })
       .listen('.character.updated', (e: { character: Character }) => {
         setCharacters(prev => prev.map(c => c.id === e.character.id ? e.character : c))
+        setConnected(true)
+      })
+      .listen('.campaign.battle-map-updated', (e: { battle_map: BattleMap | null }) => {
+        setBattleMap(e.battle_map)
         setConnected(true)
       })
     return () => { echo.leave(`campaign-share.${token}`); echo.disconnect() }
@@ -145,7 +152,11 @@ export function LiveCombatPage() {
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-6">
+      <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+        {battleMap && (battleMap.image_url || battleMap.tokens.length > 0) && (
+          <BattleMapBoard map={battleMap} combatants={combatants} characters={characters} />
+        )}
+
         {rows.length === 0 ? (
           <div className="text-center py-16">
             <p className="text-stone-700 text-5xl mb-4">⚔</p>

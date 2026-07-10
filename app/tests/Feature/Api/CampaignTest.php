@@ -2,9 +2,11 @@
 
 namespace Tests\Feature\Api;
 
+use App\Events\BattleMapUpdated;
 use App\Models\Campaign;
 use App\Models\Character;
 use App\Models\User;
+use Illuminate\Support\Facades\Event;
 use Tests\TestCase;
 
 class CampaignTest extends TestCase
@@ -66,5 +68,52 @@ class CampaignTest extends TestCase
             ->assertJsonPath('data.1.name', 'Récente');
 
         $this->assertTrue($older->fresh()->updated_at->gt($newer->fresh()->updated_at));
+    }
+
+    public function test_update_persists_the_battle_map(): void
+    {
+        $campaign = Campaign::factory()->create(['user_id' => $this->user->id]);
+        $map = [
+            'image_url' => 'https://example.test/donjon.png',
+            'grid'      => null,
+            'tokens'    => [
+                ['id' => 't1', 'ref_type' => 'combatant', 'ref_id' => 7, 'label' => 'Gobelin', 'x' => 12.5, 'y' => 40.0, 'color' => 'red', 'size' => 'md'],
+                ['id' => 't2', 'ref_type' => null, 'ref_id' => null, 'label' => 'Coffre', 'x' => 80.0, 'y' => 20.0, 'color' => 'amber', 'size' => 'sm'],
+            ],
+        ];
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}", ['battle_map' => $map])
+            ->assertOk()
+            ->assertJsonPath('data.battle_map.tokens.1.label', 'Coffre');
+
+        $this->assertEquals($map, $campaign->fresh()->battle_map);
+    }
+
+    public function test_moving_a_token_broadcasts_to_a_shared_campaign(): void
+    {
+        Event::fake([BattleMapUpdated::class]);
+        $campaign = Campaign::factory()->create([
+            'user_id'     => $this->user->id,
+            'share_token' => 'tok-123',
+        ]);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}", ['battle_map' => ['image_url' => '', 'grid' => null, 'tokens' => []]])
+            ->assertOk();
+
+        Event::assertDispatched(BattleMapUpdated::class);
+    }
+
+    public function test_battle_map_change_does_not_broadcast_without_a_share_token(): void
+    {
+        Event::fake([BattleMapUpdated::class]);
+        $campaign = Campaign::factory()->create(['user_id' => $this->user->id, 'share_token' => null]);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}", ['battle_map' => ['image_url' => '', 'grid' => null, 'tokens' => []]])
+            ->assertOk();
+
+        Event::assertNotDispatched(BattleMapUpdated::class);
     }
 }

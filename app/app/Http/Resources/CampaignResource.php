@@ -25,6 +25,7 @@ class CampaignResource extends JsonResource
             'factions'         => $this->factions ?? [],
             'random_tables'    => $this->random_tables ?? [],
             'campaign_map'          => $this->campaign_map ?? null,
+            'battle_map'            => $this->battle_map ?? null,
             'campaign_milestones'   => $this->campaign_milestones ?? [],
             'quests'                => $this->quests ?? [],
             'share_token'      => $this->share_token,

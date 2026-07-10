@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\BattleMapUpdated;
 use App\Events\CampaignTimeUpdated;
 use App\Events\CombatTurnUpdated;
 use App\Http\Controllers\Controller;
@@ -71,11 +72,17 @@ class CampaignController extends Controller
             'factions'         => ['sometimes', 'nullable', 'array'],
             'random_tables'    => ['sometimes', 'nullable', 'array'],
             'campaign_map'          => ['sometimes', 'nullable', 'array'],
+            'battle_map'            => ['sometimes', 'nullable', 'array'],
             'campaign_milestones'   => ['sometimes', 'nullable', 'array'],
             'quests'                => ['sometimes', 'nullable', 'array'],
         ]);
 
         $campaign->update($validated);
+
+        // Déplacer un pion doit se voir en direct sur l'écran des joueurs.
+        if (array_key_exists('battle_map', $validated) && $campaign->share_token) {
+            BattleMapUpdated::dispatch($campaign->share_token, $campaign->battle_map);
+        }
 
         return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
     }

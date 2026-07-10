@@ -11,7 +11,7 @@ class Campaign extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'locations', 'session_prep', 'custom_monsters', 'factions', 'random_tables', 'campaign_map', 'campaign_milestones', 'quests', 'share_token', 'time_of_day'];
+    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'locations', 'session_prep', 'custom_monsters', 'factions', 'random_tables', 'campaign_map', 'battle_map', 'campaign_milestones', 'quests', 'share_token', 'time_of_day'];
 
     protected $casts = [
         'saved_encounters' => 'array',
@@ -24,6 +24,7 @@ class Campaign extends Model
         'factions'         => 'array',
         'random_tables'    => 'array',
         'campaign_map'          => 'array',
+        'battle_map'            => 'array',
         'campaign_milestones'   => 'array',
         'quests'                => 'array',
     ];
