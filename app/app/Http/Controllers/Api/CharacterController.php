@@ -5,9 +5,11 @@ namespace App\Http\Controllers\Api;
 use App\Events\CharacterUpdated;
 use App\Events\DiceRolled;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ImportCharacterRequest;
 use App\Http\Requests\StoreCharacterRequest;
 use App\Http\Requests\UpdateCharacterRequest;
 use App\Http\Resources\CharacterResource;
+use App\Models\Campaign;
 use App\Models\Character;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -34,6 +36,26 @@ class CharacterController extends Controller
                 ...$request->validated(),
                 'current_hp' => $request->validated('max_hp', 1),
             ]);
+
+        return new CharacterResource($character);
+    }
+
+    /**
+     * Restore a character from an archive into a campaign. The campaign comes
+     * from the route and is checked against the caller, so a hand-edited file
+     * cannot drop a character into someone else's campaign.
+     */
+    public function import(ImportCharacterRequest $request, Campaign $campaign): CharacterResource
+    {
+        abort_if($campaign->user_id !== $request->user()->id, 403);
+
+        $data = $request->validated();
+
+        $character = $request->user()->characters()->create([
+            ...$data,
+            'campaign_id' => $campaign->id,
+            'current_hp'  => $data['current_hp'] ?? $data['max_hp'] ?? 1,
+        ]);
 
         return new CharacterResource($character);
     }

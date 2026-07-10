@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateCharacterRequest extends FormRequest
 {
@@ -100,7 +101,10 @@ class UpdateCharacterRequest extends FormRequest
             'spells_known.*.level'  => ['required_with:spells_known', 'integer', 'min:0', 'max:9'],
             'spells_known.*.prepared' => ['sometimes', 'boolean'],
 
-            'campaign_id'      => ['sometimes', 'nullable', 'integer', 'exists:campaigns,id'],
+            'campaign_id'      => [
+                'sometimes', 'integer',
+                Rule::exists('campaigns', 'id')->where('user_id', $this->user()->id),
+            ],
         ];
     }
 }

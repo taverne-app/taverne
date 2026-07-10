@@ -19,9 +19,13 @@ return new class extends Migration
         SQL);
         DB::table('characters')->whereNull('campaign_id')->delete();
 
+        // Both drivers must end up identical: NOT NULL, and a cascade that takes
+        // characters down with their campaign instead of orphaning them.
         if (Schema::getConnection()->getDriverName() === 'sqlite') {
             Schema::table('characters', function (Blueprint $table) {
+                $table->dropForeign(['campaign_id']);
                 $table->foreignId('campaign_id')->nullable(false)->change();
+                $table->foreign('campaign_id')->references('id')->on('campaigns')->cascadeOnDelete();
             });
 
             return;

@@ -87,6 +87,82 @@ class CharacterTest extends TestCase
             ->assertJsonValidationErrors('campaign_id');
     }
 
+    public function test_import_restores_a_character_into_a_campaign(): void
+    {
+        $campaign = Campaign::factory()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/characters/import", [
+                'name'            => 'Freya',
+                'race'            => 'Elfe',
+                'character_class' => 'Rôdeur',
+                'level'           => 5,
+                'max_hp'          => 40,
+                'current_hp'      => 12,
+                'temporary_hp'    => 3,
+                'armor_class'     => 16,
+                'conditions'      => ['poisoned'],
+                'currency'        => ['po' => 25],
+                'notes'           => 'Rescapée',
+            ])
+            ->assertStatus(201)
+            ->assertJsonPath('data.name', 'Freya')
+            ->assertJsonPath('data.combat.current_hp', 12)
+            ->assertJsonPath('data.combat.temporary_hp', 3)
+            ->assertJsonPath('data.state.conditions', ['poisoned'])
+            ->assertJsonPath('data.campaign_id', $campaign->id);
+    }
+
+    public function test_import_defaults_current_hp_to_max(): void
+    {
+        $campaign = Campaign::factory()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/characters/import", [
+                'name' => 'Anok', 'race' => 'Nain', 'character_class' => 'Clerc', 'max_hp' => 30,
+            ])
+            ->assertStatus(201)
+            ->assertJsonPath('data.combat.current_hp', 30);
+    }
+
+    public function test_import_forbids_a_campaign_owned_by_someone_else(): void
+    {
+        $other = Campaign::factory()->create();
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$other->id}/characters/import", [
+                'name' => 'Intrus', 'race' => 'Orc', 'character_class' => 'Barbare', 'max_hp' => 10,
+            ])
+            ->assertStatus(403);
+
+        $this->assertDatabaseMissing('characters', ['name' => 'Intrus']);
+    }
+
+    public function test_import_ignores_a_campaign_id_smuggled_in_the_payload(): void
+    {
+        $mine  = Campaign::factory()->create(['user_id' => $this->user->id]);
+        $other = Campaign::factory()->create();
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$mine->id}/characters/import", [
+                'name' => 'Ruse', 'race' => 'Elfe', 'character_class' => 'Barde', 'max_hp' => 10,
+                'campaign_id' => $other->id,
+            ])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('campaign_id');
+    }
+
+    public function test_update_cannot_move_a_character_into_someone_elses_campaign(): void
+    {
+        $character = Character::factory()->create(['user_id' => $this->user->id]);
+        $other     = Campaign::factory()->create();
+
+        $this->actingAs($this->user)
+            ->putJson("/api/characters/{$character->id}", ['campaign_id' => $other->id])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors('campaign_id');
+    }
+
     public function test_index_can_be_scoped_to_a_campaign(): void
     {
         $a = Campaign::factory()->create(['user_id' => $this->user->id]);

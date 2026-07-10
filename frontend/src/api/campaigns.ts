@@ -200,12 +200,6 @@ export async function addCharacterToCampaign(campaignId: number, characterId: nu
   return (await res.json()).data
 }
 
-export async function removeCharacterFromCampaign(campaignId: number, characterId: number): Promise<Campaign> {
-  const res = await apiFetch(`/campaigns/${campaignId}/characters/${characterId}`, { method: 'DELETE' })
-  if (!res.ok) throw new ApiError(res.status, await res.json())
-  return (await res.json()).data
-}
-
 export async function broadcastCombatTurn(
   campaignId: number,
   payload: { active_kind: 'character' | 'combatant' | null; active_id: number | null; round: number },

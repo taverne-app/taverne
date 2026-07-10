@@ -28,8 +28,12 @@ services:
         VITE_REVERB_PORT: ${VITE_REVERB_PORT:-8080}
         VITE_REVERB_SCHEME: ${VITE_REVERB_SCHEME:-http}
     restart: unless-stopped
+    # Publier sans préfixe d'adresse ferait écouter docker-proxy sur 0.0.0.0 ET
+    # [::]. L'IPv6 de cette machine est globale et sans NAT : le port serait
+    # joignable depuis internet. Les services sont donc liés au loopback ; en
+    # production ils restent atteignables par Caddy via le réseau « taverne ».
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       - app
     networks:
@@ -59,7 +63,7 @@ services:
     restart: unless-stopped
     command: php artisan reverb:start --host=0.0.0.0 --port=8080
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./app:/var/www/html
       - vendor:/var/www/html/vendor
@@ -87,7 +91,7 @@ services:
     image: axllent/mailpit:latest
     restart: unless-stopped
     ports:
-      - "8025:8025"
+      - "127.0.0.1:8025:8025"
     networks:
       - taverne
 
@@ -95,7 +99,7 @@ services:
     image: nginx:alpine
     restart: unless-stopped
     ports:
-      - "8000:80"
+      - "127.0.0.1:8000:80"
     volumes:
       - ./app:/var/www/html
       - ./docker/nginx.conf:/etc/nginx/conf.d/default.conf

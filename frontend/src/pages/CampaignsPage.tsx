@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { createCampaign, deleteCampaign } from '../api/campaigns'
+import { createCampaign, deleteCampaign, getCampaign } from '../api/campaigns'
+import { listSessions } from '../api/sessions'
 import { createCheckoutSession, createPortalSession } from '../api/billing'
 import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
+import { archiveFilename, buildCampaignZip } from '../lib/campaignArchive'
 
 export function CampaignsPage() {
   const { user, refreshUser } = useAuth()
@@ -17,6 +19,7 @@ export function CampaignsPage() {
   const [descDraft, setDescDraft] = useState('')
   const [saving, setSaving]       = useState(false)
   const [confirmDelete, setConfirmDelete] = useState<number | null>(null)
+  const [exporting, setExporting] = useState<number | null>(null)
   const [upgradingPlan, setUpgradingPlan] = useState<'adventurer' | 'guild' | null>(null)
   const [showUpgradeModal, setShowUpgradeModal] = useState(false)
 
@@ -61,6 +64,30 @@ export function CampaignsPage() {
     await deleteCampaign(id)
     await reload()
     setConfirmDelete(null)
+  }
+
+  /**
+   * Deleting a campaign takes its characters with it, so the archive is written
+   * first and the delete only runs once it exists. The list carries no sessions,
+   * hence the fetch.
+   */
+  async function handleExportThenDelete(id: number) {
+    setExporting(id)
+    try {
+      const [full, sessions] = await Promise.all([getCampaign(id), listSessions(id)])
+      const blob = buildCampaignZip(full, full.characters ?? [], sessions)
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = archiveFilename(full.name)
+      a.click()
+      URL.revokeObjectURL(url)
+      await handleDelete(id)
+    } catch {
+      alert('L\'export a échoué. La campagne n\'a pas été supprimée.')
+    } finally {
+      setExporting(null)
+    }
   }
 
   async function handleUpgrade(plan: 'adventurer' | 'guild') {
@@ -195,23 +222,35 @@ export function CampaignsPage() {
                   </div>
                   <div className="flex items-center gap-1 shrink-0 relative z-10">
                     {confirmDelete === c.id ? (
-                      <>
-                        <span className="text-stone-500 text-xs text-right leading-tight">
-                          Supprime aussi<br />ses {c.characters.length} personnage{c.characters.length !== 1 ? 's' : ''}
+                      <div className="flex flex-col items-end gap-1.5">
+                        <span className="text-stone-400 text-xs text-right leading-tight">
+                          Supprimer emporte aussi {c.characters.length === 0
+                            ? 'la campagne seule'
+                            : <>ses <b className="text-stone-300">{c.characters.length} personnage{c.characters.length !== 1 ? 's' : ''}</b></>}.
                         </span>
-                        <button
-                          onClick={() => setConfirmDelete(null)}
-                          className="text-stone-500 hover:text-stone-300 text-xs transition-colors px-2 py-1"
-                        >
-                          Annuler
-                        </button>
-                        <button
-                          onClick={() => handleDelete(c.id)}
-                          className="text-red-400 hover:text-red-300 text-xs font-medium transition-colors px-2 py-1"
-                        >
-                          Confirmer
-                        </button>
-                      </>
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => setConfirmDelete(null)}
+                            className="text-stone-500 hover:text-stone-300 text-xs transition-colors px-2 py-1"
+                          >
+                            Annuler
+                          </button>
+                          <button
+                            onClick={() => handleDelete(c.id)}
+                            disabled={exporting !== null}
+                            className="text-red-400 hover:text-red-300 text-xs transition-colors px-2 py-1 disabled:opacity-40"
+                          >
+                            Supprimer sans exporter
+                          </button>
+                          <button
+                            onClick={() => handleExportThenDelete(c.id)}
+                            disabled={exporting !== null}
+                            className="bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40"
+                          >
+                            {exporting === c.id ? 'Export…' : '↓ Exporter puis supprimer'}
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <button
                         onClick={() => setConfirmDelete(c.id)}

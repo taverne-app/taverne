@@ -48,7 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('campaigns', CampaignController::class);
     Route::prefix('campaigns/{campaign}')->group(function () {
         Route::post('characters',               [CampaignController::class, 'addCharacter']);
-        Route::delete('characters/{character}', [CampaignController::class, 'removeCharacter']);
+        Route::post('characters/import',        [CharacterController::class, 'import']);
         Route::post('share',                    [CampaignController::class, 'share']);
         Route::delete('share',                  [CampaignController::class, 'revokeShare']);
         Route::post('combat-turn',              [CampaignController::class, 'broadcastTurn']);

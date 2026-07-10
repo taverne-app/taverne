@@ -5,7 +5,6 @@ import {
   createCampaign,
   updateCampaign,
   addCharacterToCampaign,
-  removeCharacterFromCampaign,
   type Campaign,
   type Npc,
   type GameCalendar,
@@ -22,9 +21,10 @@ import {
   type Milestone,
   type Quest,
   type MonsterAttack,
+  type SavedEncounter,
 } from '../api/campaigns'
 import { generateShareToken, revokeShareToken } from '../api/share'
-import { listCharacters, longRest, shortRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, updateExhaustion, updateDeathSaves, updateTempMaxHp, type Character } from '../api/characters'
+import { deleteCharacter, importCharacter, listCharacters, longRest, shortRest, updateInventory, updateIdentity, updateHp, updateInspiration, updateConditions, updateExhaustion, updateDeathSaves, type Character } from '../api/characters'
 import {
   listSessions,
   createSession,
@@ -37,6 +37,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { TIME_OF_DAY, TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
 import { setCampaignTimeOfDay } from '../api/campaigns'
+import { archiveFilename, buildCampaignZip, parseCampaignArchive, ArchiveError } from '../lib/campaignArchive'
+import { ZipError } from '../lib/zip'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
 import { MicButton } from '../components/MicButton'
@@ -371,13 +373,18 @@ export function CampaignPage() {
     } finally { setSaving(false) }
   }
 
-  async function handleRemove(characterId: number) {
+  /**
+   * A character cannot exist outside a campaign, so pulling one out of the
+   * campaign means deleting it. The button says so.
+   */
+  async function handleDeleteCharacter(characterId: number) {
     if (!campaign) return
     setSaving(true)
     try {
-      const updated = await removeCharacterFromCampaign(campaign.id, characterId)
-      setCampaign(updated)
-      setCharacters(updated.characters)
+      await deleteCharacter(characterId)
+      const fresh = await getCampaign(campaign.id)
+      setCampaign(fresh)
+      setCharacters(fresh.characters)
       setConfirmRemove(null)
     } finally { setSaving(false) }
   }
@@ -1183,11 +1190,6 @@ export function CampaignPage() {
     setCampaign(updated)
   }
 
-  async function handleUpdateTempMaxHp(charId: number, bonus: number) {
-    const updated = await updateTempMaxHp(charId, bonus)
-    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
-  }
-
   async function handleUpdateCustomMonster(index: number) {
     if (!campaign || !editMonsterDraft.name.trim()) return
     const xp = CR_XP[editMonsterDraft.cr] ?? 0
@@ -1231,30 +1233,11 @@ export function CampaignPage() {
 
   function handleExportCampaign() {
     if (!campaign) return
-    const data = {
-      _version: 2,
-      name: campaign.name,
-      description: campaign.description,
-      dm_notes: campaign.dm_notes,
-      npcs: campaign.npcs,
-      locations: campaign.locations,
-      party_treasury: campaign.party_treasury,
-      saved_encounters: campaign.saved_encounters,
-      custom_monsters: campaign.custom_monsters,
-      factions: campaign.factions,
-      random_tables: campaign.random_tables,
-      game_calendar: campaign.game_calendar,
-      session_prep: campaign.session_prep,
-      campaign_milestones: campaign.campaign_milestones,
-      quests: campaign.quests,
-      campaign_map: campaign.campaign_map,
-      sessions: sessions,
-    }
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const blob = buildCampaignZip(campaign, campaign.characters ?? [], sessions)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${campaign.name.replace(/[^a-z0-9]/gi, '_')}.json`
+    a.download = archiveFilename(campaign.name)
     a.click()
     URL.revokeObjectURL(url)
   }
@@ -1262,32 +1245,39 @@ export function CampaignPage() {
   async function handleImportCampaign(file: File) {
     setImporting(true)
     try {
-      const text = await file.text()
-      const data = JSON.parse(text)
-      const newCampaign = await createCampaign(data.name ?? 'Campagne importée', data.description ?? null)
+      const { campaign: data, characters } = await parseCampaignArchive(file)
+      const newCampaign = await createCampaign(
+        (data.name as string) ?? 'Campagne importée',
+        (data.description as string) ?? null,
+      )
       await updateCampaign(newCampaign.id, {
-        dm_notes: data.dm_notes ?? null,
-        npcs: data.npcs ?? [],
-        locations: data.locations ?? [],
-        party_treasury: data.party_treasury ?? [],
-        saved_encounters: data.saved_encounters ?? [],
-        custom_monsters: data.custom_monsters ?? [],
-        factions: data.factions ?? [],
-        random_tables: data.random_tables ?? [],
-        game_calendar: data.game_calendar ?? {},
-        session_prep: data.session_prep ?? null,
-        campaign_milestones: data.campaign_milestones ?? [],
-        quests: data.quests ?? [],
-        campaign_map: data.campaign_map ?? null,
+        dm_notes: (data.dm_notes as string) ?? null,
+        npcs: (data.npcs as Npc[]) ?? [],
+        locations: (data.locations as Location[]) ?? [],
+        party_treasury: (data.party_treasury as TreasureItem[]) ?? [],
+        saved_encounters: (data.saved_encounters as SavedEncounter[]) ?? [],
+        custom_monsters: (data.custom_monsters as CustomMonster[]) ?? [],
+        factions: (data.factions as Faction[]) ?? [],
+        random_tables: (data.random_tables as RandomTable[]) ?? [],
+        game_calendar: (data.game_calendar as GameCalendar) ?? {},
+        session_prep: (data.session_prep as SessionPrep) ?? null,
+        campaign_milestones: (data.campaign_milestones as Milestone[]) ?? [],
+        quests: (data.quests as Quest[]) ?? [],
+        campaign_map: (data.campaign_map as CampaignMap) ?? null,
       })
       if (Array.isArray(data.sessions)) {
-        for (const s of data.sessions) {
+        for (const s of data.sessions as CampaignSession[]) {
           await createSession(newCampaign.id, { title: s.title, session_date: s.session_date, notes: s.notes, xp_awarded: s.xp_awarded ?? null, loot_notes: s.loot_notes ?? null })
         }
       }
+      for (const archived of characters) {
+        await importCharacter(newCampaign.id, archived)
+      }
       navigate(`/campaigns/${newCampaign.id}`)
-    } catch {
-      alert('Fichier invalide ou corrompu.')
+    } catch (err) {
+      alert(err instanceof ZipError || err instanceof ArchiveError
+        ? err.message
+        : 'Fichier invalide ou corrompu.')
     } finally {
       setImporting(false)
     }
@@ -1615,134 +1605,6 @@ export function CampaignPage() {
           </button>
           {showDashboard && (
             <div className="px-5 pb-5 space-y-4 border-t border-stone-800">
-              {/* HP du groupe */}
-              {characters.length > 0 && (
-                <div>
-                  <p className="text-stone-500 text-xs uppercase tracking-widest mb-2 mt-3">Santé du groupe</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                    {characters.map(c => {
-                      const maxHp = c.combat.max_hp
-                      const curHp = c.combat.current_hp
-                      const pct = maxHp > 0 ? Math.min(1, curHp / maxHp) : 0
-                      const bar = pct > 0.5 ? 'bg-emerald-500' : pct > 0.25 ? 'bg-amber-500' : 'bg-red-500'
-                      const conditions = (c.state.conditions ?? []).filter(Boolean)
-                      const editing = hpEditCharId === c.id
-                      return (
-                        <div key={c.id} className="bg-stone-800 rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-1 min-w-0">
-                              <button
-                                onClick={() => handleToggleInspiration(c.id, c.combat.inspiration)}
-                                title={c.combat.inspiration ? "Retirer l'inspiration" : "Accorder l'inspiration"}
-                                className={`shrink-0 text-xs transition-colors ${c.combat.inspiration ? 'text-amber-400 hover:text-amber-300' : 'text-stone-700 hover:text-amber-500'}`}
-                              >✦</button>
-                              <span className="text-stone-200 text-xs font-medium truncate">{c.name}</span>
-                            </div>
-                            <button
-                              onClick={() => { setHpEditCharId(editing ? null : c.id); setHpDeltaValue(5) }}
-                              className={`text-xs tabular-nums transition-colors ${curHp <= 0 ? 'text-red-400' : editing ? 'text-amber-400' : 'text-stone-400 hover:text-white'}`}
-                              title="Cliquer pour modifier les PV"
-                            >
-                              {curHp}/{maxHp}
-                              {c.combat.temporary_hp > 0 && <span className="text-sky-400 ml-0.5">+{c.combat.temporary_hp}</span>}
-                            </button>
-                          </div>
-                          <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
-                            <div className={`h-full ${bar} rounded-full transition-all`} style={{ width: `${pct * 100}%` }} />
-                          </div>
-                          {(conditions.length > 0 || editing) && (
-                            <div className="flex flex-wrap gap-1 mt-1.5">
-                              {conditions.map((cond: string, idx: number) => (
-                                editing ? (
-                                  <button
-                                    key={idx}
-                                    onClick={() => handleRemoveCondition(c.id, cond)}
-                                    title="Retirer"
-                                    className="text-[10px] bg-amber-900/40 border border-amber-700/30 text-amber-300 hover:bg-red-900/40 hover:border-red-700/40 hover:text-red-300 rounded px-1.5 py-0.5 transition-colors"
-                                  >
-                                    {CONDITIONS_FR[cond] ?? cond} ×
-                                  </button>
-                                ) : (
-                                  <span key={idx} className="text-[10px] bg-amber-900/40 border border-amber-700/30 text-amber-300 rounded px-1.5 py-0.5">
-                                    {CONDITIONS_FR[cond] ?? cond}
-                                  </span>
-                                )
-                              ))}
-                              {editing && (
-                                <select
-                                  value=""
-                                  onChange={e => { if (e.target.value) { handleAddCondition(c.id, e.target.value); e.target.value = '' } }}
-                                  className="text-[10px] bg-transparent border border-stone-700 text-stone-500 hover:text-stone-300 rounded px-1 py-0.5 focus:outline-none cursor-pointer transition-colors"
-                                  title="Ajouter une condition"
-                                >
-                                  <option value="">+ état</option>
-                                  {Object.entries(CONDITIONS_FR).filter(([k]) => !c.state.conditions.includes(k)).map(([k, v]) => (
-                                    <option key={k} value={k}>{v}</option>
-                                  ))}
-                                </select>
-                              )}
-                            </div>
-                          )}
-                          {editing && (
-                            <div className="mt-2 space-y-1">
-                              <div className="flex items-center gap-1">
-                                <input
-                                  type="number"
-                                  value={hpDeltaValue}
-                                  onChange={e => setHpDeltaValue(Math.max(1, parseInt(e.target.value) || 1))}
-                                  min={1}
-                                  className="w-14 bg-stone-700 border border-stone-600 rounded px-2 py-1 text-white text-xs text-center focus:outline-none"
-                                />
-                                <button
-                                  onClick={() => handleQuickHp(c.id, hpDeltaValue, 'heal')}
-                                  className="flex-1 bg-emerald-900/60 hover:bg-emerald-900/80 border border-emerald-800/50 text-emerald-400 text-xs font-semibold rounded py-1 transition-colors"
-                                >
-                                  + Soin
-                                </button>
-                                <button
-                                  onClick={() => handleQuickHp(c.id, hpDeltaValue, 'damage')}
-                                  className="flex-1 bg-red-900/60 hover:bg-red-900/80 border border-red-800/50 text-red-400 text-xs font-semibold rounded py-1 transition-colors"
-                                >
-                                  − Dégât
-                                </button>
-                              </div>
-                              <button
-                                onClick={() => handleQuickHp(c.id, hpDeltaValue, 'temporary')}
-                                className="w-full bg-sky-900/40 hover:bg-sky-900/60 border border-sky-800/50 text-sky-400 text-xs font-semibold rounded py-1 transition-colors"
-                              >
-                                + PV temporaires
-                              </button>
-                              <div className="flex items-center gap-1 pt-1 border-t border-stone-700">
-                                <span className="text-stone-500 text-[10px] flex-1">
-                                  Max PV {c.combat.temp_max_hp_bonus !== 0 ? <span className={c.combat.temp_max_hp_bonus < 0 ? 'text-red-400' : 'text-emerald-400'}>{c.combat.temp_max_hp_bonus > 0 ? '+' : ''}{c.combat.temp_max_hp_bonus}</span> : ''}
-                                </span>
-                                <button
-                                  onClick={() => handleUpdateTempMaxHp(c.id, c.combat.temp_max_hp_bonus - hpDeltaValue)}
-                                  className="px-1.5 py-0.5 bg-red-900/40 hover:bg-red-900/60 border border-red-900/50 text-red-400 text-xs rounded transition-colors"
-                                  title="Réduire le max de PV (drain)"
-                                >−</button>
-                                <button
-                                  onClick={() => handleUpdateTempMaxHp(c.id, Math.min(0, c.combat.temp_max_hp_bonus + hpDeltaValue))}
-                                  className="px-1.5 py-0.5 bg-emerald-900/40 hover:bg-emerald-900/60 border border-emerald-900/50 text-emerald-400 text-xs rounded transition-colors"
-                                  title="Restaurer le max de PV"
-                                >+</button>
-                                {c.combat.temp_max_hp_bonus !== 0 && (
-                                  <button
-                                    onClick={() => handleUpdateTempMaxHp(c.id, 0)}
-                                    className="text-stone-600 hover:text-stone-400 text-[10px] transition-colors"
-                                    title="Réinitialiser"
-                                  >↺</button>
-                                )}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
               <div className="grid grid-cols-2 gap-4">
                 {/* Calendrier */}
                 {(campaign.game_calendar?.date || campaign.game_calendar?.weather) && (
@@ -1751,9 +1613,6 @@ export function CampaignPage() {
                     <div className="bg-stone-800 rounded-lg p-3 space-y-1">
                       {campaign.game_calendar.date && (
                         <p className="text-stone-200 text-sm">📅 {campaign.game_calendar.date}</p>
-                      )}
-                      {campaign.game_calendar.time && (
-                        <p className="text-stone-400 text-xs capitalize">{campaign.game_calendar.time}</p>
                       )}
                       {campaign.game_calendar.weather && (
                         <p className="text-stone-300 text-sm">🌤 {campaign.game_calendar.weather}</p>
@@ -1896,7 +1755,7 @@ export function CampaignPage() {
               <div className="flex items-center gap-3 shrink-0 flex-wrap justify-end">
                 <button
                   onClick={handleExportCampaign}
-                  title="Exporter la campagne en JSON"
+                  title="Exporter la campagne et ses personnages (archive ZIP)"
                   className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
                 >
                   ↓ Export
@@ -1911,13 +1770,13 @@ export function CampaignPage() {
                   </button>
                 )}
                 <label
-                  title="Importer une campagne depuis un JSON"
+                  title="Importer une campagne depuis une archive ZIP (ou un ancien JSON)"
                   className="text-stone-500 hover:text-stone-300 text-sm transition-colors cursor-pointer"
                 >
                   {importing ? '…' : '↑ Import'}
                   <input
                     type="file"
-                    accept=".json"
+                    accept=".zip,.json"
                     className="hidden"
                     onChange={e => { const f = e.target.files?.[0]; if (f) handleImportCampaign(f); e.target.value = '' }}
                   />
@@ -2383,10 +2242,10 @@ export function CampaignPage() {
                               ✕
                             </button>
                             <button
-                              onClick={() => handleRemove(c.id)}
+                              onClick={() => handleDeleteCharacter(c.id)}
                               className="text-red-400 text-xs hover:text-red-300 transition-colors"
                             >
-                              Retirer
+                              Supprimer définitivement
                             </button>
                           </div>
                         ) : (
@@ -2630,20 +2489,6 @@ export function CampaignPage() {
                 onBlur={() => handleSaveCalendar({ date: calendarDraft.date })}
                 className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
               />
-            </div>
-            <div>
-              <label className="text-stone-500 text-xs block mb-1">Moment de la journée</label>
-              <select
-                value={calendarDraft.time ?? ''}
-                onChange={e => handleSaveCalendar({ time: e.target.value as GameCalendar['time'] })}
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors"
-              >
-                <option value="">—</option>
-                <option value="matin">🌅 Matin</option>
-                <option value="après-midi">☀️ Après-midi</option>
-                <option value="soir">🌆 Soir</option>
-                <option value="nuit">🌙 Nuit</option>
-              </select>
             </div>
             <div>
               <label className="text-stone-500 text-xs block mb-1">Météo</label>

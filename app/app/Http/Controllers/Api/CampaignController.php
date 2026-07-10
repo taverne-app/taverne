@@ -84,7 +84,8 @@ class CampaignController extends Controller
     {
         $this->authorize($request, $campaign);
 
-        $campaign->characters()->update(['campaign_id' => null]);
+        // A character cannot exist outside a campaign, so the database cascade
+        // takes them with it. The campaign list warns before getting here.
         $campaign->delete();
 
         return response()->json(null, 204);
@@ -110,16 +111,6 @@ class CampaignController extends Controller
         );
 
         $character->update(['campaign_id' => $campaign->id]);
-
-        return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
-    }
-
-    public function removeCharacter(Request $request, Campaign $campaign, Character $character): CampaignResource
-    {
-        $this->authorize($request, $campaign);
-        abort_if($character->campaign_id !== $campaign->id, 422, 'Ce personnage n\'appartient pas à cette campagne.');
-
-        $character->update(['campaign_id' => null]);
 
         return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));
     }

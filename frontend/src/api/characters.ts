@@ -184,6 +184,16 @@ export async function listCharacters(campaignId?: number): Promise<Character[]> 
   return json.data
 }
 
+/** Restores an archived character into a campaign. The campaign is taken from the URL, not the payload. */
+export async function importCharacter(campaignId: number, archive: Record<string, unknown>): Promise<Character> {
+  const res = await apiFetch(`/campaigns/${campaignId}/characters/import`, {
+    method: 'POST',
+    body: JSON.stringify(archive),
+  })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}
+
 export async function createCharacter(payload: CreateCharacterPayload): Promise<Character> {
   const res = await apiFetch('/characters', {
     method: 'POST',
