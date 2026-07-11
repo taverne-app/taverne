@@ -70,10 +70,16 @@ export function LiveCombatPage() {
         setLiveState(e)
       })
       .listen('.combatant.updated', (e: { combatant: Combatant }) => {
-        setCombatants(prev => prev.map(c => c.id === e.combatant.id ? e.combatant : c))
+        // Upsert : met à jour un combattant existant, ou l'ajoute s'il vient
+        // d'être créé pendant que la page est ouverte (ajout à chaud).
+        setCombatants(prev => prev.some(c => c.id === e.combatant.id)
+          ? prev.map(c => c.id === e.combatant.id ? e.combatant : c)
+          : [...prev, e.combatant])
       })
       .listen('.character.updated', (e: { character: Character }) => {
-        setCharacters(prev => prev.map(c => c.id === e.character.id ? e.character : c))
+        setCharacters(prev => prev.some(c => c.id === e.character.id)
+          ? prev.map(c => c.id === e.character.id ? e.character : c)
+          : [...prev, e.character])
       })
       .listen('.campaign.battle-map-updated', (e: { battle_map: BattleMap | null }) => {
         setBattleMap(e.battle_map)

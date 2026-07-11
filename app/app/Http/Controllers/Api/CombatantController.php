@@ -38,6 +38,10 @@ class CombatantController extends Controller
 
         $combatant = $campaign->combatants()->create($validated);
 
+        // Diffuse la création pour que les vues joueurs connectées voient
+        // apparaître le combattant sans recharger.
+        CombatantUpdated::dispatch($combatant);
+
         return new CombatantResource($combatant);
     }
 
