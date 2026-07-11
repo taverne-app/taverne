@@ -412,6 +412,8 @@ export function CombatPage() {
   // The docked active-combatant panel is the primary surface now; the full
   // initiative list stays as a collapsible fallback (repliée par défaut).
   const [showInitList, setShowInitList] = useState(false)
+  // Overflow menu (⋯) regroupant les actions utilitaires de l'en-tête d'initiative.
+  const [showInitMenu, setShowInitMenu] = useState(false)
   // Ribbon card whose quick-action popover is open (off-turn Dmg/Soin/état).
   const [ribbonMenu, setRibbonMenu] = useState<string | null>(null)
   // Horizontal center (px, relative to the fixed bar) of the card whose popover is open — anchors it under the card.
@@ -1495,8 +1497,9 @@ export function CombatPage() {
         </div>
 
 
-        {/* Combat timers */}
-        {(timers.length > 0 || withRollDisplay.length > 0) && (
+        {/* Combat timers — n'apparaît que s'il y a des effets ou une saisie en cours
+            (le déclencheur « + Effet » vit dans le menu ⋯ de l'en-tête d'initiative). */}
+        {(timers.length > 0 || showTimerForm) && (
           <div className="bg-stone-900 border border-stone-800 rounded-xl px-4 py-3">
             <div className="flex items-center gap-3 flex-wrap">
               <span className="text-stone-600 text-xs uppercase tracking-widest shrink-0">Effets</span>
@@ -1741,7 +1744,7 @@ export function CombatPage() {
               {campaignId && combatants.some(c => c.current_hp <= 0) && (
                 <button
                   onClick={handleClearDeadCombatants}
-                  className="text-amber-600 hover:text-amber-400 text-xs transition-colors"
+                  className="text-xs font-medium rounded-lg px-2.5 py-1.5 border bg-stone-800 border-stone-700 text-stone-400 hover:border-amber-600/50 hover:text-amber-400 transition-colors"
                 >
                   ☠ Retirer morts
                 </button>
@@ -1749,29 +1752,53 @@ export function CombatPage() {
               {campaignId && combatants.length > 0 && (
                 <button
                   onClick={handleClearCombatants}
-                  className="text-red-600 hover:text-red-400 text-xs transition-colors"
+                  className="text-xs font-medium rounded-lg px-2.5 py-1.5 border bg-stone-800 border-stone-700 text-stone-400 hover:border-red-700/60 hover:text-red-400 transition-colors"
                 >
                   Vider ennemis
                 </button>
               )}
               <button
                 onClick={() => setShowCombatSummary(true)}
-                className="text-amber-500 hover:text-amber-300 text-xs transition-colors"
+                className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-amber-600/15 border-amber-700/40 text-amber-400 hover:bg-amber-600/30 transition-colors"
               >
                 ⚔ Fin du combat
               </button>
-              <button
-                onClick={() => setShowNotepad(v => !v)}
-                className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${showNotepad ? 'bg-stone-700/40 border-stone-600 text-stone-300' : 'text-stone-500 hover:text-stone-300 border-transparent'}`}
-              >
-                📝 Notes
-              </button>
-              <button
-                onClick={handleReset}
-                className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
-              >
-                Réinitialiser
-              </button>
+
+              {/* Utilitaires regroupés sous un menu ⋯ pour désencombrer l'en-tête */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowInitMenu(v => !v)}
+                  title="Plus d'actions"
+                  className={`text-sm rounded-lg px-2 py-1 border transition-colors ${showInitMenu ? 'bg-stone-700/50 border-stone-600 text-stone-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-stone-200'}`}
+                >
+                  ⋯
+                </button>
+                {showInitMenu && (
+                  <>
+                    <div className="fixed inset-0 z-30" onClick={() => setShowInitMenu(false)} />
+                    <div className="absolute right-0 top-full mt-1 z-40 w-44 bg-stone-900 border border-stone-700 rounded-lg shadow-xl py-1">
+                      <button
+                        onClick={() => { setShowTimerForm(true); setShowInitMenu(false) }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-stone-400 hover:bg-stone-800 hover:text-stone-200 transition-colors"
+                      >
+                        ⏱ Ajouter un effet
+                      </button>
+                      <button
+                        onClick={() => { setShowNotepad(v => !v); setShowInitMenu(false) }}
+                        className={`w-full text-left px-3 py-1.5 text-xs transition-colors hover:bg-stone-800 ${showNotepad ? 'text-stone-200' : 'text-stone-400'}`}
+                      >
+                        📝 Notes{showNotepad ? ' ✓' : ''}
+                      </button>
+                      <button
+                        onClick={() => { handleReset(); setShowInitMenu(false) }}
+                        className="w-full text-left px-3 py-1.5 text-xs text-stone-400 hover:bg-stone-800 hover:text-stone-200 transition-colors"
+                      >
+                        ↺ Réinitialiser
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
 
@@ -3488,9 +3515,9 @@ export function CombatPage() {
               )
             })()}
 
-            {/* Outils de groupe — accessibles directement depuis la barre du bas */}
+            {/* Outils de groupe — barre légère attachée au ruban (secondaire dans la hiérarchie) */}
             {(characters.length > 0 || combatants.length > 0) && (
-              <div className="flex items-center gap-1.5 py-1.5 border-b border-stone-800/60 overflow-x-auto">
+              <div className="flex items-center gap-1.5 py-1 overflow-x-auto">
                 <span className="text-stone-600 text-[10px] uppercase tracking-widest shrink-0 pr-1">Groupe</span>
                 <button
                   onClick={() => { if (aoeMode) { setAoeMode(false); setAoeSelected(new Set()); setAoeDamageInput('') } else { setAoeMode(true); setShowSavingThrow(false); setShowRestPanel(false); setRibbonMenu(null) } }}
