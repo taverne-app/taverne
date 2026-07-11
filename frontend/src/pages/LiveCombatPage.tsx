@@ -52,22 +52,31 @@ export function LiveCombatPage() {
   useEffect(() => {
     if (!token || !REALTIME_CONFIGURED) return
     const echo = createPublicEcho()
+
+    // L'indicateur « En direct » suit l'état réel de la connexion WebSocket,
+    // pas la réception d'un premier événement.
+    const connection = (echo.connector as { pusher?: { connection?: { bind: (e: string, cb: () => void) => void; state?: string } } }).pusher?.connection
+    if (connection) {
+      connection.bind('connected', () => setConnected(true))
+      connection.bind('connecting', () => setConnected(false))
+      connection.bind('unavailable', () => setConnected(false))
+      connection.bind('failed', () => setConnected(false))
+      connection.bind('disconnected', () => setConnected(false))
+      if (connection.state === 'connected') setConnected(true)
+    }
+
     echo.channel(`campaign-share.${token}`)
       .listen('.combat.turn-updated', (e: LiveState) => {
         setLiveState(e)
-        setConnected(true)
       })
       .listen('.combatant.updated', (e: { combatant: Combatant }) => {
         setCombatants(prev => prev.map(c => c.id === e.combatant.id ? e.combatant : c))
-        setConnected(true)
       })
       .listen('.character.updated', (e: { character: Character }) => {
         setCharacters(prev => prev.map(c => c.id === e.character.id ? e.character : c))
-        setConnected(true)
       })
       .listen('.campaign.battle-map-updated', (e: { battle_map: BattleMap | null }) => {
         setBattleMap(e.battle_map)
-        setConnected(true)
       })
     return () => { echo.leave(`campaign-share.${token}`); echo.disconnect() }
   }, [token])
