@@ -148,7 +148,7 @@ class CharacterController extends Controller
         $max  = (int) $slots[$level]['max'];
         $used = (int) ($slots[$level]['used'] ?? 0);
 
-        $slots[$level]['used'] = $request->string('action') === 'use'
+        $slots[$level]['used'] = $request->string('action')->value() === 'use'
             ? min($max, $used + 1)
             : max(0, $used - 1);
 
