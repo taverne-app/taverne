@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\CombatantRemoved;
 use App\Events\CombatantUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CombatantResource;
@@ -149,7 +150,16 @@ class CombatantController extends Controller
         $this->authorize($request, $campaign);
         abort_if($combatant->campaign_id !== $campaign->id, 403);
 
+        $shareToken = $campaign->share_token;
+        $id = $combatant->id;
+
         $combatant->delete();
+
+        // Diffuse le retrait pour que les vues joueurs connectées voient
+        // disparaître le combattant sans recharger.
+        if ($shareToken) {
+            CombatantRemoved::dispatch($shareToken, $id);
+        }
 
         return response()->json(null, 204);
     }

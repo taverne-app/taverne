@@ -76,6 +76,9 @@ export function LiveCombatPage() {
           ? prev.map(c => c.id === e.combatant.id ? e.combatant : c)
           : [...prev, e.combatant])
       })
+      .listen('.combatant.removed', (e: { id: number }) => {
+        setCombatants(prev => prev.filter(c => c.id !== e.id))
+      })
       .listen('.character.updated', (e: { character: Character }) => {
         setCharacters(prev => prev.some(c => c.id === e.character.id)
           ? prev.map(c => c.id === e.character.id ? e.character : c)
