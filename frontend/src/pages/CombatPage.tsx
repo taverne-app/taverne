@@ -732,6 +732,19 @@ export function CombatPage() {
   // Phase 3 — quand une image de fond est fournie, le plateau devient l'élément central de la page.
   const hasBattleImage = !!campaign?.battle_map?.image_url
 
+  // Sans plateau visuel, la liste d'initiative est le seul contenu à afficher :
+  // on la déplie automatiquement une fois dès qu'un combat est lancé pour ne pas
+  // laisser un grand vide entre le haut de page et la barre du bas. L'utilisateur
+  // reste libre de la replier ensuite (autoExpandedRef garde l'ouverture ponctuelle).
+  const autoExpandedRef = useRef(false)
+  useEffect(() => {
+    if (autoExpandedRef.current || hasBattleImage) return
+    if (withRoll.length > 0) {
+      autoExpandedRef.current = true
+      setShowInitList(true)
+    }
+  }, [withRoll.length, hasBattleImage])
+
   const { setTitle, notify } = useTabNotify()
 
   // Update tab title on every turn change; blink if tab is hidden.
@@ -1693,25 +1706,6 @@ export function CombatPage() {
                     </button>
                   )}
                 </div>
-              )}
-              {(characters.length > 0 || combatants.length > 0) && (
-                <button
-                  onClick={() => {
-                    if (manualOrder) {
-                      setManualOrder(null)
-                    } else {
-                      setManualOrder(sorted.map(rowId))
-                    }
-                  }}
-                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
-                    manualOrder
-                      ? 'bg-sky-700/40 border-sky-500 text-sky-300'
-                      : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'
-                  }`}
-                  title="Réordonner manuellement l'initiative"
-                >
-                  ⇅ Réordonner
-                </button>
               )}
               {campaignId && combatants.some(c => c.current_hp <= 0) && characters.length > 0 && (
                 <button
@@ -3505,6 +3499,11 @@ export function CombatPage() {
                     className={`shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${showRestPanel ? 'bg-sky-700/30 border-sky-600 text-sky-400' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'}`}
                   >⛺ Repos</button>
                 )}
+                <button
+                  onClick={() => { setManualOrder(manualOrder ? null : sorted.map(rowId)) }}
+                  className={`shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${manualOrder ? 'bg-sky-700/40 border-sky-500 text-sky-300' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'}`}
+                  title="Réordonner manuellement l'initiative (poignées ⠿ sur les lignes)"
+                >⇅ Réordonner</button>
               </div>
             )}
 
