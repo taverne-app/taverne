@@ -412,6 +412,9 @@ export function CombatPage() {
   // The docked active-combatant panel is the primary surface now; the full
   // initiative list stays as a collapsible fallback (repliée par défaut).
   const [showInitList, setShowInitList] = useState(false)
+  // Une fois le combat lancé avec un plateau, la liste d'initiative s'efface pour
+  // laisser la vedette au plateau ; ce drapeau la rappelle ponctuellement.
+  const [forceShowInit, setForceShowInit] = useState(false)
   // Overflow menu (⋯) regroupant les actions utilitaires de l'en-tête d'initiative.
   const [showInitMenu, setShowInitMenu] = useState(false)
   // Ribbon card whose quick-action popover is open (off-turn Dmg/Soin/état).
@@ -756,6 +759,14 @@ export function CombatPage() {
       setShowInitList(true)
     }
   }, [withRoll.length, hasBattleImage])
+
+  // Le combat est « lancé » dès que tout le monde a une initiative (plus aucune
+  // manquante). Avec un plateau, on efface alors la liste d'initiative pour lui
+  // donner la vedette — la mise en place (jets manquants) la garde visible, et un
+  // lien discret permet de la rappeler à la demande.
+  const combatLaunched = withRoll.length > 0 && withoutRoll.length === 0
+  const hideInitiative = hasBattleImage && combatLaunched && !forceShowInit
+  const mainWidthClass = hasBattleImage ? (combatLaunched ? 'max-w-7xl' : 'max-w-6xl') : 'max-w-5xl'
 
   const { setTitle, notify } = useTabNotify()
 
@@ -1471,7 +1482,7 @@ export function CombatPage() {
   return (
     <div className="min-h-screen bg-stone-950">
       {/* Header */}
-      <main className={`${hasBattleImage ? 'max-w-6xl' : 'max-w-5xl'} mx-auto px-4 py-8 pb-44 space-y-4`}>
+      <main className={`${mainWidthClass} mx-auto px-4 py-8 pb-44 space-y-4`}>
         <div className="flex items-center justify-between">
           <h1 className="text-white text-xl font-display font-semibold tracking-wide">Combat</h1>
           {campaign?.share_token && (
@@ -1634,6 +1645,17 @@ export function CombatPage() {
                   <span className="text-[10px] text-stone-600 font-normal normal-case tracking-normal">— partagez la campagne pour la diffuser aux joueurs</span>
                 )}
               </h2>
+              {/* Rappel de la liste d'initiative, effacée une fois le combat lancé pour laisser la vedette au plateau */}
+              {combatLaunched && (
+                <button
+                  onClick={() => { setForceShowInit(v => !v); if (!forceShowInit) setShowInitList(true) }}
+                  className="flex items-center gap-1.5 text-stone-500 hover:text-stone-300 text-xs transition-colors shrink-0"
+                  title="La liste détaillée s'efface pendant le combat ; les tours se gèrent depuis la barre du bas"
+                >
+                  <span>{forceShowInit ? '▾' : '▸'}</span>
+                  {forceShowInit ? 'Masquer la liste' : `Liste d’initiative (${withRollDisplay.length})`}
+                </button>
+              )}
             </div>
             <div className="p-3 sm:p-4">
               <BattleMapBoard
@@ -1679,7 +1701,7 @@ export function CombatPage() {
         )}
 
         {/* Initiative table */}
-        <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+        <div className={`bg-stone-900 border border-stone-800 rounded-xl overflow-hidden ${hideInitiative ? 'hidden' : ''}`}>
           <div className="flex items-center justify-between px-5 py-3 border-b border-stone-800">
             <button
               onClick={() => setShowInitList(v => !v)}
@@ -3473,7 +3495,7 @@ export function CombatPage() {
       {/* ─────────── Ruban de tour + dock du combattant actif ─────────── */}
       {withRollDisplay.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-amber-700/40 bg-stone-900/95 backdrop-blur shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
-          <div ref={barRef} className={`${hasBattleImage ? 'max-w-6xl' : 'max-w-5xl'} mx-auto px-4 relative`}>
+          <div ref={barRef} className={`${mainWidthClass} mx-auto px-4 relative`}>
 
             {/* Popover d'action rapide (hors tour) — rendu hors du ruban scrollable pour ne pas être rogné */}
             {ribbonMenu && (() => {
