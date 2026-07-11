@@ -5,8 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Events\CharacterUpdated;
 use App\Events\DiceRolled;
 use App\Http\Controllers\Controller;
-use App\Http\Resources\CampaignResource;
 use App\Http\Resources\CharacterResource;
+use App\Http\Resources\SharedCampaignResource;
 use App\Models\Campaign;
 use App\Models\Character;
 use Illuminate\Http\JsonResponse;
@@ -14,13 +14,13 @@ use Illuminate\Http\Request;
 
 class ShareController extends Controller
 {
-    public function show(string $token): CampaignResource
+    public function show(string $token): SharedCampaignResource
     {
         $campaign = Campaign::where('share_token', $token)
             ->with(['characters', 'combatants', 'sessions'])
             ->firstOrFail();
 
-        return new CampaignResource($campaign);
+        return new SharedCampaignResource($campaign);
     }
 
     public function showCharacter(string $token): CharacterResource
