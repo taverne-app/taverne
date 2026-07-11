@@ -414,6 +414,9 @@ export function CombatPage() {
   const [showInitList, setShowInitList] = useState(false)
   // Ribbon card whose quick-action popover is open (off-turn Dmg/Soin/état).
   const [ribbonMenu, setRibbonMenu] = useState<string | null>(null)
+  // Horizontal center (px, relative to the fixed bar) of the card whose popover is open — anchors it under the card.
+  const [ribbonMenuX, setRibbonMenuX] = useState<number | null>(null)
+  const barRef = useRef<HTMLDivElement>(null)
   // Set only when no combat could be resolved and the DM must pick a campaign.
   const allMonsters: MonsterTemplate[] = [
     ...MONSTERS,
@@ -1710,19 +1713,6 @@ export function CombatPage() {
                   ⇅ Réordonner
                 </button>
               )}
-              {(characters.length > 0 || combatants.length > 0) && (
-                <button
-                  onClick={() => { setAoeMode(v => !v); setAoeSelected(new Set()); setAoeDamageInput('') }}
-                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
-                    aoeMode
-                      ? 'bg-orange-700/40 border-orange-500 text-orange-300'
-                      : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-orange-600/50 hover:text-orange-400'
-                  }`}
-                  title="Appliquer des dégâts à plusieurs cibles simultanément"
-                >
-                  🔥 Zone
-                </button>
-              )}
               {campaignId && combatants.some(c => c.current_hp <= 0) && characters.length > 0 && (
                 <button
                   onClick={() => {
@@ -1742,18 +1732,6 @@ export function CombatPage() {
                   }`}
                 >
                   ✦ XP
-                </button>
-              )}
-              {characters.length > 0 && (
-                <button
-                  onClick={() => { setShowSavingThrow(v => !v); setSavingThrowResults(null) }}
-                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
-                    showSavingThrow
-                      ? 'bg-sky-700/30 border-sky-600 text-sky-400'
-                      : 'bg-sky-900/20 border-sky-800/50 text-sky-500 hover:border-sky-700 hover:text-sky-400'
-                  }`}
-                >
-                  🎲 JS groupe
                 </button>
               )}
               {campaignId && combatants.some(c => c.current_hp <= 0) && (
@@ -1778,18 +1756,6 @@ export function CombatPage() {
               >
                 ⚔ Fin du combat
               </button>
-              {characters.length > 0 && (
-                <button
-                  onClick={() => setShowRestPanel(v => !v)}
-                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${
-                    showRestPanel
-                      ? 'bg-sky-700/30 border-sky-600 text-sky-400'
-                      : 'text-stone-500 hover:text-stone-300 border-transparent'
-                  }`}
-                >
-                  ⛺ Repos
-                </button>
-              )}
               <button
                 onClick={() => setShowNotepad(v => !v)}
                 className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${showNotepad ? 'bg-stone-700/40 border-stone-600 text-stone-300' : 'text-stone-500 hover:text-stone-300 border-transparent'}`}
@@ -2702,64 +2668,7 @@ export function CombatPage() {
             </div>
           ) : null}
 
-          {/* AoE damage bar */}
-          {aoeMode && (
-            <div className="border-t border-orange-800/50 bg-orange-950/20 px-5 py-3">
-              <div className="flex items-center gap-3 flex-wrap">
-                <span className="text-orange-400 text-xs font-semibold uppercase tracking-wider">
-                  🔥 Zone — {aoeSelected.size} cible{aoeSelected.size > 1 ? 's' : ''} sélectionnée{aoeSelected.size > 1 ? 's' : ''}
-                </span>
-                <input
-                  type="number"
-                  min={1}
-                  value={aoeDamageInput}
-                  onChange={e => setAoeDamageInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleAoeDamage('damage') }}
-                  placeholder="Montant"
-                  autoFocus
-                  className="w-24 bg-stone-800 border border-orange-700/50 rounded-lg px-3 py-1.5 text-white text-sm text-center focus:outline-none focus:border-orange-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-                <button
-                  onClick={() => handleAoeDamage('damage')}
-                  disabled={!aoeDamageInput || aoeSelected.size === 0}
-                  className="bg-red-700/60 hover:bg-red-600/80 disabled:opacity-40 border border-red-600/50 text-red-200 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  Dégâts
-                </button>
-                <button
-                  onClick={() => handleAoeDamage('heal')}
-                  disabled={!aoeDamageInput || aoeSelected.size === 0}
-                  className="bg-emerald-700/60 hover:bg-emerald-600/80 disabled:opacity-40 border border-emerald-600/50 text-emerald-200 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  Soins
-                </button>
-                <span className="text-stone-700">|</span>
-                <select
-                  value={aoeCondition}
-                  onChange={e => setAoeCondition(e.target.value)}
-                  className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-stone-300 text-xs focus:outline-none focus:border-orange-500 transition-colors"
-                >
-                  <option value="">État...</option>
-                  {Object.entries(CONDITIONS_FR).map(([key, label]) => (
-                    <option key={key} value={key}>{label}</option>
-                  ))}
-                </select>
-                <button
-                  onClick={handleAoeCondition}
-                  disabled={!aoeCondition || aoeSelected.size === 0}
-                  className="bg-purple-800/60 hover:bg-purple-700/80 disabled:opacity-40 border border-purple-700/50 text-purple-200 text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors"
-                >
-                  Appliquer
-                </button>
-                <button
-                  onClick={() => { setAoeMode(false); setAoeSelected(new Set()); setAoeDamageInput(''); setAoeCondition('') }}
-                  className="text-stone-500 hover:text-stone-300 text-xs transition-colors ml-auto"
-                >
-                  Annuler
-                </button>
-              </div>
-            </div>
-          )}
+          {/* La barre AoE « Zone » vit désormais dans le tiroir d'outils de groupe (barre du bas). */}
 
           {/* Add combatant section */}
           {campaignId && (
@@ -3274,64 +3183,7 @@ export function CombatPage() {
         </div>
 
         {/* Group saving throw panel */}
-        {showSavingThrow && (
-          <div className="bg-stone-900 border border-sky-800/40 rounded-xl p-5 space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sky-400 text-xs font-semibold uppercase tracking-widest">🎲 Jet de sauvegarde de groupe</h2>
-              <button onClick={() => { setShowSavingThrow(false); setSavingThrowResults(null) }} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
-            </div>
-
-            <div className="flex items-center gap-3 flex-wrap">
-              <select
-                value={savingThrowAbility}
-                onChange={e => { setSavingThrowAbility(e.target.value as typeof savingThrowAbility); setSavingThrowResults(null) }}
-                className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
-              >
-                <option value="strength">Force (FOR)</option>
-                <option value="dexterity">Dextérité (DEX)</option>
-                <option value="constitution">Constitution (CON)</option>
-                <option value="intelligence">Intelligence (INT)</option>
-                <option value="wisdom">Sagesse (SAG)</option>
-                <option value="charisma">Charisme (CHA)</option>
-              </select>
-              <div className="flex items-center gap-2">
-                <span className="text-stone-500 text-sm">DD</span>
-                <input
-                  type="number"
-                  min={1}
-                  max={30}
-                  value={savingThrowDC}
-                  onChange={e => { setSavingThrowDC(e.target.value); setSavingThrowResults(null) }}
-                  className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-sky-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-              </div>
-              <button
-                onClick={handleGroupSavingThrow}
-                className="bg-sky-700 hover:bg-sky-600 text-white text-sm font-semibold rounded-lg px-4 py-2 transition-colors"
-              >
-                Lancer
-              </button>
-            </div>
-
-            {savingThrowResults && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {savingThrowResults.map((r, i) => (
-                  <div key={i} className={`rounded-lg px-3 py-2 border ${
-                    r.success
-                      ? 'bg-emerald-900/30 border-emerald-700/50'
-                      : 'bg-red-900/30 border-red-700/50'
-                  }`}>
-                    <p className="text-stone-200 text-xs font-semibold truncate">{r.name}</p>
-                    <p className={`text-sm font-bold ${r.success ? 'text-emerald-400' : 'text-red-400'}`}>
-                      {r.total} {r.success ? '✓' : '✗'}
-                    </p>
-                    <p className="text-stone-600 text-xs">{r.roll} + {r.mod >= 0 ? r.mod : `(${r.mod})`}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
+        {/* Le panneau « JS de groupe » vit désormais dans le tiroir d'outils de groupe (barre du bas). */}
 
         {/* XP distribution panel */}
         {showXpPanel && (() => {
@@ -3411,34 +3263,7 @@ export function CombatPage() {
           )
         })()}
 
-        {/* Group rest panel */}
-        {showRestPanel && characters.length > 0 && (
-          <div className="bg-stone-900 border border-sky-800/40 rounded-xl p-5 space-y-3">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sky-400 text-xs font-semibold uppercase tracking-widest">⛺ Repos du groupe</h2>
-              <button onClick={() => setShowRestPanel(false)} className="text-stone-600 hover:text-stone-400 text-sm">×</button>
-            </div>
-            <p className="text-stone-500 text-xs">
-              {characters.map(c => `${c.name} (${c.combat.current_hp}/${c.combat.max_hp} PV${c.combat.hit_dice_remaining > 0 ? `, ${c.combat.hit_dice_remaining} DV` : ''})`).join(' · ')}
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => handleGroupRest('short')}
-                disabled={restInProgress}
-                className="flex-1 bg-sky-900/40 hover:bg-sky-800/60 disabled:opacity-50 border border-sky-700/50 text-sky-300 text-sm font-medium rounded-lg px-4 py-2.5 transition-colors"
-              >
-                Court repos (1 DV/perso)
-              </button>
-              <button
-                onClick={() => handleGroupRest('long')}
-                disabled={restInProgress}
-                className="flex-1 bg-violet-900/40 hover:bg-violet-800/60 disabled:opacity-50 border border-violet-700/50 text-violet-300 text-sm font-medium rounded-lg px-4 py-2.5 transition-colors"
-              >
-                Long repos (PV + emplacements)
-              </button>
-            </div>
-          </div>
-        )}
+        {/* Le panneau « Repos du groupe » vit désormais dans le tiroir d'outils de groupe (barre du bas). */}
 
         {/* Rest notification */}
         {restNotif && (
@@ -3617,7 +3442,7 @@ export function CombatPage() {
       {/* ─────────── Ruban de tour + dock du combattant actif ─────────── */}
       {withRollDisplay.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-amber-700/40 bg-stone-900/95 backdrop-blur shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
-          <div className={`${hasBattleImage ? 'max-w-6xl' : 'max-w-5xl'} mx-auto px-4 relative`}>
+          <div ref={barRef} className={`${hasBattleImage ? 'max-w-6xl' : 'max-w-5xl'} mx-auto px-4 relative`}>
 
             {/* Popover d'action rapide (hors tour) — rendu hors du ruban scrollable pour ne pas être rogné */}
             {ribbonMenu && (() => {
@@ -3627,7 +3452,12 @@ export function CombatPage() {
               const conds = isChar ? row.data.state.conditions : row.data.conditions
               const addable = Object.entries(CONDITIONS_FR).filter(([k]) => !conds.includes(k))
               return (
-                <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 z-40 w-56 bg-stone-900 border border-stone-700 rounded-lg shadow-xl p-2 space-y-2">
+                <div
+                  style={ribbonMenuX != null ? { left: ribbonMenuX, transform: 'translateX(-50%)' } : undefined}
+                  className={`absolute bottom-full mb-2 z-40 w-56 bg-stone-900 border border-stone-700 rounded-lg shadow-xl p-2 space-y-2 ${ribbonMenuX == null ? 'left-1/2 -translate-x-1/2' : ''}`}
+                >
+                  {/* Petite flèche vers la carte */}
+                  <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-stone-900 border-r border-b border-stone-700 rotate-45" />
                   <div className="flex items-center justify-between">
                     <span className="text-stone-200 text-xs font-semibold truncate">{row.data.name}</span>
                     <button onClick={() => setRibbonMenu(null)} className="text-stone-500 hover:text-stone-300 text-xs">✕</button>
@@ -3654,6 +3484,100 @@ export function CombatPage() {
               )
             })()}
 
+            {/* Outils de groupe — accessibles directement depuis la barre du bas */}
+            {(characters.length > 0 || combatants.length > 0) && (
+              <div className="flex items-center gap-1.5 py-1.5 border-b border-stone-800/60 overflow-x-auto">
+                <span className="text-stone-600 text-[10px] uppercase tracking-widest shrink-0 pr-1">Groupe</span>
+                <button
+                  onClick={() => { if (aoeMode) { setAoeMode(false); setAoeSelected(new Set()); setAoeDamageInput('') } else { setAoeMode(true); setShowSavingThrow(false); setShowRestPanel(false); setRibbonMenu(null) } }}
+                  className={`shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${aoeMode ? 'bg-orange-700/40 border-orange-500 text-orange-300' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-orange-600/50 hover:text-orange-400'}`}
+                  title="Dégâts/soins/état sur plusieurs cibles — cliquez les cartes du ruban pour sélectionner"
+                >🔥 Zone</button>
+                {characters.length > 0 && (
+                  <button
+                    onClick={() => { if (showSavingThrow) { setShowSavingThrow(false) } else { setShowSavingThrow(true); setSavingThrowResults(null); setAoeMode(false); setShowRestPanel(false) } }}
+                    className={`shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${showSavingThrow ? 'bg-sky-700/30 border-sky-600 text-sky-400' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'}`}
+                  >🎲 JS groupe</button>
+                )}
+                {characters.length > 0 && (
+                  <button
+                    onClick={() => { if (showRestPanel) { setShowRestPanel(false) } else { setShowRestPanel(true); setAoeMode(false); setShowSavingThrow(false) } }}
+                    className={`shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${showRestPanel ? 'bg-sky-700/30 border-sky-600 text-sky-400' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'}`}
+                  >⛺ Repos</button>
+                )}
+              </div>
+            )}
+
+            {/* Tiroir d'outils de groupe */}
+            {(aoeMode || showSavingThrow || (showRestPanel && characters.length > 0)) && (
+              <div className="py-2 border-b border-stone-800/80 max-h-[38vh] overflow-y-auto">
+                {aoeMode && (
+                  <div className="bg-orange-950/20 border border-orange-800/40 rounded-lg px-3 py-2 flex items-center gap-2 flex-wrap">
+                    <span className="text-orange-400 text-xs font-semibold uppercase tracking-wider shrink-0">
+                      🔥 Zone — {aoeSelected.size} cible{aoeSelected.size > 1 ? 's' : ''}{aoeSelected.size === 0 ? ' (cliquez les cartes)' : ''}
+                    </span>
+                    <input type="number" min={1} value={aoeDamageInput} onChange={e => setAoeDamageInput(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') handleAoeDamage('damage') }} placeholder="Montant" className="w-20 bg-stone-800 border border-orange-700/50 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:border-orange-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                    <button onClick={() => handleAoeDamage('damage')} disabled={!aoeDamageInput || aoeSelected.size === 0} className="bg-red-700/60 hover:bg-red-600/80 disabled:opacity-40 border border-red-600/50 text-red-200 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">Dégâts</button>
+                    <button onClick={() => handleAoeDamage('heal')} disabled={!aoeDamageInput || aoeSelected.size === 0} className="bg-emerald-700/60 hover:bg-emerald-600/80 disabled:opacity-40 border border-emerald-600/50 text-emerald-200 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">Soins</button>
+                    <span className="text-stone-700">|</span>
+                    <select value={aoeCondition} onChange={e => setAoeCondition(e.target.value)} className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-stone-300 text-xs focus:outline-none focus:border-orange-500 transition-colors">
+                      <option value="">État...</option>
+                      {Object.entries(CONDITIONS_FR).map(([key, label]) => (<option key={key} value={key}>{label}</option>))}
+                    </select>
+                    <button onClick={handleAoeCondition} disabled={!aoeCondition || aoeSelected.size === 0} className="bg-purple-800/60 hover:bg-purple-700/80 disabled:opacity-40 border border-purple-700/50 text-purple-200 text-xs font-semibold rounded-lg px-2.5 py-1 transition-colors">Appliquer</button>
+                    <button onClick={() => { setAoeMode(false); setAoeSelected(new Set()); setAoeDamageInput(''); setAoeCondition('') }} className="text-stone-500 hover:text-stone-300 text-xs transition-colors ml-auto">Annuler</button>
+                  </div>
+                )}
+                {showSavingThrow && (
+                  <div className="bg-stone-900 border border-sky-800/40 rounded-lg p-3 space-y-3">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <span className="text-sky-400 text-xs font-semibold uppercase tracking-widest shrink-0">🎲 JS de groupe</span>
+                      <select value={savingThrowAbility} onChange={e => { setSavingThrowAbility(e.target.value as typeof savingThrowAbility); setSavingThrowResults(null) }} className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-xs focus:outline-none focus:border-sky-500 transition-colors">
+                        <option value="strength">Force (FOR)</option>
+                        <option value="dexterity">Dextérité (DEX)</option>
+                        <option value="constitution">Constitution (CON)</option>
+                        <option value="intelligence">Intelligence (INT)</option>
+                        <option value="wisdom">Sagesse (SAG)</option>
+                        <option value="charisma">Charisme (CHA)</option>
+                      </select>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-stone-500 text-xs">DD</span>
+                        <input type="number" min={1} max={30} value={savingThrowDC} onChange={e => { setSavingThrowDC(e.target.value); setSavingThrowResults(null) }} className="w-14 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1 text-white text-xs text-center focus:outline-none focus:border-sky-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                      </div>
+                      <button onClick={handleGroupSavingThrow} className="bg-sky-700 hover:bg-sky-600 text-white text-xs font-semibold rounded-lg px-3 py-1 transition-colors">Lancer</button>
+                      <button onClick={() => { setShowSavingThrow(false); setSavingThrowResults(null) }} className="text-stone-600 hover:text-stone-400 text-xs ml-auto">✕</button>
+                    </div>
+                    {savingThrowResults && (
+                      <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-1.5">
+                        {savingThrowResults.map((r, i) => (
+                          <div key={i} className={`rounded-lg px-2 py-1 border ${r.success ? 'bg-emerald-900/30 border-emerald-700/50' : 'bg-red-900/30 border-red-700/50'}`}>
+                            <p className="text-stone-200 text-[11px] font-semibold truncate">{r.name}</p>
+                            <p className={`text-xs font-bold ${r.success ? 'text-emerald-400' : 'text-red-400'}`}>{r.total} {r.success ? '✓' : '✗'}</p>
+                            <p className="text-stone-600 text-[10px]">{r.roll} + {r.mod >= 0 ? r.mod : `(${r.mod})`}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+                {showRestPanel && characters.length > 0 && (
+                  <div className="bg-stone-900 border border-sky-800/40 rounded-lg p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sky-400 text-xs font-semibold uppercase tracking-widest">⛺ Repos du groupe</span>
+                      <button onClick={() => setShowRestPanel(false)} className="text-stone-600 hover:text-stone-400 text-xs">✕</button>
+                    </div>
+                    <p className="text-stone-500 text-[11px]">
+                      {characters.map(c => `${c.name} (${c.combat.current_hp}/${c.combat.max_hp} PV${c.combat.hit_dice_remaining > 0 ? `, ${c.combat.hit_dice_remaining} DV` : ''})`).join(' · ')}
+                    </p>
+                    <div className="flex gap-2">
+                      <button onClick={() => handleGroupRest('short')} disabled={restInProgress} className="flex-1 bg-sky-900/40 hover:bg-sky-800/60 disabled:opacity-50 border border-sky-700/50 text-sky-300 text-xs font-medium rounded-lg px-3 py-2 transition-colors">Court repos (1 DV/perso)</button>
+                      <button onClick={() => handleGroupRest('long')} disabled={restInProgress} className="flex-1 bg-violet-900/40 hover:bg-violet-800/60 disabled:opacity-50 border border-violet-700/50 text-violet-300 text-xs font-medium rounded-lg px-3 py-2 transition-colors">Long repos (PV + emplacements)</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Ruban de tour */}
             <div className="flex items-center gap-2 py-2 border-b border-stone-800/80">
               <button onClick={prevTurn} title="Tour précédent" className="shrink-0 bg-stone-800 hover:bg-stone-700 border border-stone-700 text-stone-300 rounded px-2 py-2 text-sm transition-colors">←</button>
@@ -3669,14 +3593,27 @@ export function CombatPage() {
                   const active = i === activeTurn % withRollDisplay.length
                   const id = rowId(row)
                   const open = ribbonMenu === id
+                  const aoeSel = aoeMode && aoeSelected.has(id)
                   return (
                     <div key={id} className="relative shrink-0">
                       <button
-                        onClick={() => setRibbonMenu(m => m === id ? null : id)}
-                        className={`w-24 rounded-lg border px-2 py-1 text-left transition-colors ${active ? 'bg-amber-500/15 border-amber-500/60 ring-1 ring-amber-500/40' : open ? 'bg-stone-700/70 border-stone-500' : 'bg-stone-800/70 border-stone-700 hover:border-stone-500'}`}
+                        onClick={e => {
+                          if (aoeMode) { toggleAoeSelect(id); return }
+                          if (ribbonMenu === id) { setRibbonMenu(null); return }
+                          const bar = barRef.current
+                          if (bar) {
+                            const br = bar.getBoundingClientRect()
+                            const cr = e.currentTarget.getBoundingClientRect()
+                            const half = 116
+                            setRibbonMenuX(Math.max(half, Math.min(br.width - half, cr.left + cr.width / 2 - br.left)))
+                          }
+                          setRibbonMenu(id)
+                        }}
+                        title={aoeMode ? 'Cliquer pour (dé)sélectionner cette cible' : undefined}
+                        className={`w-24 rounded-lg border px-2 py-1 text-left transition-colors ${aoeSel ? 'bg-orange-500/20 border-orange-500 ring-1 ring-orange-500/50' : active ? 'bg-amber-500/15 border-amber-500/60 ring-1 ring-amber-500/40' : open ? 'bg-stone-700/70 border-stone-500' : aoeMode ? 'bg-stone-800/70 border-stone-700 hover:border-orange-500/50' : 'bg-stone-800/70 border-stone-700 hover:border-stone-500'}`}
                       >
                         <div className="flex items-center gap-1">
-                          <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 border ${enemy ? 'bg-red-900/50 border-red-700/50 text-red-300' : isChar ? 'bg-sky-900/50 border-sky-700/50 text-sky-300' : 'bg-stone-700 border-stone-600 text-stone-300'}`}>{init ?? '—'}</span>
+                          <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 border ${aoeSel ? 'bg-orange-500 border-orange-400 text-white' : enemy ? 'bg-red-900/50 border-red-700/50 text-red-300' : isChar ? 'bg-sky-900/50 border-sky-700/50 text-sky-300' : 'bg-stone-700 border-stone-600 text-stone-300'}`}>{aoeSel ? '✓' : (init ?? '—')}</span>
                           <span className={`text-xs font-medium truncate ${active ? 'text-amber-200' : 'text-stone-200'}`}>{row.data.name}</span>
                         </div>
                         <div className="mt-1 flex items-center gap-1">
