@@ -19,7 +19,10 @@ class CharacterUpdated implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        $channels = [new PrivateChannel("character.{$this->character->id}")];
+        $channels = [
+            new PrivateChannel("character.{$this->character->id}"),
+            new PrivateChannel("campaign.{$this->character->campaign_id}"),
+        ];
 
         $shareToken = $this->character->campaign?->share_token;
         if ($shareToken) {

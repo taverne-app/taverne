@@ -155,11 +155,10 @@ class CombatantController extends Controller
 
         $combatant->delete();
 
-        // Diffuse le retrait pour que les vues joueurs connectées voient
-        // disparaître le combattant sans recharger.
-        if ($shareToken) {
-            CombatantRemoved::dispatch($shareToken, $id);
-        }
+        // Diffuse le retrait : canal privé campagne (autres sessions MJ) et,
+        // si la campagne est partagée, canal public (vues joueurs) — les deux
+        // voient disparaître le combattant sans recharger.
+        CombatantRemoved::dispatch($campaign->id, $id, $shareToken);
 
         return response()->json(null, 204);
     }

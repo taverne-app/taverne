@@ -19,7 +19,10 @@ class CombatantUpdated implements ShouldBroadcastNow
 
     public function broadcastOn(): array
     {
-        $channels = [new PrivateChannel("combatant.{$this->combatant->id}")];
+        $channels = [
+            new PrivateChannel("combatant.{$this->combatant->id}"),
+            new PrivateChannel("campaign.{$this->combatant->campaign_id}"),
+        ];
 
         $shareToken = $this->combatant->campaign?->share_token;
         if ($shareToken) {

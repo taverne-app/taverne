@@ -664,16 +664,33 @@ export function CombatPage() {
 
   // WS subscriptions
   useEffect(() => {
-    if (!token || (characters.length === 0 && combatants.length === 0) || !REALTIME_CONFIGURED) return
+    if (!token || !campaignId || !REALTIME_CONFIGURED) return
 
     const echo = createEcho(token)
     echoRef.current = echo
 
+    // Canal campagne : mises à jour ET événements structurels (ajout/retrait de
+    // combattant), poussés à toutes les sessions MJ ouvertes. C'est ce qui permet
+    // l'ajout/retrait de combattant à chaud en multi-appareils — un canal par
+    // combattant ne pourrait pas notifier les sessions qui ignorent le nouveau venu.
+    echo.private(`campaign.${campaignId}`)
+      .listen('.combatant.updated', (e: { combatant: Combatant }) => {
+        setCombatants(prev => prev.some(c => c.id === e.combatant.id)
+          ? prev.map(c => c.id === e.combatant.id ? e.combatant : c)
+          : [...prev, e.combatant])
+      })
+      .listen('.combatant.removed', (e: { id: number }) => {
+        setCombatants(prev => prev.filter(c => c.id !== e.id))
+      })
+      .listen('.character.updated', (e: { character: Character }) => {
+        setCharacters(prev => prev.some(c => c.id === e.character.id)
+          ? prev.map(c => c.id === e.character.id ? e.character : c)
+          : prev)
+      })
+
+    // Canaux personnages : uniquement le flux de jets de dés (diffusé par personnage).
     characters.forEach(c => {
       echo.private(`character.${c.id}`)
-        .listen('.character.updated', (e: { character: Character }) => {
-          setCharacters(prev => prev.map(ch => ch.id === e.character.id ? e.character : ch))
-        })
         .listen('.dice.rolled', (e: DiceRoll) => {
           setDiceLog(log => {
             const next = [e, ...log].slice(0, 50)
@@ -683,21 +700,14 @@ export function CombatPage() {
         })
     })
 
-    combatants.forEach(cb => {
-      echo.private(`combatant.${cb.id}`)
-        .listen('.combatant.updated', (e: { combatant: Combatant }) => {
-          setCombatants(prev => prev.map(c => c.id === e.combatant.id ? e.combatant : c))
-        })
-    })
-
     return () => {
+      echo.leave(`campaign.${campaignId}`)
       characters.forEach(c => echo.leave(`character.${c.id}`))
-      combatants.forEach(cb => echo.leave(`combatant.${cb.id}`))
       echo.disconnect()
       echoRef.current = null
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token, characters.map(c => c.id).join(','), combatants.map(c => c.id).join(',')])
+  }, [token, campaignId, characters.map(c => c.id).join(',')])
 
   // Build unified sorted list
   const allRows: CombatRow[] = [
