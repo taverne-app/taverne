@@ -726,6 +726,9 @@ export function CombatPage() {
 
   const activeCombatant = withRollDisplay[activeTurn % Math.max(1, withRollDisplay.length)] ?? null
 
+  // Phase 3 — quand une image de fond est fournie, le plateau devient l'élément central de la page.
+  const hasBattleImage = !!campaign?.battle_map?.image_url
+
   const { setTitle, notify } = useTabNotify()
 
   // Update tab title on every turn change; blink if tab is hidden.
@@ -1440,7 +1443,7 @@ export function CombatPage() {
   return (
     <div className="min-h-screen bg-stone-950">
       {/* Header */}
-      <main className="max-w-5xl mx-auto px-4 py-8 pb-44 space-y-4">
+      <main className={`${hasBattleImage ? 'max-w-6xl' : 'max-w-5xl'} mx-auto px-4 py-8 pb-44 space-y-4`}>
         <div className="flex items-center justify-between">
           <h1 className="text-white text-xl font-display font-semibold tracking-wide">Combat</h1>
           {campaign?.share_token && (
@@ -1589,24 +1592,21 @@ export function CombatPage() {
         )}
 
         {/* Battle map */}
-        <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setShowBattleMap(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 hover:bg-stone-800/40 transition-colors"
-          >
-            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
-              🗺 Battle map
-              {(campaign?.battle_map?.tokens.length ?? 0) > 0 && (
-                <span className="text-[10px] bg-stone-700 text-stone-300 rounded-full px-1.5 py-0.5 font-normal">{campaign?.battle_map?.tokens.length}</span>
-              )}
-              {!campaign?.share_token && (
-                <span className="text-[10px] text-stone-600 font-normal normal-case tracking-normal">— partagez la campagne pour la diffuser aux joueurs</span>
-              )}
-            </h2>
-            <span className="text-stone-500 text-xs">{showBattleMap ? '▲' : '▼'}</span>
-          </button>
-          {showBattleMap && (
-            <div className="px-5 pb-5 border-t border-stone-800 pt-4">
+        {hasBattleImage ? (
+          // Phase 3 — plateau-central : le plateau est l'élément principal, toujours déployé.
+          <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden ring-1 ring-amber-500/20">
+            <div className="flex items-center justify-between px-5 py-2.5 border-b border-stone-800">
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
+                🗺 Battle map
+                {(campaign?.battle_map?.tokens.length ?? 0) > 0 && (
+                  <span className="text-[10px] bg-stone-700 text-stone-300 rounded-full px-1.5 py-0.5 font-normal">{campaign?.battle_map?.tokens.length}</span>
+                )}
+                {!campaign?.share_token && (
+                  <span className="text-[10px] text-stone-600 font-normal normal-case tracking-normal">— partagez la campagne pour la diffuser aux joueurs</span>
+                )}
+              </h2>
+            </div>
+            <div className="p-3 sm:p-4">
               <BattleMapBoard
                 map={campaign?.battle_map ?? null}
                 combatants={combatants}
@@ -1616,8 +1616,38 @@ export function CombatPage() {
                 activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
               />
             </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
+            <button
+              onClick={() => setShowBattleMap(v => !v)}
+              className="w-full flex items-center justify-between px-5 py-3 hover:bg-stone-800/40 transition-colors"
+            >
+              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
+                🗺 Battle map
+                {(campaign?.battle_map?.tokens.length ?? 0) > 0 && (
+                  <span className="text-[10px] bg-stone-700 text-stone-300 rounded-full px-1.5 py-0.5 font-normal">{campaign?.battle_map?.tokens.length}</span>
+                )}
+                {!campaign?.share_token && (
+                  <span className="text-[10px] text-stone-600 font-normal normal-case tracking-normal">— partagez la campagne pour la diffuser aux joueurs</span>
+                )}
+              </h2>
+              <span className="text-stone-500 text-xs">{showBattleMap ? '▲' : '▼'}</span>
+            </button>
+            {showBattleMap && (
+              <div className="px-5 pb-5 border-t border-stone-800 pt-4">
+                <BattleMapBoard
+                  map={campaign?.battle_map ?? null}
+                  combatants={combatants}
+                  characters={characters}
+                  editable
+                  onChange={handleBattleMapChange}
+                  activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
+                />
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Initiative table */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
@@ -3587,7 +3617,7 @@ export function CombatPage() {
       {/* ─────────── Ruban de tour + dock du combattant actif ─────────── */}
       {withRollDisplay.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 z-30 border-t border-amber-700/40 bg-stone-900/95 backdrop-blur shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
-          <div className="max-w-5xl mx-auto px-4 relative">
+          <div className={`${hasBattleImage ? 'max-w-6xl' : 'max-w-5xl'} mx-auto px-4 relative`}>
 
             {/* Popover d'action rapide (hors tour) — rendu hors du ruban scrollable pour ne pas être rogné */}
             {ribbonMenu && (() => {
