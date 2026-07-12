@@ -106,3 +106,13 @@ export async function deleteCombatant(campaignId: number, combatantId: number): 
   const res = await apiFetch(`/campaigns/${campaignId}/combatants/${combatantId}`, { method: 'DELETE' })
   if (!res.ok && res.status !== 204) throw new ApiError(res.status, await res.json())
 }
+
+/**
+ * Annule une suppression. La suppression est réversible côté serveur et conserve
+ * l'identifiant : le combattant retrouve sa place, pions du plateau compris.
+ */
+export async function restoreCombatant(campaignId: number, combatantId: number): Promise<Combatant> {
+  const res = await apiFetch(`/campaigns/${campaignId}/combatants/${combatantId}/restore`, { method: 'POST' })
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
+}

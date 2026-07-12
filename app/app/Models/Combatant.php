@@ -4,9 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Combatant extends Model
 {
+    // Suppression réversible : l'identifiant est conservé, donc restaurer un
+    // combattant remet aussi en place les pions du plateau qui le référencent.
+    use SoftDeletes;
+
     protected $table = 'campaign_combatants';
 
     protected $fillable = [

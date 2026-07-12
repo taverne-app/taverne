@@ -13,6 +13,7 @@ import {
   updateCombatantFaction,
   updateCombatantName,
   deleteCombatant,
+  restoreCombatant,
   type Combatant,
   type CombatantFaction,
 } from '../api/combatants'
@@ -21,7 +22,6 @@ import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
 import { useToast } from '../contexts/ToastContext'
 import { ApiError } from '../api/client'
-import { ConfirmDialog, type ConfirmRequest } from '../components/ConfirmDialog'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, CR_XP, type MonsterTemplate } from '../data/monsters'
 import { canLevelUp } from '../data/xp'
@@ -403,8 +403,6 @@ function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, c
 
 export function CombatPage() {
   const toast = useToast()
-  // Demande de confirmation en cours sur une action destructive (null = aucune).
-  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const { token } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -988,12 +986,45 @@ export function CombatPage() {
     setAoeCondition('')
   }
 
+  /**
+   * Supprime des combattants et propose d'annuler.
+   *
+   * La suppression est réversible côté serveur et conserve les identifiants : une
+   * annulation remet donc réellement les combattants en place, pions du plateau
+   * compris. C'est ce qui permet d'offrir « Annuler » après coup plutôt qu'une
+   * boîte de confirmation avant chaque geste.
+   */
+  async function deleteCombatantsWithUndo(ids: number[], notice: string) {
+    if (!campaignId || ids.length === 0) return
+    const cid = campaignId
+
+    // `run` renvoie undefined en cas d'échec — on retourne donc explicitement une
+    // valeur en cas de succès, sinon les deux cas seraient indiscernables.
+    const done = await run(async () => {
+      await Promise.all(ids.map(id => deleteCombatant(cid, id)))
+      setCombatants(prev => prev.filter(c => !ids.includes(c.id)))
+      return true
+    }, 'La suppression a échoué.')
+    if (!done) return
+
+    toast.info(notice, {
+      label: 'Annuler',
+      onClick: () => {
+        void run(async () => {
+          const restored = await Promise.all(ids.map(id => restoreCombatant(cid, id)))
+          setCombatants(prev => {
+            const byId = new Map(prev.map(c => [c.id, c]))
+            restored.forEach(c => byId.set(c.id, c))
+            return [...byId.values()]
+          })
+        }, 'La restauration a échoué.')
+      },
+    })
+  }
+
   async function handleDeleteCombatant(id: number) {
-    if (!campaignId) return
-    await run(async () => {
-      await deleteCombatant(campaignId, id)
-      setCombatants(prev => prev.filter(c => c.id !== id))
-    }, "Le combattant n'a pas pu être supprimé.")
+    const name = combatants.find(c => c.id === id)?.name ?? 'Combattant'
+    await deleteCombatantsWithUndo([id], `${name} supprimé.`)
   }
 
   async function handleToggleInspiration(character: Character) {
@@ -1189,39 +1220,15 @@ export function CombatPage() {
   }
 
   function handleClearCombatants() {
-    if (!campaignId || combatants.length === 0) return
-    setConfirm({
-      title: 'Vider les ennemis ?',
-      message: `${combatants.length} combattant${combatants.length > 1 ? 's seront supprimés' : ' sera supprimé'} définitivement. Cette action est irréversible.`,
-      confirmLabel: 'Vider',
-      onConfirm: async () => {
-        try {
-          await Promise.all(combatants.map(c => deleteCombatant(campaignId, c.id)))
-          setCombatants([])
-        } catch {
-          toast.error("Les combattants n'ont pas pu être supprimés.")
-        }
-      },
-    })
+    const ids = combatants.map(c => c.id)
+    if (ids.length === 0) return
+    void deleteCombatantsWithUndo(ids, `${ids.length} combattant${ids.length > 1 ? 's supprimés' : ' supprimé'}.`)
   }
 
   function handleClearDeadCombatants() {
-    if (!campaignId) return
-    const dead = combatants.filter(c => c.current_hp <= 0)
-    if (dead.length === 0) return
-    setConfirm({
-      title: 'Retirer les combattants à terre ?',
-      message: `${dead.length} combattant${dead.length > 1 ? 's à 0 PV seront supprimés' : ' à 0 PV sera supprimé'} définitivement.`,
-      confirmLabel: 'Retirer',
-      onConfirm: async () => {
-        try {
-          await Promise.all(dead.map(c => deleteCombatant(campaignId, c.id)))
-          setCombatants(prev => prev.filter(c => c.current_hp > 0))
-        } catch {
-          toast.error("Les combattants n'ont pas pu être retirés.")
-        }
-      },
-    })
+    const ids = combatants.filter(c => c.current_hp <= 0).map(c => c.id)
+    if (ids.length === 0) return
+    void deleteCombatantsWithUndo(ids, `${ids.length} combattant${ids.length > 1 ? 's à terre retirés' : ' à terre retiré'}.`)
   }
 
   function handleGroupSavingThrow() {
@@ -4055,8 +4062,6 @@ export function CombatPage() {
           </div>
         </div>
       )}
-
-      <ConfirmDialog request={confirm} onCancel={() => setConfirm(null)} />
     </div>
   )
 }

@@ -163,6 +163,26 @@ class CombatantController extends Controller
         return response()->json(null, 204);
     }
 
+    /**
+     * Annule une suppression. Le soft delete a conservé l'identifiant : le
+     * combattant retrouve donc sa place partout, y compris pour les pions du
+     * plateau qui le référencent par ref_id.
+     */
+    public function restore(Request $request, Campaign $campaign, Combatant $combatant): CombatantResource
+    {
+        $this->authorize($request, $campaign);
+        abort_if($combatant->campaign_id !== $campaign->id, 403);
+
+        $combatant->restore();
+
+        $fresh = $combatant->fresh();
+        // Même événement que pour une création : les listeners font un upsert, donc
+        // le combattant réapparaît en direct chez le MJ comme chez les joueurs.
+        CombatantUpdated::dispatch($fresh);
+
+        return new CombatantResource($fresh);
+    }
+
     private function authorize(Request $request, Campaign $campaign): void
     {
         abort_if($campaign->user_id !== $request->user()->id, 403);

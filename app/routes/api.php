@@ -64,6 +64,8 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('combatants/{combatant}/conditions', [CombatantController::class, 'updateConditions']);
         Route::patch('combatants/{combatant}/faction',    [CombatantController::class, 'updateFaction']);
         Route::patch('combatants/{combatant}/name',      [CombatantController::class, 'updateName']);
+        // withTrashed : le combattant à restaurer est justement celui qui est supprimé.
+        Route::post('combatants/{combatant}/restore',    [CombatantController::class, 'restore'])->withTrashed();
     });
 
     // Personnages

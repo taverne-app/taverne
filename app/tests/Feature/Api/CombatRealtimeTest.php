@@ -112,6 +112,70 @@ class CombatRealtimeTest extends TestCase
         );
     }
 
+    // ─────────────────────── Suppression réversible (undo) ───────────────────────
+
+    public function test_deleting_a_combatant_only_soft_deletes_it(): void
+    {
+        $campaign = $this->campaign();
+        $combatant = $this->combatant($campaign);
+
+        $this->actingAs($this->user)
+            ->deleteJson("/api/campaigns/{$campaign->id}/combatants/{$combatant->id}")
+            ->assertNoContent();
+
+        // Plus visible dans le combat…
+        $this->assertSame(0, $campaign->combatants()->count());
+        // …mais toujours en base, donc restaurable.
+        $this->assertSame(1, Combatant::onlyTrashed()->where('id', $combatant->id)->count());
+    }
+
+    public function test_restoring_a_combatant_keeps_its_id_and_rebroadcasts_it(): void
+    {
+        Event::fake([CombatantUpdated::class]);
+        $campaign = $this->campaign();
+        $combatant = $this->combatant($campaign);
+        $id = $combatant->id;
+        $combatant->delete();
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/combatants/{$id}/restore")
+            ->assertOk()
+            // L'identifiant est CONSERVÉ : c'est ce qui garde valides les pions du
+            // plateau qui référencent ce combattant par ref_id.
+            ->assertJsonPath('data.id', $id);
+
+        $this->assertSame(1, $campaign->combatants()->count());
+        $this->assertNull(Combatant::find($id)->deleted_at);
+
+        // Même événement qu'une création : les vues font un upsert et le voient revenir.
+        Event::assertDispatched(CombatantUpdated::class);
+    }
+
+    public function test_restore_forbids_a_combatant_from_another_campaign(): void
+    {
+        $mine = $this->campaign();
+        $other = $this->campaign();
+        $combatant = $this->combatant($other);
+        $combatant->delete();
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$mine->id}/combatants/{$combatant->id}/restore")
+            ->assertForbidden();
+
+        $this->assertSame(0, $other->combatants()->count());
+    }
+
+    public function test_restore_forbids_someone_elses_campaign(): void
+    {
+        $campaign = Campaign::factory()->create(); // autre MJ
+        $combatant = $this->combatant($campaign);
+        $combatant->delete();
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/combatants/{$combatant->id}/restore")
+            ->assertForbidden();
+    }
+
     public function test_damaging_a_character_broadcasts_character_updated(): void
     {
         Event::fake([CharacterUpdated::class]);
