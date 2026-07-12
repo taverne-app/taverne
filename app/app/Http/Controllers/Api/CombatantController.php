@@ -183,6 +183,22 @@ class CombatantController extends Controller
         return new CombatantResource($fresh);
     }
 
+    /**
+     * Vide la corbeille de la campagne (fin de combat).
+     *
+     * Les combattants supprimés sont conservés pour permettre l'annulation ; sans
+     * ce ménage ils s'accumuleraient indéfiniment. La fin du combat est la frontière
+     * naturelle : passé ce point, plus personne ne va annuler une suppression.
+     */
+    public function purgeTrashed(Request $request, Campaign $campaign): JsonResponse
+    {
+        $this->authorize($request, $campaign);
+
+        $campaign->combatants()->onlyTrashed()->forceDelete();
+
+        return response()->json(null, 204);
+    }
+
     private function authorize(Request $request, Campaign $campaign): void
     {
         abort_if($campaign->user_id !== $request->user()->id, 403);

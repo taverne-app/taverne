@@ -116,3 +116,12 @@ export async function restoreCombatant(campaignId: number, combatantId: number):
   if (!res.ok) throw new ApiError(res.status, await res.json())
   return (await res.json()).data
 }
+
+/**
+ * Vide la corbeille de la campagne. Appelé à la fin du combat : au-delà, plus
+ * personne n'annulera une suppression, et les combattants supprimés s'accumuleraient.
+ */
+export async function purgeTrashedCombatants(campaignId: number): Promise<void> {
+  const res = await apiFetch(`/campaigns/${campaignId}/trashed-combatants`, { method: 'DELETE' })
+  if (!res.ok && res.status !== 204) throw new ApiError(res.status, await res.json())
+}

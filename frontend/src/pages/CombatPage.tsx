@@ -14,6 +14,7 @@ import {
   updateCombatantName,
   deleteCombatant,
   restoreCombatant,
+  purgeTrashedCombatants,
   type Combatant,
   type CombatantFaction,
 } from '../api/combatants'
@@ -1215,6 +1216,11 @@ export function CombatPage() {
         localStorage.removeItem(`taverne-combat-round-${campaignId}`)
         localStorage.removeItem(`taverne-combat-active-${campaignId}`)
       } catch { /* ignore */ }
+
+      // Le combat est fini : plus personne n'annulera une suppression, on vide la
+      // corbeille pour qu'elle ne s'accumule pas. Best-effort — un échec de ménage
+      // ne doit pas empêcher la fin du combat.
+      purgeTrashedCombatants(campaignId).catch(() => { /* purge différée au prochain combat */ })
     }
     restoredRef.current = false
   }

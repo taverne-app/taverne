@@ -66,6 +66,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::patch('combatants/{combatant}/name',      [CombatantController::class, 'updateName']);
         // withTrashed : le combattant à restaurer est justement celui qui est supprimé.
         Route::post('combatants/{combatant}/restore',    [CombatantController::class, 'restore'])->withTrashed();
+        // Chemin distinct de « combatants/… » à dessein : sous DELETE, un segment
+        // littéral y serait capturé par {combatant} et pris pour un identifiant.
+        Route::delete('trashed-combatants',              [CombatantController::class, 'purgeTrashed']);
     });
 
     // Personnages

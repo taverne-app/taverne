@@ -176,6 +176,43 @@ class CombatRealtimeTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_purge_empties_the_trash_of_that_campaign_only(): void
+    {
+        $campaign = $this->campaign();
+        $other = $this->campaign();
+
+        $deleted = $this->combatant($campaign);
+        $alive   = $this->combatant($campaign, ['name' => 'Vivant']);
+        $deleted->delete();
+
+        $otherDeleted = $this->combatant($other, ['name' => 'Ailleurs']);
+        $otherDeleted->delete();
+
+        $this->actingAs($this->user)
+            ->deleteJson("/api/campaigns/{$campaign->id}/trashed-combatants")
+            ->assertNoContent();
+
+        // Le supprimé est définitivement parti…
+        $this->assertSame(0, Combatant::withTrashed()->where('id', $deleted->id)->count());
+        // …le vivant est intact…
+        $this->assertSame(1, $campaign->combatants()->whereKey($alive->id)->count());
+        // …et la corbeille de l'autre campagne n'a pas été touchée.
+        $this->assertSame(1, Combatant::onlyTrashed()->where('id', $otherDeleted->id)->count());
+    }
+
+    public function test_purge_forbids_someone_elses_campaign(): void
+    {
+        $campaign = Campaign::factory()->create(); // autre MJ
+        $combatant = $this->combatant($campaign);
+        $combatant->delete();
+
+        $this->actingAs($this->user)
+            ->deleteJson("/api/campaigns/{$campaign->id}/trashed-combatants")
+            ->assertForbidden();
+
+        $this->assertSame(1, Combatant::onlyTrashed()->where('id', $combatant->id)->count());
+    }
+
     public function test_damaging_a_character_broadcasts_character_updated(): void
     {
         Event::fake([CharacterUpdated::class]);
