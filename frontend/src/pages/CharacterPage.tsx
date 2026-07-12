@@ -50,6 +50,7 @@ import { SPELL_DETAILS } from '../data/spell_details'
 import { computeMulticlassSlots } from '../data/multiclass'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
+import { ImagePicker } from '../components/ImagePicker'
 import { MicButton } from '../components/MicButton'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { ConditionTag } from '../components/ConditionTag'
@@ -1685,13 +1686,11 @@ export function CharacterPage() {
                 ))}
               </div>
               <div>
-                <label className="text-stone-500 text-xs mb-1 block">URL du portrait (image)</label>
-                <input
-                  type="url"
+                <label className="text-stone-500 text-xs mb-1 block">Portrait</label>
+                <ImagePicker
                   value={(identityDraft.portrait_url ?? '') as string}
-                  onChange={e => setIdentityDraft(d => ({ ...d, portrait_url: e.target.value || null }))}
-                  placeholder="https://…"
-                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
+                  onChange={url => setIdentityDraft(d => ({ ...d, portrait_url: url || null }))}
+                  placeholder="URL du portrait…"
                 />
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

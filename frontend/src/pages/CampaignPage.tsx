@@ -42,6 +42,7 @@ import { ZipError } from '../lib/zip'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
 import { MicButton } from '../components/MicButton'
+import { ImagePicker } from '../components/ImagePicker'
 import { computeEncounterDifficulty, difficultyColor } from '../data/encounter_difficulty'
 import { CR_XP } from '../data/monsters'
 import { generateNpc, generateNpcName, NPC_RACES, type GeneratedNpc } from '../data/npc_generator'
@@ -3861,7 +3862,7 @@ export function CampaignPage() {
                 onClick={() => { setEditingMapUrl(v => !v); setMapUrlDraft(campaign.campaign_map?.image_url ?? '') }}
                 className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
               >
-                {campaign.campaign_map?.image_url ? '✎ URL' : '+ URL'}
+                {campaign.campaign_map?.image_url ? '✎ Image' : '+ Image'}
               </button>
               {campaign.campaign_map?.image_url && (
                 <button
@@ -3881,15 +3882,11 @@ export function CampaignPage() {
           {editingMapUrl && (
             <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 mb-4 space-y-3">
               <div>
-                <label className="text-stone-500 text-xs block mb-1">URL de l'image</label>
-                <input
-                  type="url"
+                <label className="text-stone-500 text-xs block mb-1">Image de la carte</label>
+                <ImagePicker
                   value={mapUrlDraft}
-                  onChange={e => setMapUrlDraft(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && handleSetMapUrl()}
-                  placeholder="https://..."
-                  autoFocus
-                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500"
+                  onChange={setMapUrlDraft}
+                  placeholder="URL de l'image de la carte…"
                 />
               </div>
               <div className="flex justify-end gap-2">
