@@ -17,6 +17,10 @@ export interface SectionProps {
   setCharacters: Dispatch<SetStateAction<Character[]>>
   /** Indicateur de sauvegarde de la coquille : les sections désactivent leurs boutons pendant. */
   saving: boolean
+  /** Modale d'ajout de personnage : elle vit dans la coquille, les sections l'ouvrent. */
+  setAllChars: Dispatch<SetStateAction<Character[]>>
+  setShowAddModal: Dispatch<SetStateAction<boolean>>
+  setSaving: Dispatch<SetStateAction<boolean>>
   copiedKey: string | null
   copyToClipboard: (key: string, text: string) => void
   exportSection: (sectionKey: string, data: unknown[]) => void
@@ -28,4 +32,21 @@ export function uuid(): string {
     const r = Math.random() * 16 | 0
     return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
   })
+}
+
+export function sign(n: number) { return n >= 0 ? `+${n}` : `${n}` }
+
+export function hpColor(current: number, max: number) {
+  const pct = max > 0 ? current / max : 0
+  if (pct > 0.5) return 'bg-emerald-500'
+  if (pct > 0.25) return 'bg-amber-500'
+  return 'bg-red-500'
+}
+
+export const CONDITIONS_FR: Record<string, string> = {
+  blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
+  exhaustion: 'Épuisé', frightened: 'Effrayé', grappled: 'Agrippé',
+  incapacitated: 'Hors de combat', invisible: 'Invisible', paralyzed: 'Paralysé',
+  petrified: 'Pétrifié', poisoned: 'Empoisonné', prone: 'À terre',
+  restrained: 'Entravé', stunned: 'Étourdi', unconscious: 'Inconscient',
 }
