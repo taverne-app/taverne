@@ -33,6 +33,7 @@ class CampaignResource extends JsonResource
             'characters'  => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'  => CombatantResource::collection($this->whenLoaded('combatants')),
             'sessions'    => SessionResource::collection($this->whenLoaded('sessions')),
+            'sessions_count' => $this->whenCounted('sessions'),
             'created_at'  => $this->created_at,
             'updated_at'  => $this->updated_at,
         ];

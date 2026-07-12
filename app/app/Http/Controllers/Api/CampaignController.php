@@ -21,6 +21,9 @@ class CampaignController extends Controller
         $campaigns = $request->user()
             ->campaigns()
             ->with(['characters', 'combatants'])
+            // Compte seulement : la barre latérale affiche un badge, elle n'a pas
+            // besoin du contenu des séances.
+            ->withCount('sessions')
             ->orderByDesc('updated_at')
             ->get();
 

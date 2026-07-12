@@ -42,12 +42,26 @@ export function Sidebar() {
    * ont chacune leur URL, donc leur place est dans la navigation. `sep` insère un
    * filet entre les sections de la campagne et les outils de jeu.
    */
+  /**
+   * Badges des sections — repris de l'ancienne barre d'onglets. Tout vient déjà de la
+   * campagne courante, sauf le nombre de séances, compté côté serveur (`sessions_count`)
+   * pour ne pas charger leur contenu juste pour afficher un chiffre.
+   */
+  const badges = current
+    ? {
+        session:  current.characters?.length || undefined,
+        monde:    ((current.npcs?.length ?? 0) + (current.locations?.length ?? 0)) || undefined,
+        aventure: (current.quests ?? []).filter(q => q.status === 'active').length || undefined,
+        journal:  current.sessions_count || undefined,
+      }
+    : {}
+
   const navLinks = current
     ? [
-        { to: `/campaigns/${current.id}/session`,  icon: '🎲', label: 'Session',     end: false, sep: false },
-        { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false },
-        { to: `/campaigns/${current.id}/aventure`, icon: '📜', label: 'Aventure',    end: false, sep: false },
-        { to: `/campaigns/${current.id}/journal`,  icon: '📖', label: 'Journal',     end: false, sep: false },
+        { to: `/campaigns/${current.id}/session`,  icon: '🎲', label: 'Session',     end: false, sep: false , badge: badges.session },
+        { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false , badge: badges.monde },
+        { to: `/campaigns/${current.id}/aventure`, icon: '📜', label: 'Aventure',    end: false, sep: false , badge: badges.aventure },
+        { to: `/campaigns/${current.id}/journal`,  icon: '📖', label: 'Journal',     end: false, sep: false , badge: badges.journal },
         { to: `/campaigns/${current.id}/campagne`, icon: '🏰', label: 'Campagne',    end: false, sep: false },
         { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false, sep: true },
         { to: `/combat?campaign=${current.id}`,     icon: '⚔', label: 'Combat',      end: false, sep: false },
@@ -104,7 +118,7 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-3 space-y-0.5 overflow-hidden">
-        {navLinks.map(({ to, icon, label, end, sep }) => (
+        {navLinks.map(({ to, icon, label, end, sep, badge }) => (
           <NavLink
             key={label}
             to={to}
@@ -118,9 +132,14 @@ export function Sidebar() {
             }
           >
             <span className="text-base shrink-0 w-6 text-center">{icon}</span>
-            <span className="ml-3 text-sm font-medium opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150">
+            <span className="ml-3 flex-1 text-sm font-medium opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150">
               {label}
             </span>
+            {badge !== undefined && (
+              <span className="ml-2 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-stone-800 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+                {badge}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>

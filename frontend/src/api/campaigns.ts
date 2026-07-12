@@ -184,6 +184,8 @@ export interface Quest {
 }
 
 export interface Campaign {
+  /** Nombre de séances — compté côté serveur pour le badge de la barre latérale. */
+  sessions_count?: number
   id: number
   name: string
   description: string | null
