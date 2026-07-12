@@ -41,6 +41,10 @@ RUN composer install \
         --no-dev \
         --no-interaction \
         --prefer-dist \
+    # public/storage est gitignoré : sans ce lien, les images uploadées ne sont
+    # pas servies en production. `ln -s` plutôt que `artisan storage:link` :
+    # pas besoin de booter l'app (ni de .env) au moment du build.
+    && ln -sfn ../storage/app/public public/storage \
     && chown -R www-data:www-data storage bootstrap/cache
 
 USER www-data
