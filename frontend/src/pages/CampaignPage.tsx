@@ -264,12 +264,14 @@ export function CampaignPage() {
   // Navigation par onglets
   const VALID_TABS = ['session', 'monde', 'aventure', 'journal', 'campagne'] as const
   type Tab = typeof VALID_TABS[number]
-  const [activeTab, setActiveTab] = useState<Tab>(() => {
-    try {
-      const saved = localStorage.getItem(`taverne-campaign-tab-${id}`)
-      return VALID_TABS.includes(saved as Tab) ? (saved as Tab) : 'session'
-    } catch { return 'session' }
-  })
+  /**
+   * L'onglet vit dans l'URL, pas dans le localStorage : sans ça, aucun lien
+   * partageable vers une section, et le bouton « Retour » du navigateur ne
+   * ramenait pas à l'onglet précédent.
+   */
+  const { tab: tabParam } = useParams<{ tab?: string }>()
+  const activeTab: Tab = VALID_TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'session'
+  const setActiveTab = (t: Tab) => navigate(`/campaigns/${id}/${t}`)
 
   // Tableau de bord
   const [showDashboard, setShowDashboard] = useState(true)
@@ -1399,7 +1401,6 @@ export function CampaignPage() {
                   key={tab.key}
                   onClick={() => {
                     setActiveTab(tab.key)
-                    try { localStorage.setItem(`taverne-campaign-tab-${id}`, tab.key) } catch {}
                   }}
                   className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
                     activeTab === tab.key

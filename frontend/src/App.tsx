@@ -84,6 +84,15 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          {/* Chaque section de campagne a son URL : lien partageable et bouton Retour. */}
+          <Route
+            path="/campaigns/:id/:tab"
+            element={
+              <ProtectedRoute>
+                <CampaignPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="/dashboard"
             element={
