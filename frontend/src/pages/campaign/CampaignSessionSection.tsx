@@ -12,13 +12,19 @@ import { MarkdownText } from '../../components/MarkdownText'
 import { MicButton } from '../../components/MicButton'
 import {
   updateCampaign,
+  type SessionPrep,
+  type PrepScene,
+  type SceneKind,
   type TreasureItem,
   type RandomTable,
   type RandomTableEntry,
 } from '../../api/campaigns'
 import { useToast } from '../../contexts/ToastContext'
 import type { SectionProps } from './shared'
-import { sign, hpColor, CONDITIONS_FR } from './shared'
+import { uuid, sign, hpColor, CONDITIONS_FR } from './shared'
+import { createCombatant } from '../../api/combatants'
+import { useNavigate } from 'react-router-dom'
+import { computeEncounterDifficulty, difficultyColor } from '../../data/encounter_difficulty'
 
 /**
  * Section « Session » : préparation de séance, calendrier, trésor de groupe,
@@ -28,10 +34,11 @@ import { sign, hpColor, CONDITIONS_FR } from './shared'
  * onglets (mutuellement exclusifs), donc les regrouper ne change pas l'affichage.
  */
 export default function CampaignSessionSection({
-  campaign, setCampaign, characters, setCharacters, setSaving,
+  campaign, setCampaign, characters, setCharacters, saving, setSaving,
   setAllChars, setShowAddModal,
 }: SectionProps) {
   const toast = useToast()
+  const navigate = useNavigate()
 
   const [todSaving, setTodSaving]   = useState(false)
   const [confirmRemove, setConfirmRemove]       = useState<number | null>(null)
@@ -310,8 +317,597 @@ export default function CampaignSessionSection({
     setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
   }
 
+  const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
+  const [sessionPrepDraft, setSessionPrepDraft] = useState<SessionPrep>(campaign.session_prep ?? emptySessionPrep())
+  const [editingSessionPrep, setEditingSessionPrep] = useState(false)
+  const [hasSessionPrep, setHasSessionPrep] = useState(!!campaign.session_prep)
+  const [savingSessionPrep, setSavingSessionPrep] = useState(false)
+  const emptyScene = (): PrepScene => ({
+    id: uuid(),
+    kind: 'event',
+    title: '', location_name: '', npc_names: [], encounter_name: '',
+    treasure: '', hook: '', notes: '', done: false,
+  })
+
+  /**
+   * Palette des scènes. Une scène sans type vient d'avant leur introduction :
+   * elle est traitée comme un événement.
+   */
+  const SCENE_KINDS: Record<SceneKind, { icon: string; label: string; color: string }> = {
+    combat:      { icon: '⚔',  label: 'Combat',      color: 'text-red-400 border-red-700/50 bg-red-950/30' },
+    event:       { icon: '🎭', label: 'Événement',   color: 'text-amber-400 border-amber-700/50 bg-amber-950/30' },
+    npc:         { icon: '🗣', label: 'Rencontre PNJ', color: 'text-sky-400 border-sky-700/50 bg-sky-950/30' },
+    exploration: { icon: '🧭', label: 'Exploration', color: 'text-emerald-400 border-emerald-700/50 bg-emerald-950/30' },
+  }
+  const sceneKind = (sc: PrepScene): SceneKind => sc.kind ?? 'event'
+
+  /**
+   * Monte le combat d'une scène : crée les combattants de la rencontre référencée
+   * (avec leur FP, sans quoi l'XP de fin de combat serait perdue) et bascule sur la
+   * page Combat. C'est le geste qui fait gagner du temps à la table.
+   */
+  async function handleLaunchSceneCombat(sc: PrepScene) {
+    if (!campaign) return
+    const enc = (campaign.saved_encounters ?? []).find(e => e.name === sc.encounter_name)
+    if (!enc || enc.entries.length === 0) {
+      toast.error('Aucune rencontre sauvegardée liée à cette scène.')
+      return
+    }
+    setSaving(true)
+    try {
+      await Promise.all(enc.entries.flatMap(entry =>
+        Array.from({ length: entry.count }, (_, i) =>
+          createCombatant(campaign.id, {
+            name: entry.count > 1 ? `${entry.monster_name} ${i + 1}` : entry.monster_name,
+            cr: entry.cr ?? null,
+            max_hp: (campaign.custom_monsters ?? []).find(m => m.name === entry.monster_name)?.hp_avg ?? 10,
+            faction: 'ennemi',
+          })
+        )
+      ))
+      toast.success(`${enc.name} — combattants ajoutés.`)
+      navigate(`/combat?campaign=${campaign.id}`)
+    } catch {
+      toast.error("Le combat n'a pas pu être monté.")
+    } finally {
+      setSaving(false)
+    }
+  }
+  const [sceneDraft, setSceneDraft] = useState<PrepScene>(emptyScene())
+  const [addingScene, setAddingScene] = useState(false)
+  const [expandedScene, setExpandedScene] = useState<string | null>(null)
+  const [editingSceneId, setEditingSceneId] = useState<string | null>(null)
+  const [sceneSearch, setSceneSearch] = useState('')
+  const [sceneStatusFilter, setSceneStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
+  const [editSceneDraft, setEditSceneDraft] = useState<PrepScene>(emptyScene())
+  async function handleSaveSessionPrep() {
+    if (!campaign) return
+    setSavingSessionPrep(true)
+    try {
+      const updated = await updateCampaign(campaign.id, { session_prep: sessionPrepDraft })
+      setCampaign(updated)
+      setHasSessionPrep(true)
+      setEditingSessionPrep(false)
+    } finally { setSavingSessionPrep(false) }
+  }
+  function handleExportSessionPrepMarkdown() {
+    if (!campaign?.session_prep) return
+    const prep = campaign.session_prep
+    const lines: string[] = []
+    lines.push(`# Préparation — ${prep.title || 'Session sans titre'}`)
+    if (prep.date) lines.push(`**Date prévue :** ${prep.date}`)
+    lines.push('')
+    if (prep.npc_names.length > 0) {
+      lines.push('## PNJ impliqués')
+      prep.npc_names.forEach(n => lines.push(`- ${n}`))
+      lines.push('')
+    }
+    if (prep.location_names.length > 0) {
+      lines.push('## Lieux à visiter')
+      prep.location_names.forEach(l => lines.push(`- ${l}`))
+      lines.push('')
+    }
+    if (prep.encounter_names.length > 0) {
+      lines.push('## Rencontres planifiées')
+      prep.encounter_names.forEach(e => lines.push(`- ${e}`))
+      lines.push('')
+    }
+    if ((prep.scenes ?? []).length > 0) {
+      lines.push('## Scènes')
+      prep.scenes.forEach((s, idx) => {
+        lines.push(`### ${idx + 1}. ${s.title}${s.done ? ' ✓' : ''}`)
+        if (s.location_name) lines.push(`**Lieu :** ${s.location_name}`)
+        if (s.encounter_name) lines.push(`**Rencontre :** ${s.encounter_name}`)
+        if (s.hook) lines.push(`**Accroche :** ${s.hook}`)
+        if (s.treasure) lines.push(`**Trésor :** ${s.treasure}`)
+        if (s.notes) { lines.push(''); lines.push(s.notes) }
+        lines.push('')
+      })
+    }
+    if (prep.notes) {
+      lines.push('## Notes de préparation')
+      lines.push(prep.notes)
+      lines.push('')
+    }
+    const md = lines.join('\n')
+    const blob = new Blob([md], { type: 'text/markdown' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const filename = (prep.title || 'session').replace(/\s+/g, '_').replace(/[^a-zA-Z0-9_\-]/g, '')
+    a.download = `prep_${filename || 'session'}.md`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+  async function handleClearSessionPrep() {
+    if (!campaign) return
+    const updated = await updateCampaign(campaign.id, { session_prep: null })
+    setCampaign(updated)
+    setSessionPrepDraft(emptySessionPrep())
+    setHasSessionPrep(false)
+    setEditingSessionPrep(false)
+  }
+  async function handleAddScene() {
+    if (!campaign || !sceneDraft.title.trim()) return
+    const prep = campaign.session_prep ?? emptySessionPrep()
+    const next: SessionPrep = {
+      ...prep,
+      scenes: [...(prep.scenes ?? []), { ...sceneDraft, id: uuid(), title: sceneDraft.title.trim() }],
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    setHasSessionPrep(true)
+    setSceneDraft(emptyScene())
+    setAddingScene(false)
+  }
+  async function handleToggleSceneDone(sceneId: string) {
+    if (!campaign?.session_prep) return
+    const next: SessionPrep = {
+      ...campaign.session_prep,
+      scenes: (campaign.session_prep.scenes ?? []).map(s =>
+        s.id === sceneId ? { ...s, done: !s.done } : s
+      ),
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+  }
+  async function handleDeleteScene(sceneId: string) {
+    if (!campaign?.session_prep) return
+    const next: SessionPrep = {
+      ...campaign.session_prep,
+      scenes: (campaign.session_prep.scenes ?? []).filter(s => s.id !== sceneId),
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    if (expandedScene === sceneId) setExpandedScene(null)
+  }
+  async function handleMoveScene(sceneId: string, dir: -1 | 1) {
+    if (!campaign?.session_prep) return
+    const scenes = [...campaign.session_prep.scenes]
+    const idx = scenes.findIndex(s => s.id === sceneId)
+    if (idx < 0) return
+    const target = idx + dir
+    if (target < 0 || target >= scenes.length) return
+    ;[scenes[idx], scenes[target]] = [scenes[target], scenes[idx]]
+    const next: SessionPrep = { ...campaign.session_prep, scenes }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+  }
+  async function handleDuplicateScene(sceneId: string) {
+    if (!campaign?.session_prep) return
+    const src = campaign.session_prep.scenes.find(s => s.id === sceneId)
+    if (!src) return
+    const copy = { ...src, id: uuid(), title: `${src.title} (copie)`, done: false }
+    const next: SessionPrep = { ...campaign.session_prep, scenes: [...campaign.session_prep.scenes, copy] }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+  }
+  async function handleUpdateScene(sceneId: string) {
+    if (!campaign?.session_prep || !editSceneDraft.title.trim()) return
+    const next: SessionPrep = {
+      ...campaign.session_prep,
+      scenes: (campaign.session_prep.scenes ?? []).map(s =>
+        s.id === sceneId ? { ...editSceneDraft, id: sceneId, title: editSceneDraft.title.trim() } : s
+      ),
+    }
+    const updated = await updateCampaign(campaign.id, { session_prep: next })
+    setCampaign(updated)
+    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    setEditingSceneId(null)
+  }
+
   return (
     <>
+        {/* Prochaine session */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-stone-300 text-sm font-semibold">Prochaine session</h2>
+              <p className="text-stone-500 text-xs mt-0.5">Planifiez la prochaine séance</p>
+            </div>
+            <div className="flex items-center gap-3">
+              {savingSessionPrep && <div className="w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />}
+              {hasSessionPrep && !editingSessionPrep && (
+                <button onClick={() => setEditingSessionPrep(true)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Modifier</button>
+              )}
+              {hasSessionPrep && !editingSessionPrep && (
+                <button onClick={handleExportSessionPrepMarkdown} className="text-stone-500 hover:text-stone-300 text-xs transition-colors" title="Exporter en Markdown">↓ MD</button>
+              )}
+              {hasSessionPrep && (
+                <button onClick={handleClearSessionPrep} className="text-red-500 hover:text-red-400 text-xs transition-colors">Effacer</button>
+              )}
+              {!hasSessionPrep && !editingSessionPrep && (
+                <button onClick={() => setEditingSessionPrep(true)} className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors">+ Planifier</button>
+              )}
+            </div>
+          </div>
+
+          {(editingSessionPrep || hasSessionPrep) ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Titre</label>
+                  <input
+                    type="text"
+                    placeholder="ex. L'attaque du manoir…"
+                    value={sessionPrepDraft.title}
+                    onChange={e => setSessionPrepDraft(d => ({ ...d, title: e.target.value }))}
+                    disabled={!editingSessionPrep}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors disabled:opacity-60"
+                  />
+                </div>
+                <div>
+                  <label className="text-stone-500 text-xs block mb-1">Date prévue</label>
+                  <input
+                    type="date"
+                    value={sessionPrepDraft.date}
+                    onChange={e => setSessionPrepDraft(d => ({ ...d, date: e.target.value }))}
+                    disabled={!editingSessionPrep}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors disabled:opacity-60"
+                  />
+                </div>
+              </div>
+
+              {/* NPCs à mettre en avant */}
+              {(campaign.npcs ?? []).length > 0 && (
+                <div>
+                  <label className="text-stone-500 text-xs block mb-2">PNJ impliqués</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(campaign.npcs ?? []).map((npc, i) => {
+                      const selected = sessionPrepDraft.npc_names.includes(npc.name)
+                      return (
+                        <button
+                          key={i}
+                          disabled={!editingSessionPrep}
+                          onClick={() => setSessionPrepDraft(d => ({
+                            ...d,
+                            npc_names: selected ? d.npc_names.filter(n => n !== npc.name) : [...d.npc_names, npc.name],
+                          }))}
+                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors ${selected ? 'bg-violet-900/40 border-violet-600/50 text-violet-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-violet-700/50 hover:text-stone-300'} disabled:cursor-default`}
+                        >
+                          {npc.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Lieux à visiter */}
+              {(campaign.locations ?? []).length > 0 && (
+                <div>
+                  <label className="text-stone-500 text-xs block mb-2">Lieux à visiter</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(campaign.locations ?? []).map((loc, i) => {
+                      const selected = sessionPrepDraft.location_names.includes(loc.name)
+                      return (
+                        <button
+                          key={i}
+                          disabled={!editingSessionPrep}
+                          onClick={() => setSessionPrepDraft(d => ({
+                            ...d,
+                            location_names: selected ? d.location_names.filter(n => n !== loc.name) : [...d.location_names, loc.name],
+                          }))}
+                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors ${selected ? 'bg-amber-900/40 border-amber-600/50 text-amber-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-amber-700/50 hover:text-stone-300'} disabled:cursor-default`}
+                        >
+                          {loc.name}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Rencontres planifiées */}
+              {(campaign.saved_encounters ?? []).length > 0 && (
+                <div>
+                  <label className="text-stone-500 text-xs block mb-2">Rencontres planifiées</label>
+                  <div className="flex flex-wrap gap-2">
+                    {(campaign.saved_encounters ?? []).map((enc, i) => {
+                      const selected = sessionPrepDraft.encounter_names.includes(enc.name)
+                      const partyLevels = characters.map(c => c.level)
+                      const diff = computeEncounterDifficulty(enc.entries, partyLevels)
+                      return (
+                        <button
+                          key={i}
+                          disabled={!editingSessionPrep}
+                          onClick={() => setSessionPrepDraft(d => ({
+                            ...d,
+                            encounter_names: selected ? d.encounter_names.filter(n => n !== enc.name) : [...d.encounter_names, enc.name],
+                          }))}
+                          className={`text-xs rounded-lg px-2.5 py-1 border transition-colors flex items-center gap-1.5 ${selected ? 'bg-red-900/40 border-red-600/50 text-red-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-red-700/50 hover:text-stone-300'} disabled:cursor-default`}
+                        >
+                          {enc.name}
+                          {diff && <span className={`font-semibold text-xs ${selected ? '' : difficultyColor(diff)}`}>{diff}</span>}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {/* Notes de préparation */}
+              <div>
+                <label className="text-stone-500 text-xs block mb-1">Notes de préparation</label>
+                {editingSessionPrep ? (
+                  <textarea
+                    placeholder="Objectifs de la session, secrets à révéler, rebondissements…"
+                    value={sessionPrepDraft.notes}
+                    onChange={e => setSessionPrepDraft(d => ({ ...d, notes: e.target.value }))}
+                    rows={4}
+                    className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors resize-y"
+                  />
+                ) : sessionPrepDraft.notes ? (
+                  <div className="bg-stone-800/50 border border-stone-700/50 rounded-lg px-3 py-2">
+                    <MarkdownText className="text-stone-300 text-sm">{sessionPrepDraft.notes}</MarkdownText>
+                  </div>
+                ) : (
+                  <p className="text-stone-600 text-xs italic">Aucune note.</p>
+                )}
+              </div>
+
+              {editingSessionPrep && (
+                <div className="flex items-center justify-end gap-3">
+                  {hasSessionPrep && (
+                    <button onClick={() => setEditingSessionPrep(false)} className="text-stone-500 hover:text-stone-300 text-sm transition-colors">Annuler</button>
+                  )}
+                  <button
+                    onClick={handleSaveSessionPrep}
+                    disabled={savingSessionPrep}
+                    className="text-sky-400 hover:text-sky-300 text-sm font-semibold transition-colors disabled:opacity-40"
+                  >
+                    Enregistrer
+                  </button>
+                </div>
+              )}
+
+              {/* Scènes de préparation */}
+              {hasSessionPrep && (
+                <div className="pt-2 border-t border-stone-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-stone-500 text-xs uppercase tracking-widest">
+                      Scènes ({(campaign.session_prep?.scenes ?? []).length})
+                    </p>
+                    <button
+                      onClick={() => { setAddingScene(v => !v); setSceneDraft(emptyScene()) }}
+                      className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors"
+                    >
+                      {addingScene ? 'Annuler' : '+ Scène'}
+                    </button>
+                  </div>
+
+                  {addingScene && (
+                    <div className="bg-stone-800/60 border border-stone-700 rounded-lg p-3 mb-3 space-y-2">
+                      {/* Nature de la scène : détermine son icône et, pour un combat, la
+                          possibilité de monter la rencontre en un clic. */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {(Object.keys(SCENE_KINDS) as SceneKind[]).map(k => (
+                          <button
+                            key={k}
+                            onClick={() => setSceneDraft(d => ({ ...d, kind: k }))}
+                            className={`text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${
+                              (sceneDraft.kind ?? 'event') === k
+                                ? SCENE_KINDS[k].color
+                                : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                            }`}
+                          >{SCENE_KINDS[k].icon} {SCENE_KINDS[k].label}</button>
+                        ))}
+                      </div>
+                      <input
+                        type="text"
+                        value={sceneDraft.title}
+                        onChange={e => setSceneDraft(d => ({ ...d, title: e.target.value }))}
+                        autoFocus
+                        placeholder="Titre de la scène *"
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                      />
+                      <div className="grid grid-cols-2 gap-2">
+                        <input
+                          type="text"
+                          value={sceneDraft.location_name}
+                          onChange={e => setSceneDraft(d => ({ ...d, location_name: e.target.value }))}
+                          placeholder="Lieu"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={sceneDraft.encounter_name}
+                          onChange={e => setSceneDraft(d => ({ ...d, encounter_name: e.target.value }))}
+                          placeholder="Rencontre liée"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={sceneDraft.hook}
+                          onChange={e => setSceneDraft(d => ({ ...d, hook: e.target.value }))}
+                          placeholder="Accroche / déclencheur"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                        <input
+                          type="text"
+                          value={sceneDraft.treasure}
+                          onChange={e => setSceneDraft(d => ({ ...d, treasure: e.target.value }))}
+                          placeholder="Trésor / récompense"
+                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors"
+                        />
+                      </div>
+                      <textarea
+                        value={sceneDraft.notes}
+                        onChange={e => setSceneDraft(d => ({ ...d, notes: e.target.value }))}
+                        placeholder="Notes de la scène…"
+                        rows={2}
+                        className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors resize-none"
+                      />
+                      <div className="flex justify-end">
+                        <button
+                          onClick={handleAddScene}
+                          disabled={!sceneDraft.title.trim()}
+                          className="bg-sky-700 hover:bg-sky-600 text-white text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors disabled:opacity-40"
+                        >
+                          Ajouter la scène
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {(campaign.session_prep?.scenes ?? []).length > 2 && (
+                    <div className="flex gap-2 mb-2">
+                      <input
+                        type="text"
+                        value={sceneSearch}
+                        onChange={e => setSceneSearch(e.target.value)}
+                        placeholder="Rechercher une scène…"
+                        className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-600 transition-colors"
+                      />
+                      <div className="flex gap-1">
+                        {(['all', 'todo', 'done'] as const).map(f => (
+                          <button
+                            key={f}
+                            onClick={() => setSceneStatusFilter(f)}
+                            className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${sceneStatusFilter === f ? 'bg-sky-900/60 border-sky-700 text-sky-300' : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'}`}
+                          >
+                            {f === 'all' ? 'Toutes' : f === 'todo' ? 'À faire' : '✓ Faites'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(campaign.session_prep?.scenes ?? []).length > 0 ? (
+                    <div className="space-y-2">
+                      {(campaign.session_prep!.scenes).filter(s =>
+                        (sceneStatusFilter === 'all' || (sceneStatusFilter === 'done' ? s.done : !s.done)) &&
+                        (!sceneSearch || s.title.toLowerCase().includes(sceneSearch.toLowerCase()) || (s.location_name ?? '').toLowerCase().includes(sceneSearch.toLowerCase()) || (s.notes ?? '').toLowerCase().includes(sceneSearch.toLowerCase()))
+                      ).map((scene, sceneIdx) => (
+                        <div key={scene.id} className={`border rounded-lg overflow-hidden transition-colors ${scene.done ? 'border-stone-800 opacity-60' : 'border-sky-800/40'}`}>
+                          {editingSceneId === scene.id ? (
+                            <div className="px-3 py-3 space-y-2">
+                              <input
+                                type="text"
+                                value={editSceneDraft.title}
+                                onChange={e => setEditSceneDraft(d => ({ ...d, title: e.target.value }))}
+                                autoFocus
+                                placeholder="Titre *"
+                                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-sky-500 transition-colors"
+                              />
+                              <div className="grid grid-cols-2 gap-2">
+                                <input type="text" value={editSceneDraft.location_name} onChange={e => setEditSceneDraft(d => ({ ...d, location_name: e.target.value }))} placeholder="Lieu" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                                <input type="text" value={editSceneDraft.encounter_name} onChange={e => setEditSceneDraft(d => ({ ...d, encounter_name: e.target.value }))} placeholder="Rencontre liée" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                                <input type="text" value={editSceneDraft.hook} onChange={e => setEditSceneDraft(d => ({ ...d, hook: e.target.value }))} placeholder="Accroche / déclencheur" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                                <input type="text" value={editSceneDraft.treasure} onChange={e => setEditSceneDraft(d => ({ ...d, treasure: e.target.value }))} placeholder="Trésor / récompense" className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                              </div>
+                              <textarea value={editSceneDraft.notes} onChange={e => setEditSceneDraft(d => ({ ...d, notes: e.target.value }))} placeholder="Notes…" rows={2} className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors resize-none" />
+                              <div className="flex justify-between items-center">
+                                <button onClick={() => setEditingSceneId(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
+                                <button onClick={() => handleUpdateScene(scene.id)} disabled={!editSceneDraft.title.trim()} className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors disabled:opacity-40">Enregistrer</button>
+                              </div>
+                            </div>
+                          ) : (
+                            <>
+                              <div
+                                className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-stone-800/40 transition-colors"
+                                onClick={() => setExpandedScene(expandedScene === scene.id ? null : scene.id)}
+                              >
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleToggleSceneDone(scene.id) }}
+                                  className={`w-4 h-4 rounded border shrink-0 flex items-center justify-center transition-colors ${scene.done ? 'bg-emerald-600 border-emerald-600 text-white' : 'border-stone-600 hover:border-sky-500'}`}
+                                >
+                                  {scene.done && <span className="text-[10px] font-bold">✓</span>}
+                                </button>
+                                <span
+                                  title={SCENE_KINDS[sceneKind(scene)].label}
+                                  className={`shrink-0 text-xs rounded px-1.5 py-0.5 border ${SCENE_KINDS[sceneKind(scene)].color}`}
+                                >{SCENE_KINDS[sceneKind(scene)].icon}</span>
+                                <p className={`text-sm font-medium flex-1 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
+                                {scene.location_name && <span className="text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
+                                {sceneKind(scene) === 'combat' && scene.encounter_name && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleLaunchSceneCombat(scene) }}
+                                    disabled={saving}
+                                    title={`Monter « ${scene.encounter_name} » et aller au combat`}
+                                    className="shrink-0 text-xs font-semibold rounded px-2 py-0.5 border bg-red-700/30 border-red-600/50 text-red-300 hover:bg-red-700/60 disabled:opacity-40 transition-colors"
+                                  >⚔ Lancer</button>
+                                )}
+                                {!sceneSearch && sceneStatusFilter === 'all' && sceneIdx > 0 && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleMoveScene(scene.id, -1) }}
+                                    className="text-stone-700 hover:text-stone-400 text-xs leading-none shrink-0 transition-colors"
+                                    title="Monter"
+                                  >↑</button>
+                                )}
+                                {!sceneSearch && sceneStatusFilter === 'all' && sceneIdx < (campaign.session_prep!.scenes.length - 1) && (
+                                  <button
+                                    onClick={e => { e.stopPropagation(); handleMoveScene(scene.id, 1) }}
+                                    className="text-stone-700 hover:text-stone-400 text-xs leading-none shrink-0 transition-colors"
+                                    title="Descendre"
+                                  >↓</button>
+                                )}
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDuplicateScene(scene.id) }}
+                                  className="text-stone-600 hover:text-sky-400 text-xs leading-none shrink-0 transition-colors"
+                                  title="Dupliquer"
+                                >⎘</button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); setEditingSceneId(scene.id); setEditSceneDraft({ ...scene }); setExpandedScene(null) }}
+                                  className="text-stone-600 hover:text-sky-400 text-sm leading-none shrink-0 transition-colors"
+                                  title="Modifier"
+                                >✎</button>
+                                <button
+                                  onClick={e => { e.stopPropagation(); handleDeleteScene(scene.id) }}
+                                  className="text-stone-700 hover:text-red-400 text-base leading-none shrink-0 transition-colors ml-1"
+                                >×</button>
+                              </div>
+                              {expandedScene === scene.id && (
+                                <div className="px-3 pb-3 pt-0 text-xs space-y-1 border-t border-stone-800">
+                                  {scene.hook && <p className="text-stone-400">⚡ <span className="text-stone-300">{scene.hook}</span></p>}
+                                  {scene.encounter_name && <p className="text-stone-400">⚔ <span className="text-stone-300">{scene.encounter_name}</span></p>}
+                                  {scene.treasure && <p className="text-stone-400">💰 <span className="text-stone-300">{scene.treasure}</span></p>}
+                                  {scene.notes && <MarkdownText className="text-stone-300 mt-1">{scene.notes}</MarkdownText>}
+                                </div>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    !addingScene && (
+                      <p className="text-stone-700 text-xs text-center py-2">Aucune scène. Structurez votre session en actes.</p>
+                    )
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-stone-600 text-sm text-center py-4">Aucune session planifiée. Cliquez sur "+ Planifier" pour préparer la prochaine séance.</p>
+          )}
+        </div>
+
         {/* Moment de la journée */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
           <p className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">Ambiance — moment de la journée</p>

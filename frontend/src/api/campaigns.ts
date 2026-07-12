@@ -19,8 +19,16 @@ export interface Npc {
   notes: string
 }
 
+/** Nature d'une scène de préparation — détermine son icône et ses actions. */
+export type SceneKind = 'combat' | 'event' | 'npc' | 'exploration'
+
 export interface PrepScene {
   id: string
+  /**
+   * Optionnel : les scènes créées avant l'introduction des types n'en ont pas.
+   * Elles sont traitées comme des événements.
+   */
+  kind?: SceneKind
   title: string
   location_name: string
   npc_names: string[]
