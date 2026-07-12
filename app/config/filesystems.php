@@ -41,7 +41,12 @@ return [
         'public' => [
             'driver' => 'local',
             'root' => storage_path('app/public'),
-            'url' => rtrim(env('APP_URL', 'http://localhost'), '/').'/storage',
+            // URL RELATIVE, volontairement. Une URL absolue bâtie sur APP_URL
+            // (http://localhost:8000/storage/…) ne résout que depuis la machine du
+            // MJ : le téléphone d'un joueur ouvrant le lien de partage obtiendrait
+            // une image cassée. En relatif, l'image est servie par l'origine de la
+            // page (Caddy route déjà /storage/* vers nginx en production).
+            'url' => '/storage',
             'visibility' => 'public',
             'throw' => false,
             'report' => false,
