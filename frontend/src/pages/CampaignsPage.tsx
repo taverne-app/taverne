@@ -99,6 +99,7 @@ export function CampaignsPage() {
       window.location.href = url
     } catch {
       setUpgradingPlan(null)
+      toast.error("Impossible d'ouvrir le paiement. Réessayez dans un instant.")
     }
   }
 
@@ -106,7 +107,9 @@ export function CampaignsPage() {
     try {
       const url = await createPortalSession()
       window.location.href = url
-    } catch { /* ignore */ }
+    } catch {
+      toast.error("Impossible d'ouvrir la gestion de l'abonnement. Réessayez dans un instant.")
+    }
   }
 
   return (

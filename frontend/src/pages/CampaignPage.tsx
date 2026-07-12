@@ -398,7 +398,10 @@ export function CampaignPage() {
     const tod = value === 'none' ? null : value
     setCampaign(c => c ? { ...c, time_of_day: tod } : null)
     try { await setCampaignTimeOfDay(campaign.id, tod) }
-    catch { setCampaign(c => c ? { ...c, time_of_day: campaign.time_of_day } : null) }
+    catch {
+      setCampaign(c => c ? { ...c, time_of_day: campaign.time_of_day } : null)
+      toast.error("Le moment de la journée n'a pas pu être enregistré.")
+    }
     finally { setTodSaving(false) }
   }
 

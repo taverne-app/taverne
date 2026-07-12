@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
 import { updateProfile, updatePassword } from '../api/auth'
 import { createPortalSession, createCheckoutSession } from '../api/billing'
 import { useSharedTheme, type ThemeChoice } from '../lib/sharedTheme'
@@ -17,6 +18,7 @@ const PLAN_LABELS: Record<string, string> = {
 }
 
 export function AccountPage() {
+  const toast = useToast()
   const { user, setAuth } = useAuth()
   const { themeChoice, chooseTheme } = useSharedTheme()
 
@@ -74,7 +76,10 @@ export function AccountPage() {
     try {
       const url = await createPortalSession()
       window.location.href = url
-    } catch { setPortalLoading(false) }
+    } catch {
+      setPortalLoading(false)
+      toast.error("Impossible d'ouvrir la gestion de l'abonnement. Réessayez dans un instant.")
+    }
   }
 
   async function handleUpgrade(plan: 'adventurer' | 'guild') {
@@ -82,7 +87,10 @@ export function AccountPage() {
     try {
       const url = await createCheckoutSession(plan)
       window.location.href = url
-    } catch { setUpgradingPlan(null) }
+    } catch {
+      setUpgradingPlan(null)
+      toast.error("Impossible d'ouvrir le paiement. Réessayez dans un instant.")
+    }
   }
 
   return (

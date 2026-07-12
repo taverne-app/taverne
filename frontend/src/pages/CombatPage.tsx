@@ -20,6 +20,7 @@ import { createSession } from '../api/sessions'
 import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
 import { useToast } from '../contexts/ToastContext'
+import { ApiError } from '../api/client'
 import { ConfirmDialog, type ConfirmRequest } from '../components/ConfirmDialog'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, CR_XP, type MonsterTemplate } from '../data/monsters'
@@ -809,19 +810,39 @@ export function CombatPage() {
   }
 
   async function handleSetCharacterInitiative(id: number, roll: number | null) {
-    const updated = await setInitiativeRoll(id, roll)
-    updateCharacter(updated)
+    await run(async () => {
+      const updated = await setInitiativeRoll(id, roll)
+      updateCharacter(updated)
+    }, "L'initiative n'a pas pu être enregistrée.")
   }
 
   async function handleSetCombatantInitiative(id: number, roll: number | null) {
     if (!campaignId) return
-    const updated = await updateCombatantInitiative(campaignId, id, roll)
-    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+    await run(async () => {
+      const updated = await updateCombatantInitiative(campaignId, id, roll)
+      setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+    }, "L'initiative n'a pas pu être enregistrée.")
+  }
+
+  /**
+   * Exécute une mutation et signale son échec.
+   *
+   * Ces handlers appliquent l'état renvoyé par le SERVEUR après la réponse : en cas
+   * d'échec rien n'est corrompu, mais sans ce message l'action semblerait simplement
+   * « ne rien faire » — un coup critique appliqué sur un wifi qui tousse passerait
+   * inaperçu.
+   */
+  async function run<T>(fn: () => Promise<T>, message: string): Promise<T | undefined> {
+    try {
+      return await fn()
+    } catch (e) {
+      toast.error(e instanceof ApiError ? e.message : message)
+    }
   }
 
   async function handleRollAllInitiative(onlyMissing = false) {
     const d20 = () => Math.floor(Math.random() * 20) + 1
-    await Promise.all([
+    await run(() => Promise.all([
       ...characters
         .filter(c => !onlyMissing || c.combat.initiative_roll == null)
         .map(async c => {
@@ -838,7 +859,7 @@ export function CombatPage() {
           const updated = await updateCombatantInitiative(campaignId, cb.id, roll)
           setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
         }),
-    ])
+    ]), "Les initiatives n'ont pas toutes pu être enregistrées.")
     setManualOrder(null)
   }
 
@@ -848,10 +869,12 @@ export function CombatPage() {
     const amount = parseInt(raw, 10)
     if (!amount || amount <= 0) return
     const cbName = combatants.find(c => c.id === combatantId)?.name ?? '?'
-    const updated = await updateCombatantHp(campaignId, combatantId, amount, type)
-    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
-    setCombatantHpInputs(prev => ({ ...prev, [combatantId]: '' }))
-    logEvent('hp', `${cbName} : ${type === 'damage' ? `-${amount}` : `+${amount}`} PV`)
+    await run(async () => {
+      const updated = await updateCombatantHp(campaignId, combatantId, amount, type)
+      setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+      setCombatantHpInputs(prev => ({ ...prev, [combatantId]: '' }))
+      logEvent('hp', `${cbName} : ${type === 'damage' ? `-${amount}` : `+${amount}`} PV`)
+    }, `Les PV de ${cbName} n'ont pas pu être mis à jour.`)
   }
 
   async function handleSetCharacterTempHp(character: Character) {
@@ -868,15 +891,17 @@ export function CombatPage() {
     const raw = charHpInputs[character.id] ?? ''
     const amount = parseInt(raw, 10)
     if (!amount || amount <= 0) return
-    const updated = await updateHp(character.id, amount, type)
-    updateCharacter(updated)
-    setCharHpInputs(prev => ({ ...prev, [character.id]: '' }))
-    logEvent('hp', `${character.name} : ${type === 'damage' ? `-${amount}` : `+${amount}`} PV`)
-    if (type === 'damage' && character.state.concentrating_on) {
-      const dc = Math.max(10, Math.floor(amount / 2))
-      setConcentrationPrompt({ character: updated, amount, dc })
-      setConcentrationRoll(null)
-    }
+    await run(async () => {
+      const updated = await updateHp(character.id, amount, type)
+      updateCharacter(updated)
+      setCharHpInputs(prev => ({ ...prev, [character.id]: '' }))
+      logEvent('hp', `${character.name} : ${type === 'damage' ? `-${amount}` : `+${amount}`} PV`)
+      if (type === 'damage' && character.state.concentrating_on) {
+        const dc = Math.max(10, Math.floor(amount / 2))
+        setConcentrationPrompt({ character: updated, amount, dc })
+        setConcentrationRoll(null)
+      }
+    }, `Les PV de ${character.name} n'ont pas pu être mis à jour.`)
   }
 
   async function handleToggleCharacterCondition(id: number, condition: string, duration?: number) {
@@ -892,8 +917,10 @@ export function CombatPage() {
     } else if (duration) {
       nextDurations[condition] = duration
     }
-    const updated = await updateConditions(id, nextConditions, nextDurations)
-    updateCharacter(updated)
+    await run(async () => {
+      const updated = await updateConditions(id, nextConditions, nextDurations)
+      updateCharacter(updated)
+    }, "L'état n'a pas pu être appliqué.")
   }
 
   function toggleAoeSelect(id: string) {
@@ -909,7 +936,9 @@ export function CombatPage() {
     const amount = parseInt(aoeDamageInput, 10)
     if (!amount || amount <= 0 || aoeSelected.size === 0) return
     const names: string[] = []
-    await Promise.all(Array.from(aoeSelected).map(async id => {
+    // Une zone touche plusieurs cibles : si une seule écriture échoue, le MJ doit
+    // le savoir — sinon une créature reste à pleins PV sans que personne ne le voie.
+    const ok = await run(() => Promise.all(Array.from(aoeSelected).map(async id => {
       const [kind, rawId] = id.split('-')
       const numId = parseInt(rawId, 10)
       if (kind === 'character') {
@@ -923,7 +952,8 @@ export function CombatPage() {
         const updated = await updateCombatantHp(campaignId, numId, amount, type)
         setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
       }
-    }))
+    })), "La zone n'a pas pu être appliquée à toutes les cibles.")
+    if (!ok) return
     if (names.length > 0) {
       logEvent('hp', `Zone ${type === 'damage' ? `−${amount} PV` : `+${amount} PV`} → ${names.join(', ')}`)
     }
@@ -960,13 +990,17 @@ export function CombatPage() {
 
   async function handleDeleteCombatant(id: number) {
     if (!campaignId) return
-    await deleteCombatant(campaignId, id)
-    setCombatants(prev => prev.filter(c => c.id !== id))
+    await run(async () => {
+      await deleteCombatant(campaignId, id)
+      setCombatants(prev => prev.filter(c => c.id !== id))
+    }, "Le combattant n'a pas pu être supprimé.")
   }
 
   async function handleToggleInspiration(character: Character) {
-    const updated = await updateInspiration(character.id, !character.combat.inspiration)
-    updateCharacter(updated)
+    await run(async () => {
+      const updated = await updateInspiration(character.id, !character.combat.inspiration)
+      updateCharacter(updated)
+    }, "L'inspiration n'a pas pu être modifiée.")
   }
 
   async function handleUseSlot(character: Character, level: number, action: 'use' | 'restore') {
@@ -988,15 +1022,19 @@ export function CombatPage() {
     } else if (duration) {
       nextDurations[condition] = duration
     }
-    const updated = await updateCombatantConditions(campaignId, id, nextConditions, nextDurations)
-    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+    await run(async () => {
+      const updated = await updateCombatantConditions(campaignId, id, nextConditions, nextDurations)
+      setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+    }, "L'état n'a pas pu être appliqué.")
   }
 
   async function handleRenameCombatant(id: number) {
     if (!campaignId || !renameDraft.trim()) return
-    const updated = await updateCombatantName(campaignId, id, renameDraft.trim())
-    setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
-    setRenamingCombatantId(null)
+    await run(async () => {
+      const updated = await updateCombatantName(campaignId, id, renameDraft.trim())
+      setCombatants(prev => prev.map(c => c.id === updated.id ? updated : c))
+      setRenamingCombatantId(null)
+    }, "Le combattant n'a pas pu être renommé.")
   }
 
   async function handleCycleFaction(id: number) {
@@ -1497,6 +1535,10 @@ export function CombatPage() {
         logEvent('hp', `Court repos — ${results.map(r => `${r.name} +${r.healed} PV`).join(', ')}`)
       }
       setShowRestPanel(false)
+    } catch (e) {
+      // Le try n'existait que pour le finally : l'échec repartait en rejet non géré,
+      // et le repos semblait n'avoir aucun effet.
+      toast.error(e instanceof ApiError ? e.message : "Le repos du groupe a échoué.")
     } finally {
       setRestInProgress(false)
     }
