@@ -465,6 +465,28 @@ export function CombatPage() {
   const [xpInputs, setXpInputs] = useState<Record<number, string>>({})
   const [xpResult, setXpResult] = useState<{ total: number; share: number; levelUps: string[] } | null>(null)
   const [monsterMap, setMonsterMap] = useState<Record<number, MonsterTemplate>>({})
+
+  /**
+   * Fiche de créature associée à chaque combattant.
+   *
+   * `monsterMap` n'est peuplé qu'au moment où l'on ajoute une créature depuis le
+   * bestiaire, et c'est un état React : il disparaît au moindre rechargement de la
+   * page. On retombe donc sur une recherche par nom dans le bestiaire (SRD +
+   * personnalisé) — sans quoi l'XP des créatures prédéfinies n'est jamais
+   * pré-remplie, et le bouton « Distribuer » reste désactivé faute de total.
+   */
+  const resolvedMonsters: Record<number, MonsterTemplate> = {}
+  combatants.forEach(cb => {
+    const tpl = monsterMap[cb.id] ?? allMonsters.find(m => m.name === cb.name)
+    if (tpl) resolvedMonsters[cb.id] = tpl
+  })
+
+  /** XP d'un combattant : la fiche fait foi, à défaut on la déduit du FP. */
+  const xpForCombatant = (id: number): number => {
+    const tpl = resolvedMonsters[id]
+    if (!tpl) return 0
+    return tpl.xp || crToXp(tpl.cr)
+  }
   const [showCombatSummary, setShowCombatSummary] = useState(false)
 
   // Group rest
@@ -853,7 +875,7 @@ export function CombatPage() {
         .filter(cb => !onlyMissing || cb.initiative_roll == null)
         .map(async cb => {
           if (!campaignId) return
-          const mod = monsterMap[cb.id]?.initiative_mod ?? 0
+          const mod = resolvedMonsters[cb.id]?.initiative_mod ?? 0
           const roll = d20() + mod
           const updated = await updateCombatantInitiative(campaignId, cb.id, roll)
           setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
@@ -1840,7 +1862,8 @@ export function CombatPage() {
                     if (!showXpPanel) {
                       const defaults: Record<number, string> = {}
                       combatants.filter(c => c.current_hp <= 0).forEach(c => {
-                        defaults[c.id] = monsterMap[c.id] ? String(monsterMap[c.id].xp) : ''
+                        const xp = xpForCombatant(c.id)
+                        defaults[c.id] = xp > 0 ? String(xp) : ''
                       })
                       setXpInputs(defaults)
                     }
@@ -2668,7 +2691,7 @@ export function CombatPage() {
                       </div>
 
                       {/* Monster stat block toggle */}
-                      {monsterMap[cb.id] && (
+                      {resolvedMonsters[cb.id] && (
                         <button
                           onClick={() => setExpandedMonster(expandedMonster === cb.id ? null : cb.id)}
                           className={`text-xs rounded px-2 py-1 border transition-colors shrink-0 ${
@@ -2693,8 +2716,8 @@ export function CombatPage() {
                     </div>
 
                     {/* Monster stat block */}
-                    {expandedMonster === cb.id && monsterMap[cb.id] && (() => {
-                      const m = monsterMap[cb.id]
+                    {expandedMonster === cb.id && resolvedMonsters[cb.id] && (() => {
+                      const m = resolvedMonsters[cb.id]
                       const hpStr = `${m.hp_dice}d${m.hp_sides}${m.hp_bonus > 0 ? `+${m.hp_bonus}` : m.hp_bonus < 0 ? m.hp_bonus : ''}`
                       const atkBonus = crToAttackBonus(m.cr)
                       const dmg = crToDamageDice(m.cr)
@@ -3999,7 +4022,7 @@ export function CombatPage() {
         <CombatSummaryModal
           roundNumber={roundNumber}
           combatants={combatants}
-          monsterMap={monsterMap}
+          monsterMap={resolvedMonsters}
           characters={characters}
           campaignId={campaignId}
           onClose={() => setShowCombatSummary(false)}
