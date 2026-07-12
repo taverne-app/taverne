@@ -100,7 +100,14 @@ export function CampaignPage() {
    */
   const { tab: tabParam } = useParams<{ tab?: string }>()
   const activeTab: Tab = VALID_TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'session'
-  const setActiveTab = (t: Tab) => navigate(`/campaigns/${id}/${t}`)
+
+  // URL canonique : /campaigns/:id renvoie vers sa première section, sinon aucune
+  // entrée de la barre latérale n'apparaîtrait active.
+  useEffect(() => {
+    if (id && !VALID_TABS.includes(tabParam as Tab)) {
+      navigate(`/campaigns/${id}/session`, { replace: true })
+    }
+  }, [id, tabParam, navigate])
 
   // Tableau de bord
 
@@ -353,49 +360,6 @@ export function CampaignPage() {
       </header>
 
       {/* Onglets */}
-      {(() => {
-        const activeQuests = (campaign.quests ?? []).filter(q => q.status === 'active').length
-        const badges: Partial<Record<Tab, number>> = {
-          session:  characters.length || undefined,
-          monde:    ((campaign.npcs ?? []).length + (campaign.locations ?? []).length) || undefined,
-          aventure: activeQuests || undefined,
-          journal:  sessions.length || undefined,
-        }
-        return (
-          <div className="border-b border-stone-800 bg-stone-900/60 sticky top-14 z-10">
-            <div className="max-w-5xl mx-auto px-4 flex gap-1">
-              {([
-                { key: 'session',  label: 'Session' },
-                { key: 'monde',    label: 'Monde' },
-                { key: 'aventure', label: 'Aventure' },
-                { key: 'journal',  label: 'Journal' },
-                { key: 'campagne', label: 'Campagne' },
-              ] as const).map(tab => (
-                <button
-                  key={tab.key}
-                  onClick={() => {
-                    setActiveTab(tab.key)
-                  }}
-                  className={`px-4 py-3 text-sm font-medium transition-colors border-b-2 -mb-px flex items-center gap-1.5 ${
-                    activeTab === tab.key
-                      ? 'border-amber-400 text-amber-400'
-                      : 'border-transparent text-stone-400 hover:text-stone-200'
-                  }`}
-                >
-                  {tab.label}
-                  {badges[tab.key] !== undefined && (
-                    <span className={`text-xs px-1.5 py-0.5 rounded-full font-normal ${
-                      activeTab === tab.key ? 'bg-amber-400/20 text-amber-400' : 'bg-stone-700 text-stone-400'
-                    }`}>
-                      {badges[tab.key]}
-                    </span>
-                  )}
-                </button>
-              ))}
-            </div>
-          </div>
-        )
-      })()}
 
       <main className="max-w-5xl mx-auto px-4 py-6 space-y-6">
 

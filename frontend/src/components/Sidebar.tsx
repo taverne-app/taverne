@@ -34,16 +34,25 @@ export function Sidebar() {
   function goToCampaign(id: number) {
     select(id)
     setSwitcherOpen(false)
-    navigate(`/campaigns/${id}`)
+    navigate(`/campaigns/${id}/session`)
   }
 
+  /**
+   * Les sections de la campagne vivent ici, plus dans une barre d'onglets : elles
+   * ont chacune leur URL, donc leur place est dans la navigation. `sep` insère un
+   * filet entre les sections de la campagne et les outils de jeu.
+   */
   const navLinks = current
     ? [
-        { to: `/campaigns/${current.id}`, icon: '🗺', label: 'Campagne', end: true },
-        { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false },
-        { to: `/combat?campaign=${current.id}`, icon: '⚔', label: 'Combat', end: false },
+        { to: `/campaigns/${current.id}/session`,  icon: '🎲', label: 'Session',     end: false, sep: false },
+        { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false },
+        { to: `/campaigns/${current.id}/aventure`, icon: '📜', label: 'Aventure',    end: false, sep: false },
+        { to: `/campaigns/${current.id}/journal`,  icon: '📖', label: 'Journal',     end: false, sep: false },
+        { to: `/campaigns/${current.id}/campagne`, icon: '🏰', label: 'Campagne',    end: false, sep: false },
+        { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false, sep: true },
+        { to: `/combat?campaign=${current.id}`,     icon: '⚔', label: 'Combat',      end: false, sep: false },
       ]
-    : [{ to: '/campaigns', icon: '🗺', label: 'Campagnes', end: true }]
+    : [{ to: '/campaigns', icon: '🗺', label: 'Campagnes', end: true, sep: false }]
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-14 hover:w-48 transition-all duration-200 bg-stone-900 border-r border-stone-800 z-50 flex flex-col group">
@@ -95,13 +104,13 @@ export function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 py-3 space-y-0.5 overflow-hidden">
-        {navLinks.map(({ to, icon, label, end }) => (
+        {navLinks.map(({ to, icon, label, end, sep }) => (
           <NavLink
             key={label}
             to={to}
             end={end}
             className={({ isActive }) =>
-              `flex items-center h-10 px-4 mx-1 rounded-lg transition-colors ${
+              `flex items-center h-10 px-4 mx-1 rounded-lg transition-colors ${sep ? 'mt-2 border-t border-stone-800 pt-2 h-12' : ''} ${
                 isActive
                   ? 'bg-amber-500/10 text-amber-400'
                   : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800'
