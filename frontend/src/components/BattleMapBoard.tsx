@@ -58,6 +58,10 @@ interface Props {
 }
 
 
+const ZONE_LABEL: Record<ZoneShape, string> = {
+  sphere: '⭕ Sphère', cone: '🔺 Cône', line: '📏 Ligne', cube: '⬛ Cube',
+}
+
 const ZONE_FILL: Record<string, string> = {
   red: 'rgba(239,68,68,.30)', amber: 'rgba(245,158,11,.30)', green: 'rgba(16,185,129,.30)',
   blue: 'rgba(59,130,246,.30)', purple: 'rgba(168,85,247,.30)', sky: 'rgba(56,189,248,.30)',
@@ -68,7 +72,7 @@ const ZONE_STROKE: Record<string, string> = {
 }
 
 /** Dessine un gabarit dans le repère des cases (une case = une unité du viewBox). */
-function ZoneShapeSvg({ zone, grid, draft }: { zone: BattleZone; grid: { cols: number; rows: number }; draft: boolean }) {
+function ZoneShapeSvg({ zone, grid, draft, highlight }: { zone: BattleZone; grid: { cols: number; rows: number }; draft: boolean; highlight?: boolean }) {
   const o = toCells(zone.x, zone.y, grid)
   const size = metersToCells(zone.size)
   const fill = ZONE_FILL[zone.color ?? 'red'] ?? ZONE_FILL.red
@@ -77,7 +81,7 @@ function ZoneShapeSvg({ zone, grid, draft }: { zone: BattleZone; grid: { cols: n
   const common = {
     fill,
     stroke,
-    strokeWidth: 0.12,
+    strokeWidth: highlight ? 0.3 : 0.12,
     strokeDasharray: draft ? '0.4 0.3' : undefined,
     opacity: draft ? 0.85 : 1,
   }
@@ -128,6 +132,8 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
    * joueurs ne voient pas la visée hésiter.
    */
   const [zoneDraft, setZoneDraft] = useState<BattleZone | null>(null)
+  /** Zone survolée dans la liste — mise en évidence sur le plateau. */
+  const [hoveredZone, setHoveredZone] = useState<string | null>(null)
 
   useEffect(() => {
     if (dragId) return
@@ -381,7 +387,7 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
             preserveAspectRatio="none"
           >
             {[...zones.map(z => ({ z, draft: false })), ...(zoneDraft ? [{ z: zoneDraft, draft: true }] : [])].map(({ z, draft }) => (
-              <ZoneShapeSvg key={z.id} zone={z} grid={grid} draft={draft} />
+              <ZoneShapeSvg key={z.id} zone={z} grid={grid} draft={draft} highlight={hoveredZone === z.id} />
             ))}
           </svg>
         )}
@@ -458,15 +464,41 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
                     }`}
                   >{label}</button>
                 ))}
-                {zones.length > 0 && (
+                {zones.length > 1 && (
                   <button
                     onClick={() => commit({ ...work, zones: [] })}
                     className="text-xs text-stone-500 hover:text-stone-300 transition-colors ml-auto"
-                  >Effacer les zones ({zones.length})</button>
+                  >Tout effacer</button>
                 )}
               </>
             )}
           </div>
+
+          {/* Une pastille par zone posée : cliquer sur le plateau serait ambigu dès que
+              deux zones se chevauchent. Le survol met la zone en évidence. */}
+          {zones.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5">
+              {zones.map(z => (
+                <span
+                  key={z.id}
+                  onMouseEnter={() => setHoveredZone(z.id)}
+                  onMouseLeave={() => setHoveredZone(null)}
+                  className={`flex items-center gap-1 text-xs rounded-lg border px-2 py-0.5 transition-colors ${
+                    hoveredZone === z.id
+                      ? 'bg-red-700/40 border-red-500 text-red-200'
+                      : 'bg-stone-800 border-stone-700 text-stone-400'
+                  }`}
+                >
+                  {ZONE_LABEL[z.shape]} {z.size.toLocaleString('fr-FR')} m
+                  <button
+                    onClick={() => commit({ ...work, zones: zones.filter(x => x.id !== z.id) })}
+                    title="Effacer cette zone"
+                    className="text-stone-500 hover:text-red-300 transition-colors ml-0.5"
+                  >×</button>
+                </span>
+              ))}
+            </div>
+          )}
 
           {zoneDraft && grid && (
             <div className="bg-red-950/20 border border-red-800/40 rounded-lg px-3 py-2 flex items-center gap-3 flex-wrap">
