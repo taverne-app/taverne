@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\AuthController;
 use App\Http\Controllers\Api\BillingController;
+use App\Http\Controllers\Api\ImageController;
 use App\Http\Controllers\Api\PasswordResetController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\CharacterController;
@@ -43,6 +44,9 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('checkout', [BillingController::class, 'createCheckoutSession']);
         Route::post('portal',   [BillingController::class, 'createPortalSession']);
     });
+
+    // Bibliothèque d'images du compte (battle maps, cartes, portraits)
+    Route::apiResource('images', ImageController::class)->only(['index', 'store', 'destroy']);
 
     // Campagnes
     Route::apiResource('campaigns', CampaignController::class);

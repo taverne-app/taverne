@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import type { BattleMap, BattleToken, TokenColor, ActiveRef } from '../api/campaigns'
 import type { Combatant } from '../api/combatants'
 import type { Character } from '../api/characters'
+import { listImages, uploadImage, deleteImage, type LibraryImage, type ImageQuota } from '../api/images'
+import { ApiError } from '../api/client'
 
 const TOKEN_COLORS: TokenColor[] = ['red', 'amber', 'green', 'blue', 'purple', 'sky']
 
@@ -66,6 +68,21 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
   const [boardW, setBoardW] = useState(0)
   const [measure, setMeasure] = useState<{ x: number; y: number; cells: number } | null>(null)
 
+  // Bibliothèque d'images du compte (quota par plan côté serveur).
+  const [library, setLibrary] = useState<LibraryImage[]>([])
+  const [quota, setQuota] = useState<ImageQuota | null>(null)
+  const [showLibrary, setShowLibrary] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [imageError, setImageError] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!editable) return
+    listImages()
+      .then(lib => { setLibrary(lib.images); setQuota(lib.quota) })
+      .catch(() => { /* la bibliothèque reste vide : on garde la saisie d'URL */ })
+  }, [editable])
+
   useEffect(() => {
     if (dragId) return
     setWork(map ?? EMPTY_BATTLE_MAP)
@@ -85,6 +102,38 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
 
   const grid = work.grid
   const commit = (next: BattleMap) => { setWork(next); onChange?.(next) }
+
+  /** Applique une image (uploadée ou choisie dans la bibliothèque) comme fond du plateau. */
+  const useImage = (url: string) => {
+    setUrlDraft(url)
+    setImgError(false)
+    commit({ ...work, image_url: url })
+  }
+
+  const handleUpload = async (file: File) => {
+    setUploading(true)
+    setImageError(null)
+    try {
+      const { image, quota: q } = await uploadImage(file)
+      setLibrary(prev => [image, ...prev])
+      setQuota(q)
+      useImage(image.url)
+    } catch (e) {
+      setImageError(e instanceof ApiError ? e.message : "Upload impossible")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleDeleteImage = async (id: number) => {
+    try {
+      const q = await deleteImage(id)
+      setLibrary(prev => prev.filter(i => i.id !== id))
+      setQuota(q)
+    } catch (e) {
+      setImageError(e instanceof ApiError ? e.message : 'Suppression impossible')
+    }
+  }
 
   function snap(x: number, y: number) {
     if (!grid) return { x, y }
@@ -188,6 +237,34 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
             placeholder="URL de l'image de fond (donjon, carte…)"
             className="flex-1 min-w-[200px] bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
           />
+
+          {/* Upload — la saisie d'URL reste disponible à côté */}
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/gif"
+            className="hidden"
+            onChange={e => {
+              const f = e.target.files?.[0]
+              if (f) handleUpload(f)
+              e.target.value = '' // permet de re-choisir le même fichier
+            }}
+          />
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading}
+            title="Uploader une image (5 Mo max)"
+            className="bg-stone-800 border border-stone-700 text-stone-300 hover:text-white hover:border-stone-500 disabled:opacity-50 text-sm font-medium rounded-lg px-3 py-2 transition-colors"
+          >{uploading ? '⏳ Envoi…' : '⬆ Uploader'}</button>
+          <button
+            onClick={() => setShowLibrary(v => !v)}
+            title="Choisir une image déjà uploadée"
+            className={`text-sm font-medium rounded-lg px-3 py-2 border transition-colors ${showLibrary ? 'bg-stone-700 border-stone-500 text-white' : 'bg-stone-800 border-stone-700 text-stone-300 hover:text-white'}`}
+          >
+            🖼 Bibliothèque
+            {quota && <span className="text-stone-500 ml-1 tabular-nums">{quota.used}/{quota.max ?? '∞'}</span>}
+          </button>
+
           <button
             onClick={toggleGrid}
             className={`text-sm font-medium rounded-lg px-3 py-2 border transition-colors ${grid ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-stone-200'}`}
@@ -218,6 +295,50 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {editable && imageError && (
+        <p className="text-red-400 text-xs">⚠ {imageError}</p>
+      )}
+
+      {/* Bibliothèque d'images du compte — réutilisable d'une carte à l'autre */}
+      {editable && showLibrary && (
+        <div className="bg-stone-900 border border-stone-800 rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Bibliothèque d’images</span>
+            {quota && (
+              <span className={`text-xs tabular-nums ${quota.max !== null && quota.used >= quota.max ? 'text-amber-400' : 'text-stone-500'}`}>
+                {quota.used}/{quota.max ?? '∞'}
+                {quota.max !== null && quota.used >= quota.max && ' — quota atteint, supprimez une image'}
+              </span>
+            )}
+          </div>
+          {library.length === 0 ? (
+            <p className="text-stone-600 text-xs py-2">Aucune image. Utilisez « ⬆ Uploader » pour en ajouter une (5 Mo max).</p>
+          ) : (
+            <div className="grid grid-cols-3 sm:grid-cols-5 md:grid-cols-6 gap-2">
+              {library.map(img => {
+                const inUse = work.image_url === img.url
+                return (
+                  <div key={img.id} className="relative group">
+                    <button
+                      onClick={() => useImage(img.url)}
+                      title={img.original_name}
+                      className={`block w-full rounded border overflow-hidden transition-colors ${inUse ? 'border-amber-500 ring-1 ring-amber-500/50' : 'border-stone-700 hover:border-stone-500'}`}
+                    >
+                      <img src={img.url} alt={img.original_name} className="w-full h-16 object-cover" />
+                    </button>
+                    <button
+                      onClick={() => handleDeleteImage(img.id)}
+                      title="Supprimer de la bibliothèque (libère un emplacement)"
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-stone-800 border border-stone-600 text-stone-400 text-xs hover:bg-red-900/70 hover:text-red-300 hover:border-red-700 transition-colors opacity-0 group-hover:opacity-100"
+                    >×</button>
+                  </div>
+                )
+              })}
+            </div>
+          )}
         </div>
       )}
 

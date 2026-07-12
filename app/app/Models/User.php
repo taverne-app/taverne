@@ -30,6 +30,11 @@ class User extends Authenticatable
         return $this->hasMany(Campaign::class);
     }
 
+    public function images(): HasMany
+    {
+        return $this->hasMany(Image::class);
+    }
+
     public function sendPasswordResetNotification($token): void
     {
         $url = config('services.stripe.frontend_url')

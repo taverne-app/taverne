@@ -19,4 +19,16 @@ class PlanLimits
             default => 4,
         };
     }
+
+    /**
+     * Images uploadées dans la bibliothèque du compte (battle maps, cartes,
+     * portraits confondus).
+     */
+    public static function maxImages(string $plan): int
+    {
+        return match ($plan) {
+            'adventurer', 'guild' => PHP_INT_MAX,
+            default => 10,
+        };
+    }
 }

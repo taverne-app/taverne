@@ -14,10 +14,14 @@ export class ApiError extends Error {
 export async function apiFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const token = localStorage.getItem('token')
 
+  // Sur un envoi multipart (upload de fichier), le navigateur doit poser lui-même
+  // Content-Type avec sa boundary : le forcer à application/json casserait la requête.
+  const isMultipart = options.body instanceof FormData
+
   const res = await fetch(`${BASE}${path}`, {
     ...options,
     headers: {
-      'Content-Type': 'application/json',
+      ...(isMultipart ? {} : { 'Content-Type': 'application/json' }),
       Accept: 'application/json',
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(options.headers as Record<string, string>),

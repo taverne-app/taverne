@@ -1,0 +1,10 @@
+# Le contexte de build n'a pas besoin des dépendances (composer install les
+# régénère) ni des artefacts d'exécution — dont storage/framework/testing, créé
+# par Storage::fake() sous l'utilisateur du container et illisible par l'hôte,
+# ce qui faisait échouer l'envoi du contexte de build.
+/vendor
+/node_modules
+/.git
+/storage/framework/testing
+/storage/framework/cache/data
+/storage/logs/*.log

@@ -7,7 +7,11 @@ RUN apk add --no-cache \
         icu-dev \
         sqlite-dev \
         linux-headers \
+        libpng-dev \
+        libjpeg-turbo-dev \
+        freetype-dev \
         $PHPIZE_DEPS \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg \
     && docker-php-ext-install -j$(nproc) \
         pdo_pgsql \
         pgsql \
@@ -16,6 +20,7 @@ RUN apk add --no-cache \
         intl \
         pcntl \
         zip \
+        gd \
         opcache \
     && pecl install redis \
     && docker-php-ext-enable redis \
