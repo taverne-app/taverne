@@ -1,6 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react'
 import type { Campaign } from '../../api/campaigns'
 import type { Character } from '../../api/characters'
+import type { CampaignSession } from '../../api/sessions'
 
 /**
  * Contrat entre la coquille CampaignPage et ses sections.
@@ -21,6 +22,9 @@ export interface SectionProps {
   setAllChars: Dispatch<SetStateAction<Character[]>>
   setShowAddModal: Dispatch<SetStateAction<boolean>>
   setSaving: Dispatch<SetStateAction<boolean>>
+  /** Séances : chargées par la coquille, éditées par la section Journal. */
+  sessions: CampaignSession[]
+  setSessions: Dispatch<SetStateAction<CampaignSession[]>>
   copiedKey: string | null
   copyToClipboard: (key: string, text: string) => void
   exportSection: (sectionKey: string, data: unknown[]) => void
