@@ -475,3 +475,102 @@ export const SPELL_META: Record<string, SpellMeta> = {
   'Mur prismatique':                { school: 'abj', concentration: false },
   'Tempête vengeresse':             { school: 'inv', concentration: true  },
 }
+
+/**
+ * Dés de dégâts des sorts offensifs du SRD.
+ *
+ * Sans cette donnée, un sort ajouté depuis le compendium arrivait avec un champ
+ * « dés de dégâts » vide — et le combat, qui n'affiche comme attaque que les sorts
+ * qui infligent des dégâts, ne le proposait jamais. Il fallait le saisir à la main.
+ *
+ * Seuls les sorts qui infligent des dégâts figurent ici ; les autres (utilitaires,
+ * soins, protections) n'ont rien à lancer. Les valeurs sont celles du niveau de base :
+ * pour les sorts mineurs, la montée en puissance est calculée au lancer
+ * (voir scaleCantripDamage), afin qu'elle suive le personnage sans figer la donnée.
+ */
+export const SPELL_DAMAGE: Record<string, string> = {
+  // ── Sorts mineurs (dégâts de base ; montent aux niveaux 5, 11 et 17) ──
+  'Aspersion acide': '1d6',
+  'Contact glacial': '1d8',
+  'Trait de feu': '1d10',
+  'Flamme sacrée': '1d8',
+  'Décharge électrique': '1d8',
+  'Fouet épineux': '1d6',
+  'Vacherie': '1d4',
+  'Bouffée de poison': '1d12',
+  'Trait de givre': '1d8',
+  'Produire une flamme': '1d8',
+  'Infestation': '1d6',
+  'Lame de tonnerre': '1d8',
+
+  // ── Niveau 1 ──
+  'Mains brûlantes': '3d6',
+  'Missile magique': '3d4+3',
+  'Vague de tonnerre': '2d8',
+  'Blessure': '3d10',
+  'Rayon de maladie': '2d8',
+  'Éclair directeur': '4d6',
+  'Trait de sorcière': '1d12',
+
+  // ── Niveau 2 ──
+  'Nuage de dagues': '4d4',
+  'Lame de flamme': '3d6',
+  'Sphère de feu': '2d6',
+  'Rayon de lune': '2d10',
+  'Fracas': '3d8',
+  'Arme spirituelle': '1d8',
+  'Terrain de pointes': '2d4',
+
+  // ── Niveau 3 ──
+  'Boule de feu': '8d6',
+  'Éclair': '8d6',
+  'Appel de la foudre': '3d10',
+  'Toucher vampirique': '3d6',
+  'Faim de Hadar': '2d6',
+  'Esprits gardiens': '3d8',
+
+  // ── Niveau 4 ──
+  'Flétrissement': '8d8',
+  'Tempête de glace': '4d6',
+  'Mur de feu': '5d8',
+  'Bouclier de feu': '2d8',
+  'Tueur fantôme': '4d10',
+  'Tentacules d’Evard': '3d6',
+
+  // ── Niveau 5 ──
+  'Cône de froid': '8d8',
+  'Vague destructrice': '5d6',
+  'Nuée d’insectes': '4d10',
+  'Flammes de la foi': '4d6',
+
+  // ── Niveau 6 ──
+  'Chaîne d’éclairs': '10d8',
+  'Désintégration': '10d6+40',
+  'Cercle de la mort': '8d6',
+  'Barrière de lames': '6d10',
+  'Rayon de soleil': '6d8',
+
+  // ── Niveau 7 ──
+  'Doigt de mort': '7d8+30',
+  'Tempête de feu': '7d10',
+  'Boule de feu à retardement': '12d6',
+  'Vaporisation prismatique': '10d6',
+
+  // ── Niveau 8 ──
+  'Nuage incendiaire': '10d8',
+  'Explosion solaire': '12d6',
+
+  // ── Niveau 9 ──
+  'Nuée de météores': '40d6',
+}
+
+/**
+ * Un sort mineur gagne un dé aux niveaux 5, 11 et 17. On le calcule au moment du
+ * lancer plutôt que de le figer à l'ajout : la valeur suit ainsi le personnage.
+ */
+export function scaleCantripDamage(dice: string, characterLevel: number): string {
+  const m = dice.match(/^(\d+)d(\d+)(.*)$/)
+  if (!m) return dice
+  const mult = characterLevel >= 17 ? 4 : characterLevel >= 11 ? 3 : characterLevel >= 5 ? 2 : 1
+  return `${parseInt(m[1], 10) * mult}d${m[2]}${m[3]}`
+}

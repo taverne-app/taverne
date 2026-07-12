@@ -46,7 +46,7 @@ import { useToast } from '../contexts/ToastContext'
 import { ApiError } from '../api/client'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
-import { SRD_SPELLS } from '../data/spells'
+import { SRD_SPELLS, SPELL_DAMAGE } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
 import { SPELL_DETAILS } from '../data/spell_details'
 import { computeMulticlassSlots } from '../data/multiclass'
@@ -715,7 +715,13 @@ export function CharacterPage() {
   async function addSpellFromBrowser(name: string, level: number) {
     if (!character) return
     if (character.spellcasting.spells.some(s => s.name === name)) return
-    const next = [...character.spellcasting.spells, { name, level, prepared: true }]
+    // Les dés de dégâts viennent du SRD : sans eux, le sort n'apparaîtrait jamais
+    // comme attaque en combat. Ils restent modifiables à la main ensuite.
+    const damage = SPELL_DAMAGE[name]
+    const next = [
+      ...character.spellcasting.spells,
+      { name, level, prepared: true, ...(damage ? { damage_dice: damage } : {}) },
+    ]
     const updated = await withSave(() => updateSpells(character.id, next))
     if (updated) setCharacter(updated)
   }

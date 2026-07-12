@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
+import { scaleCantripDamage } from '../data/spells'
 import { setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, updateConcentration, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
 import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter, type CustomMonster, type MonsterAttack, type BattleMap } from '../api/campaigns'
 import { BattleMapBoard } from '../components/BattleMapBoard'
@@ -51,6 +52,12 @@ function parseDice(str: string): { count: number; sides: number; bonus: number }
   return { count: parseInt(m[1]), sides: parseInt(m[2]), bonus: parseInt(m[3] ?? '0') }
 }
 
+/** Dé affiché pour un sort : un sort mineur monte avec le niveau du personnage. */
+function spellDice(character: Character, spell: { level: number; damage_dice?: string }): string {
+  const base = spell.damage_dice ?? ''
+  return spell.level === 0 ? scaleCantripDamage(base, character.level) : base
+}
+
 function rollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage'): { label: string; total: number; detail: string } {
   if (type === 'attack') {
     const bonus = macro.attack_bonus ?? 0
@@ -83,7 +90,11 @@ function rollSpell(character: Character, spell: Spell, type: 'attack' | 'damage'
       total,
     }
   }
-  const parsed = parseDice(spell.damage_dice ?? '')
+  // Un sort mineur monte en puissance avec le niveau du personnage (5/11/17).
+  const dice = spell.level === 0
+    ? scaleCantripDamage(spell.damage_dice ?? '', character.level)
+    : (spell.damage_dice ?? '')
+  const parsed = parseDice(dice)
   if (!parsed) return { label: `${character.name} — Dégâts: ${spell.name}`, detail: '?', total: 0 }
   const rolls = Array.from({ length: parsed.count }, () => Math.floor(Math.random() * parsed.sides) + 1)
   const total = rolls.reduce((s, r) => s + r, 0) + parsed.bonus
@@ -2199,10 +2210,10 @@ export function CombatPage() {
                                     </button>
                                     <button
                                       onClick={() => handleRollSpell(character, spell, 'damage')}
-                                      title={`Dégâts: ${spell.damage_dice}`}
+                                      title={`Dégâts: ${spellDice(character, spell)}`}
                                       className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors"
                                     >
-                                      {spell.damage_dice}
+                                      {spellDice(character, spell)}
                                     </button>
                                   </span>
                                 ))}
@@ -3922,7 +3933,7 @@ export function CombatPage() {
                         {damageSpells.map((spell, si) => (
                           <span key={`s${si}`} className="inline-flex items-center gap-0.5">
                             <button onClick={() => handleRollSpell(ch, spell, 'attack')} className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors">✦ {spell.name}</button>
-                            <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${spell.damage_dice}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{spell.damage_dice}</button>
+                            <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${spellDice(ch, spell)}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{spellDice(ch, spell)}</button>
                           </span>
                         ))}
                       </div>

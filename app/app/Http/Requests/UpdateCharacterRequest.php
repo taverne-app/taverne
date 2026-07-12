@@ -100,6 +100,12 @@ class UpdateCharacterRequest extends FormRequest
             'spells_known.*.name'   => ['required_with:spells_known', 'string', 'max:100'],
             'spells_known.*.level'  => ['required_with:spells_known', 'integer', 'min:0', 'max:9'],
             'spells_known.*.prepared' => ['sometimes', 'boolean'],
+            // Sans ces règles, validated() les écartait en silence : un sort ne pouvait
+            // donc JAMAIS conserver ses dés de dégâts, et n'apparaissait jamais comme
+            // attaque en combat (le combat ne propose que les sorts qui infligent des dégâts).
+            'spells_known.*.damage_dice'   => ['sometimes', 'nullable', 'string', 'max:20'],
+            'spells_known.*.concentration' => ['sometimes', 'boolean'],
+            'spells_known.*.notes'         => ['sometimes', 'nullable', 'string', 'max:500'],
 
             'campaign_id'      => [
                 'sometimes', 'integer',

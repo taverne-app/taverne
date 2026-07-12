@@ -123,6 +123,28 @@ class CharacterActionsTest extends TestCase
             ->assertStatus(422);
     }
 
+    // ── Sorts ────────────────────────────────────────────────────────────────
+
+    public function test_a_spell_keeps_its_damage_dice(): void
+    {
+        $character = $this->character();
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/characters/{$character->id}", [
+                'spells_known' => [
+                    ['name' => 'Trait de feu', 'level' => 0, 'prepared' => true, 'damage_dice' => '1d10'],
+                    ['name' => 'Boule de feu', 'level' => 3, 'prepared' => true, 'damage_dice' => '8d6', 'concentration' => false],
+                ],
+            ])
+            ->assertOk();
+
+        // Les dés de dégâts étaient écartés par validated() : sans eux, le sort
+        // n'apparaît jamais comme attaque en combat.
+        $spells = $character->fresh()->spells_known;
+        $this->assertSame('1d10', $spells[0]['damage_dice']);
+        $this->assertSame('8d6', $spells[1]['damage_dice']);
+    }
+
     // ── Monnaie ──────────────────────────────────────────────────────────────
 
     public function test_update_currency_merges_with_existing_values(): void
