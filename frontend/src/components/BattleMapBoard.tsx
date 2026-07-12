@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import type { BattleMap, BattleToken, TokenColor, ActiveRef } from '../api/campaigns'
+import type { BattleMap, BattleToken, TokenColor, ActiveRef, BattleZone, ZoneShape } from '../api/campaigns'
+import { zoneCovers, toCells, metersToCells, METERS_PER_CELL as M_PER_CELL } from '../lib/zoneGeometry'
 import type { Combatant } from '../api/combatants'
 import type { Character } from '../api/characters'
 import { ImagePicker } from './ImagePicker'
@@ -52,9 +53,64 @@ interface Props {
   editable?: boolean
   onChange?: (map: BattleMap) => void
   activeRef?: ActiveRef | null
+  /** Appelé au « Lancer » avec les cibles couvertes par le gabarit (ids de lignes). */
+  onCastZone?: (rowIds: string[]) => void
 }
 
-export function BattleMapBoard({ map, combatants, characters, editable = false, onChange, activeRef = null }: Props) {
+
+const ZONE_FILL: Record<string, string> = {
+  red: 'rgba(239,68,68,.30)', amber: 'rgba(245,158,11,.30)', green: 'rgba(16,185,129,.30)',
+  blue: 'rgba(59,130,246,.30)', purple: 'rgba(168,85,247,.30)', sky: 'rgba(56,189,248,.30)',
+}
+const ZONE_STROKE: Record<string, string> = {
+  red: '#ef4444', amber: '#f59e0b', green: '#10b981',
+  blue: '#3b82f6', purple: '#a855f7', sky: '#38bdf8',
+}
+
+/** Dessine un gabarit dans le repère des cases (une case = une unité du viewBox). */
+function ZoneShapeSvg({ zone, grid, draft }: { zone: BattleZone; grid: { cols: number; rows: number }; draft: boolean }) {
+  const o = toCells(zone.x, zone.y, grid)
+  const size = metersToCells(zone.size)
+  const fill = ZONE_FILL[zone.color ?? 'red'] ?? ZONE_FILL.red
+  const stroke = ZONE_STROKE[zone.color ?? 'red'] ?? ZONE_STROKE.red
+  // L'aperçu est en pointillés : le MJ voit tout de suite ce qui est diffusé ou non.
+  const common = {
+    fill,
+    stroke,
+    strokeWidth: 0.12,
+    strokeDasharray: draft ? '0.4 0.3' : undefined,
+    opacity: draft ? 0.85 : 1,
+  }
+  const rad = ((zone.angle ?? 0) * Math.PI) / 180
+
+  if (zone.shape === 'sphere') {
+    return <circle cx={o.cx} cy={o.cy} r={size} {...common} />
+  }
+  if (zone.shape === 'cube') {
+    const half = size / 2
+    return <rect x={o.cx - half} y={o.cy - half} width={size} height={size} {...common} />
+  }
+  if (zone.shape === 'cone') {
+    // Cône de la 5e : aussi large que long à son extrémité → demi-angle atan(1/2).
+    const half = Math.atan(0.5)
+    const p1 = [o.cx + size * Math.cos(rad - half), o.cy + size * Math.sin(rad - half)]
+    const p2 = [o.cx + size * Math.cos(rad + half), o.cy + size * Math.sin(rad + half)]
+    return <polygon points={`${o.cx},${o.cy} ${p1[0]},${p1[1]} ${p2[0]},${p2[1]}`} {...common} />
+  }
+  // Ligne : rectangle orienté partant de l'origine.
+  const hw = metersToCells(zone.width ?? M_PER_CELL) / 2
+  const ux = Math.cos(rad), uy = Math.sin(rad)
+  const px = -uy, py = ux // perpendiculaire
+  const pts = [
+    [o.cx + px * hw, o.cy + py * hw],
+    [o.cx + ux * size + px * hw, o.cy + uy * size + py * hw],
+    [o.cx + ux * size - px * hw, o.cy + uy * size - py * hw],
+    [o.cx - px * hw, o.cy - py * hw],
+  ]
+  return <polygon points={pts.map(p => `${p[0]},${p[1]}`).join(' ')} {...common} />
+}
+
+export function BattleMapBoard({ map, combatants, characters, editable = false, onChange, activeRef = null, onCastZone }: Props) {
   const boardRef = useRef<HTMLDivElement>(null)
   const [work, setWork] = useState<BattleMap>(map ?? EMPTY_BATTLE_MAP)
   const [dragId, setDragId] = useState<string | null>(null)
@@ -65,6 +121,13 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
   const [imgError, setImgError] = useState(false)
   const [boardW, setBoardW] = useState(0)
   const [measure, setMeasure] = useState<{ x: number; y: number; cells: number } | null>(null)
+
+  /**
+   * Gabarit en cours de visée. Il reste LOCAL : tant que le MJ n'a pas cliqué
+   * « Lancer », rien n'est écrit dans battle_map, donc rien n'est diffusé — les
+   * joueurs ne voient pas la visée hésiter.
+   */
+  const [zoneDraft, setZoneDraft] = useState<BattleZone | null>(null)
 
   useEffect(() => {
     if (dragId) return
@@ -179,6 +242,44 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
   const availableCharacters = characters.filter(c => !placedRefs.has(`character-${c.id}`))
   const selectedToken = editable ? work.tokens.find(t => t.id === selected) ?? null : null
 
+  const zones = work.zones ?? []
+
+  /** Tailles par défaut, en mètres — les classiques de la 5e. */
+  const ZONE_DEFAULTS: Record<ZoneShape, { size: number; width?: number }> = {
+    sphere: { size: 6 },              // boule de feu : rayon 6 m
+    cone:   { size: 4.5 },            // mains brûlantes : 4,5 m
+    line:   { size: 30, width: 1.5 }, // éclair : 30 m x 1,5 m
+    cube:   { size: 4.5 },
+  }
+
+  function startZone(shape: ZoneShape) {
+    setZoneDraft({
+      id: `zone-${Date.now()}`,
+      shape,
+      x: 50, y: 50,
+      angle: 0,
+      color: 'red',
+      ...ZONE_DEFAULTS[shape],
+    })
+  }
+
+  /** Lignes (personnages/combattants) couvertes par le gabarit. */
+  function coveredRowIds(zone: BattleZone): string[] {
+    if (!grid) return []
+    return work.tokens
+      .filter(t => t.ref_type && t.ref_id != null)
+      .filter(t => zoneCovers(zone, toCells(t.x, t.y, grid), grid))
+      .map(t => `${t.ref_type}-${t.ref_id}`)
+  }
+
+  /** Révèle le gabarit aux joueurs ET renvoie les cibles à l'outil Zone. */
+  function castZone() {
+    if (!zoneDraft) return
+    commit({ ...work, zones: [...zones, zoneDraft] })
+    onCastZone?.(coveredRowIds(zoneDraft))
+    setZoneDraft(null)
+  }
+
   const cellPx = grid && boardW ? boardW / grid.cols : 0
 
   return (
@@ -226,6 +327,16 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
         ref={boardRef}
         onPointerMove={onBoardMove}
         onPointerUp={onBoardUp}
+        onPointerDown={e => {
+          // Tant qu'un gabarit est en visée, cliquer le plateau le déplace.
+          if (!zoneDraft || !boardRef.current) return
+          const r = boardRef.current.getBoundingClientRect()
+          setZoneDraft({
+            ...zoneDraft,
+            x: Math.max(0, Math.min(100, ((e.clientX - r.left) / r.width) * 100)),
+            y: Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100)),
+          })
+        }}
         className={`relative w-full overflow-hidden rounded-xl border border-stone-800 bg-stone-900 select-none ${dragId ? 'cursor-grabbing' : ''}`}
         style={{ aspectRatio: '16 / 10' }}
       >
@@ -259,6 +370,20 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
                 `repeating-linear-gradient(to bottom, rgba(255,255,255,.14) 0 1px, transparent 1px ${100 / grid.rows}%)`,
             }}
           />
+        )}
+
+        {/* Zones de sort — dessinées dans le repère des CASES : le viewBox suit la
+            grille (qui épouse l'aspect du plateau), donc un cercle reste un cercle. */}
+        {grid && (zones.length > 0 || zoneDraft) && (
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox={`0 0 ${grid.cols} ${grid.rows}`}
+            preserveAspectRatio="none"
+          >
+            {[...zones.map(z => ({ z, draft: false })), ...(zoneDraft ? [{ z: zoneDraft, draft: true }] : [])].map(({ z, draft }) => (
+              <ZoneShapeSvg key={z.id} zone={z} grid={grid} draft={draft} />
+            ))}
+          </svg>
         )}
 
         {work.tokens.map(t => {
@@ -307,6 +432,89 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
           </div>
         )}
       </div>
+
+      {/* Gabarits de sorts — nécessitent la grille : c'est elle qui donne l'échelle en mètres. */}
+      {editable && (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-stone-600 text-[10px] uppercase tracking-widest pr-1">Zone de sort</span>
+            {!grid ? (
+              <span className="text-stone-600 text-xs">Activez la grille : sans elle, aucune échelle en mètres.</span>
+            ) : (
+              <>
+                {([
+                  ['sphere', '⭕ Sphère'],
+                  ['cone', '🔺 Cône'],
+                  ['line', '📏 Ligne'],
+                  ['cube', '⬛ Cube'],
+                ] as [ZoneShape, string][]).map(([shape, label]) => (
+                  <button
+                    key={shape}
+                    onClick={() => startZone(shape)}
+                    className={`text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${
+                      zoneDraft?.shape === shape
+                        ? 'bg-red-700/40 border-red-500 text-red-300'
+                        : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-red-600/50 hover:text-red-400'
+                    }`}
+                  >{label}</button>
+                ))}
+                {zones.length > 0 && (
+                  <button
+                    onClick={() => commit({ ...work, zones: [] })}
+                    className="text-xs text-stone-500 hover:text-stone-300 transition-colors ml-auto"
+                  >Effacer les zones ({zones.length})</button>
+                )}
+              </>
+            )}
+          </div>
+
+          {zoneDraft && grid && (
+            <div className="bg-red-950/20 border border-red-800/40 rounded-lg px-3 py-2 flex items-center gap-3 flex-wrap">
+              <span className="text-red-400 text-xs font-semibold shrink-0">
+                Cliquez le plateau pour viser
+              </span>
+              <label className="flex items-center gap-1.5 text-xs text-stone-400">
+                {zoneDraft.shape === 'sphere' ? 'Rayon' : zoneDraft.shape === 'cube' ? 'Côté' : 'Longueur'}
+                <input
+                  type="number" min={1.5} step={1.5} value={zoneDraft.size}
+                  onChange={e => setZoneDraft({ ...zoneDraft, size: Math.max(1.5, parseFloat(e.target.value) || 1.5) })}
+                  className="w-16 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                /> m
+              </label>
+              {zoneDraft.shape === 'line' && (
+                <label className="flex items-center gap-1.5 text-xs text-stone-400">
+                  Largeur
+                  <input
+                    type="number" min={1.5} step={1.5} value={zoneDraft.width ?? 1.5}
+                    onChange={e => setZoneDraft({ ...zoneDraft, width: Math.max(1.5, parseFloat(e.target.value) || 1.5) })}
+                    className="w-16 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  /> m
+                </label>
+              )}
+              {(zoneDraft.shape === 'cone' || zoneDraft.shape === 'line') && (
+                <label className="flex items-center gap-1.5 text-xs text-stone-400">
+                  Orientation
+                  <input
+                    type="range" min={0} max={359} value={zoneDraft.angle ?? 0}
+                    onChange={e => setZoneDraft({ ...zoneDraft, angle: parseInt(e.target.value, 10) })}
+                    className="w-28 accent-red-500"
+                  />
+                  <span className="tabular-nums w-9 text-right">{zoneDraft.angle ?? 0}°</span>
+                </label>
+              )}
+              <span className="text-stone-500 text-xs">
+                {coveredRowIds(zoneDraft).length} cible{coveredRowIds(zoneDraft).length > 1 ? 's' : ''}
+              </span>
+              <button
+                onClick={castZone}
+                className="bg-red-700 hover:bg-red-600 text-white text-xs font-semibold rounded-lg px-3 py-1 transition-colors ml-auto"
+                title="Révèle la zone aux joueurs et sélectionne les cibles dans l'outil Zone"
+              >🔥 Lancer</button>
+              <button onClick={() => setZoneDraft(null)} className="text-stone-500 hover:text-stone-300 text-xs">Annuler</button>
+            </div>
+          )}
+        </div>
+      )}
 
       {editable && selectedToken && (
         <div className="flex flex-wrap items-center gap-3 bg-stone-800/60 border border-stone-700 rounded-lg px-3 py-2">

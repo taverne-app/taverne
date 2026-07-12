@@ -129,11 +129,35 @@ export interface BattleToken {
   hidden?: boolean
 }
 
+/** Gabarits de sorts : les formes de zone de la 5e. */
+export type ZoneShape = 'sphere' | 'cone' | 'line' | 'cube'
+
+export interface BattleZone {
+  id: string
+  shape: ZoneShape
+  /** Centre (sphère, cube) ou origine (cône, ligne), en % du plateau. */
+  x: number
+  y: number
+  /** En MÈTRES : rayon (sphère), longueur (cône, ligne), côté (cube). */
+  size: number
+  /** Largeur en mètres — ligne uniquement. */
+  width?: number
+  /** Orientation en degrés (0 = vers la droite) — cône et ligne. */
+  angle?: number
+  color?: TokenColor
+}
+
 export interface BattleMap {
   image_url: string
   /** Null = no grid. When set, tokens snap to cells and distances are measured. */
   grid: { cols: number; rows: number } | null
   tokens: BattleToken[]
+  /**
+   * Zones diffusées aux joueurs. L'aperçu que le MJ est en train de viser n'est PAS
+   * ici : il reste local tant qu'il n'a pas cliqué « Lancer », pour ne pas dévoiler
+   * sa visée aux joueurs.
+   */
+  zones?: BattleZone[]
 }
 
 /** The combatant/character whose turn it is, so its token can be highlighted. */

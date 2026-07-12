@@ -1196,6 +1196,23 @@ export function CombatPage() {
     setSaveEncounterName('')
   }
 
+  /**
+   * Un gabarit vient d'être lancé : ses cibles alimentent l'outil « 🔥 Zone » déjà
+   * en place. C'est tout l'intérêt du gabarit — sans ça, il faudrait re-cocher
+   * chaque créature à la main.
+   */
+  function handleCastZone(rowIds: string[]) {
+    if (rowIds.length === 0) {
+      toast.info('Aucune créature dans la zone.')
+      return
+    }
+    setAoeSelected(new Set(rowIds))
+    setAoeMode(true)
+    setShowSavingThrow(false)
+    setShowRestPanel(false)
+    toast.info(`${rowIds.length} cible${rowIds.length > 1 ? 's' : ''} dans la zone — saisissez les dégâts.`)
+  }
+
   async function handleBattleMapChange(next: BattleMap) {
     if (!campaignId) return
     // Optimiste : le pion a déjà bougé à l'écran, et l'écriture le diffuse aussi
@@ -1796,6 +1813,7 @@ export function CombatPage() {
                 characters={characters}
                 editable
                 onChange={handleBattleMapChange}
+                onCastZone={handleCastZone}
                 activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
               />
             </div>
@@ -1825,6 +1843,7 @@ export function CombatPage() {
                   characters={characters}
                   editable
                   onChange={handleBattleMapChange}
+                  onCastZone={handleCastZone}
                   activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
                 />
               </div>
