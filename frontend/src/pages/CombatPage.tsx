@@ -1220,6 +1220,10 @@ export function CombatPage() {
       // Le combat est fini : plus personne n'annulera une suppression, on vide la
       // corbeille pour qu'elle ne s'accumule pas. Best-effort — un échec de ménage
       // ne doit pas empêcher la fin du combat.
+      //
+      // On retire d'abord les toasts « Annuler » encore affichés : leur cible va être
+      // purgée, les laisser proposerait un geste voué à échouer.
+      toast.dismissActionable()
       purgeTrashedCombatants(campaignId).catch(() => { /* purge différée au prochain combat */ })
     }
     restoredRef.current = false

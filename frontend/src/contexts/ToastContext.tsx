@@ -20,6 +20,12 @@ interface ToastApi {
   error: (message: string, action?: ToastAction) => void
   success: (message: string, action?: ToastAction) => void
   info: (message: string, action?: ToastAction) => void
+  /**
+   * Retire les toasts porteurs d'une action (typiquement « Annuler ») lorsque cette
+   * action n'a plus de sens — par exemple à la fin d'un combat, une fois la corbeille
+   * vidée. On ne touche pas aux autres : un message d'erreur sans rapport doit rester.
+   */
+  dismissActionable: () => void
 }
 
 const ToastContext = createContext<ToastApi>({} as ToastApi)
@@ -46,10 +52,15 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     setTimeout(() => dismiss(id), DURATION[kind])
   }, [dismiss])
 
+  const dismissActionable = useCallback(() => {
+    setToasts(prev => prev.filter(t => !t.action))
+  }, [])
+
   const api: ToastApi = {
     error: useCallback((m, a) => push('error', m, a), [push]),
     success: useCallback((m, a) => push('success', m, a), [push]),
     info: useCallback((m, a) => push('info', m, a), [push]),
+    dismissActionable,
   }
 
   return (
