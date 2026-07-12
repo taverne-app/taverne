@@ -9,10 +9,18 @@ export interface LibraryImage {
   created_at: string
 }
 
-/** `max: null` = illimité (plans payants). */
+/** Deux plafonds indépendants : le nombre d'images et le poids cumulé. `null` = illimité. */
 export interface ImageQuota {
   used: number
   max: number | null
+  used_bytes: number
+  max_bytes: number | null
+}
+
+export function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} o`
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} Ko`
+  return `${(bytes / (1024 * 1024)).toFixed(1).replace('.', ',')} Mo`
 }
 
 export interface ImageLibrary {

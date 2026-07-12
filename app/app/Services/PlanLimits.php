@@ -31,4 +31,16 @@ class PlanLimits
             default => 10,
         };
     }
+
+    /**
+     * Poids cumulé de la bibliothèque. Le plafond en nombre d'images ne suffit
+     * pas : 10 images à 5 Mo pèseraient 50 Mo. Les deux limites s'appliquent.
+     */
+    public static function maxStorageBytes(string $plan): int
+    {
+        return match ($plan) {
+            'adventurer', 'guild' => PHP_INT_MAX,
+            default => 25 * 1024 * 1024, // 25 Mo
+        };
+    }
 }

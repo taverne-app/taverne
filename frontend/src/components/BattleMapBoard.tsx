@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { BattleMap, BattleToken, TokenColor, ActiveRef } from '../api/campaigns'
 import type { Combatant } from '../api/combatants'
 import type { Character } from '../api/characters'
-import { listImages, uploadImage, deleteImage, type LibraryImage, type ImageQuota } from '../api/images'
+import { listImages, uploadImage, deleteImage, formatBytes, type LibraryImage, type ImageQuota } from '../api/images'
 import { ApiError } from '../api/client'
 
 const TOKEN_COLORS: TokenColor[] = ['red', 'amber', 'green', 'blue', 'purple', 'sky']
@@ -305,14 +305,26 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
       {/* Bibliothèque d'images du compte — réutilisable d'une carte à l'autre */}
       {editable && showLibrary && (
         <div className="bg-stone-900 border border-stone-800 rounded-lg p-3 space-y-2">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between gap-3 flex-wrap">
             <span className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Bibliothèque d’images</span>
-            {quota && (
-              <span className={`text-xs tabular-nums ${quota.max !== null && quota.used >= quota.max ? 'text-amber-400' : 'text-stone-500'}`}>
-                {quota.used}/{quota.max ?? '∞'}
-                {quota.max !== null && quota.used >= quota.max && ' — quota atteint, supprimez une image'}
-              </span>
-            )}
+            {quota && (() => {
+              const countFull = quota.max !== null && quota.used >= quota.max
+              const bytesFull = quota.max_bytes !== null && quota.used_bytes >= quota.max_bytes
+              return (
+                <span className="text-xs tabular-nums flex items-center gap-2">
+                  <span className={countFull ? 'text-amber-400' : 'text-stone-500'}>
+                    {quota.used}/{quota.max ?? '∞'} images
+                  </span>
+                  <span className="text-stone-700">·</span>
+                  <span className={bytesFull ? 'text-amber-400' : 'text-stone-500'}>
+                    {formatBytes(quota.used_bytes)}{quota.max_bytes !== null && ` / ${formatBytes(quota.max_bytes)}`}
+                  </span>
+                  {(countFull || bytesFull) && (
+                    <span className="text-amber-400">— supprimez une image pour libérer de la place</span>
+                  )}
+                </span>
+              )
+            })()}
           </div>
           {library.length === 0 ? (
             <p className="text-stone-600 text-xs py-2">Aucune image. Utilisez « ⬆ Uploader » pour en ajouter une (5 Mo max).</p>

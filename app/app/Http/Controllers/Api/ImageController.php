@@ -28,10 +28,10 @@ class ImageController extends Controller
     public function store(Request $request): JsonResponse
     {
         $user = $request->user();
-        $max  = PlanLimits::maxImages($user->plan ?? 'free');
+        $plan = $user->plan ?? 'free';
 
         abort_if(
-            $user->images()->count() >= $max,
+            $user->images()->count() >= PlanLimits::maxImages($plan),
             403,
             "Limite d'images atteinte pour votre plan.",
         );
@@ -41,6 +41,16 @@ class ImageController extends Controller
         ]);
 
         $file = $request->file('file');
+
+        // Deuxième plafond, indépendant du nombre : le poids cumulé.
+        $maxBytes  = PlanLimits::maxStorageBytes($plan);
+        $usedBytes = (int) $user->images()->sum('size');
+
+        abort_if(
+            $usedBytes + $file->getSize() > $maxBytes,
+            403,
+            'Espace de stockage insuffisant pour votre plan — supprimez une image.',
+        );
 
         // Un dossier par utilisateur : évite les collisions et facilite le ménage.
         $path = $file->store("images/{$user->id}", 'public');
@@ -69,16 +79,21 @@ class ImageController extends Controller
     }
 
     /**
-     * Compteur affiché dans l'UI (« 7/10 images »). max = null → illimité.
+     * Compteurs affichés dans l'UI (« 7/10 images », « 12,3 Mo / 25 Mo »).
+     * Un max à null signifie « illimité » (plans payants).
      */
     private function quota(Request $request): array
     {
-        $user = $request->user();
-        $max  = PlanLimits::maxImages($user->plan ?? 'free');
+        $user     = $request->user();
+        $plan     = $user->plan ?? 'free';
+        $maxCount = PlanLimits::maxImages($plan);
+        $maxBytes = PlanLimits::maxStorageBytes($plan);
 
         return [
-            'used' => $user->images()->count(),
-            'max'  => $max === PHP_INT_MAX ? null : $max,
+            'used'       => $user->images()->count(),
+            'max'        => $maxCount === PHP_INT_MAX ? null : $maxCount,
+            'used_bytes' => (int) $user->images()->sum('size'),
+            'max_bytes'  => $maxBytes === PHP_INT_MAX ? null : $maxBytes,
         ];
     }
 }
