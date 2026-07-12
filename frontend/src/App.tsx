@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
+import { ToastProvider } from './contexts/ToastContext'
 import { CampaignProvider } from './contexts/CampaignContext'
 import { ProtectedRoute } from './components/ProtectedRoute'
 import { ErrorBoundary } from './components/ErrorBoundary'
@@ -25,6 +26,7 @@ import { LiveCombatPage } from './pages/LiveCombatPage'
 export default function App() {
   return (
     <AuthProvider>
+      <ToastProvider>
       <BrowserRouter>
         <CampaignProvider>
         <ErrorBoundary>
@@ -108,6 +110,7 @@ export default function App() {
         </ErrorBoundary>
         </CampaignProvider>
       </BrowserRouter>
+      </ToastProvider>
     </AuthProvider>
   )
 }

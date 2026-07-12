@@ -5,9 +5,11 @@ import { listSessions } from '../api/sessions'
 import { createCheckoutSession, createPortalSession } from '../api/billing'
 import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
+import { useToast } from '../contexts/ToastContext'
 import { archiveFilename, buildCampaignZip } from '../lib/campaignArchive'
 
 export function CampaignsPage() {
+  const toast = useToast()
   const { user, refreshUser } = useAuth()
   const { campaigns, loading, reload, select } = useCampaigns()
   const navigate = useNavigate()
@@ -84,7 +86,7 @@ export function CampaignsPage() {
       URL.revokeObjectURL(url)
       await handleDelete(id)
     } catch {
-      alert('L\'export a échoué. La campagne n\'a pas été supprimée.')
+      toast.error("L'export a échoué. La campagne n'a pas été supprimée.")
     } finally {
       setExporting(null)
     }

@@ -42,6 +42,8 @@ import {
   type ClassResource,
 } from '../api/characters'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../contexts/ToastContext'
+import { ApiError } from '../api/client'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS } from '../data/spells'
@@ -206,6 +208,7 @@ function SaveDots({
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function CharacterPage() {
+  const toast = useToast()
   const { id } = useParams<{ id: string }>()
   const { token } = useAuth()
   const navigate = useNavigate()
@@ -331,8 +334,10 @@ export function CharacterPage() {
     setSaving(true)
     try {
       return await fn()
-    } catch {
-      // TODO: toast error
+    } catch (e) {
+      // Un échec de sauvegarde doit se voir : sinon le joueur croit sa modification
+      // enregistrée, quitte la page, et la perd.
+      toast.error(e instanceof ApiError ? e.message : "La modification n'a pas pu être enregistrée.")
     } finally {
       setSaving(false)
       // Give the broadcast a tick to arrive before we clear the flag

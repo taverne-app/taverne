@@ -43,6 +43,7 @@ import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { MarkdownText } from '../components/MarkdownText'
 import { MicButton } from '../components/MicButton'
 import { ImagePicker } from '../components/ImagePicker'
+import { useToast } from '../contexts/ToastContext'
 import { computeEncounterDifficulty, difficultyColor } from '../data/encounter_difficulty'
 import { CR_XP } from '../data/monsters'
 import { generateNpc, generateNpcName, NPC_RACES, type GeneratedNpc } from '../data/npc_generator'
@@ -77,6 +78,7 @@ const CONDITIONS_FR: Record<string, string> = {
 
 export function CampaignPage() {
   const { id } = useParams<{ id: string }>()
+  const toast = useToast()
   const { token } = useAuth()
   const navigate = useNavigate()
 
@@ -1276,7 +1278,7 @@ export function CampaignPage() {
       }
       navigate(`/campaigns/${newCampaign.id}`)
     } catch (err) {
-      alert(err instanceof ZipError || err instanceof ArchiveError
+      toast.error(err instanceof ZipError || err instanceof ArchiveError
         ? err.message
         : 'Fichier invalide ou corrompu.')
     } finally {
@@ -1340,7 +1342,7 @@ export function CampaignPage() {
       else if (section === 'quests') updated = await updateCampaign(Number(id), { quests: [...(campaign.quests ?? []), ...(arr as Quest[])] })
       else updated = await updateCampaign(Number(id), { factions: [...(campaign.factions ?? []), ...(arr as Faction[])] })
       setCampaign(updated)
-    } catch { alert('Fichier invalide ou format non reconnu.') }
+    } catch { toast.error('Fichier invalide ou format non reconnu.') }
   }
 
   if (loading) {

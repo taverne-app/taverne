@@ -19,6 +19,8 @@ import {
 import { createSession } from '../api/sessions'
 import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
+import { useToast } from '../contexts/ToastContext'
+import { ConfirmDialog, type ConfirmRequest } from '../components/ConfirmDialog'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { MONSTERS, rollMonsterHp, crToAttackBonus, crToDamageDice, crToXp, CR_XP, type MonsterTemplate } from '../data/monsters'
 import { canLevelUp } from '../data/xp'
@@ -399,6 +401,9 @@ function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, c
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export function CombatPage() {
+  const toast = useToast()
+  // Demande de confirmation en cours sur une action destructive (null = aucune).
+  const [confirm, setConfirm] = useState<ConfirmRequest | null>(null)
   const { token } = useAuth()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
@@ -1082,13 +1087,18 @@ export function CombatPage() {
 
   async function handleBattleMapChange(next: BattleMap) {
     if (!campaignId) return
-    // Optimistic: the token already moved on screen; persisting also broadcasts
-    // it to the players' live view. We keep the local state even if the write
-    // is slow — the next edit or refetch reconciles.
+    // Optimiste : le pion a déjà bougé à l'écran, et l'écriture le diffuse aussi
+    // à la vue joueurs. Si elle échoue, on REVIENT en arrière : garder la position
+    // optimiste ferait croire au MJ qu'elle est enregistrée et diffusée alors que
+    // les joueurs voient toujours l'ancienne.
+    const previous = campaign?.battle_map ?? null
     setCampaign(prev => prev ? { ...prev, battle_map: next } : prev)
     try {
       await updateCampaign(campaignId, { battle_map: next })
-    } catch { /* garder l'état optimiste */ }
+    } catch {
+      setCampaign(prev => prev ? { ...prev, battle_map: previous } : prev)
+      toast.error("Le plateau n'a pas pu être enregistré : le pion est revenu à sa position précédente.")
+    }
   }
 
   async function handleDeleteSavedEncounter(index: number) {
@@ -1140,18 +1150,40 @@ export function CombatPage() {
     restoredRef.current = false
   }
 
-  async function handleClearCombatants() {
+  function handleClearCombatants() {
     if (!campaignId || combatants.length === 0) return
-    await Promise.all(combatants.map(c => deleteCombatant(campaignId, c.id)))
-    setCombatants([])
+    setConfirm({
+      title: 'Vider les ennemis ?',
+      message: `${combatants.length} combattant${combatants.length > 1 ? 's seront supprimés' : ' sera supprimé'} définitivement. Cette action est irréversible.`,
+      confirmLabel: 'Vider',
+      onConfirm: async () => {
+        try {
+          await Promise.all(combatants.map(c => deleteCombatant(campaignId, c.id)))
+          setCombatants([])
+        } catch {
+          toast.error("Les combattants n'ont pas pu être supprimés.")
+        }
+      },
+    })
   }
 
-  async function handleClearDeadCombatants() {
+  function handleClearDeadCombatants() {
     if (!campaignId) return
     const dead = combatants.filter(c => c.current_hp <= 0)
     if (dead.length === 0) return
-    await Promise.all(dead.map(c => deleteCombatant(campaignId, c.id)))
-    setCombatants(prev => prev.filter(c => c.current_hp > 0))
+    setConfirm({
+      title: 'Retirer les combattants à terre ?',
+      message: `${dead.length} combattant${dead.length > 1 ? 's à 0 PV seront supprimés' : ' à 0 PV sera supprimé'} définitivement.`,
+      confirmLabel: 'Retirer',
+      onConfirm: async () => {
+        try {
+          await Promise.all(dead.map(c => deleteCombatant(campaignId, c.id)))
+          setCombatants(prev => prev.filter(c => c.current_hp > 0))
+        } catch {
+          toast.error("Les combattants n'ont pas pu être retirés.")
+        }
+      },
+    })
   }
 
   function handleGroupSavingThrow() {
@@ -3981,6 +4013,8 @@ export function CombatPage() {
           </div>
         </div>
       )}
+
+      <ConfirmDialog request={confirm} onCancel={() => setConfirm(null)} />
     </div>
   )
 }
