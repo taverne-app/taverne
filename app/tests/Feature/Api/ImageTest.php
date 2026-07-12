@@ -62,13 +62,65 @@ class ImageTest extends TestCase
         $this->assertSame(0, Image::count());
     }
 
-    public function test_upload_rejects_a_file_over_5_mb(): void
+    public function test_upload_rejects_a_source_over_the_upload_cap(): void
     {
-        // 6 Mo > limite de 5120 Ko
-        $this->upload(UploadedFile::fake()->image('enorme.png')->size(6144))
+        // 13 Mo > plafond de 12288 Ko sur la source
+        $this->upload(UploadedFile::fake()->image('enorme.png')->size(13312))
             ->assertStatus(422);
 
         $this->assertSame(0, Image::count());
+    }
+
+    // ── Redimensionnement + recompression ────────────────────────────────────
+
+    /** Dimensions du fichier réellement stocké. */
+    private function storedSize(Image $image): array
+    {
+        $info = getimagesizefromstring(Storage::disk('public')->get($image->path));
+
+        return [$info[0], $info[1]];
+    }
+
+    public function test_a_large_image_is_downscaled_and_converted_to_webp(): void
+    {
+        // 3000×1500 → plus grand côté ramené à 2000, ratio conservé.
+        $this->upload(UploadedFile::fake()->image('donjon.png', 3000, 1500))
+            ->assertCreated()
+            ->assertJsonPath('data.mime', 'image/webp');
+
+        $image = Image::sole();
+        $this->assertSame('image/webp', $image->mime);
+        $this->assertStringEndsWith('.webp', $image->path);
+        $this->assertSame([2000, 1000], $this->storedSize($image));
+        // Le nom d'origine reste affichable même si le fichier stocké est un .webp.
+        $this->assertSame('donjon.png', $image->original_name);
+    }
+
+    public function test_a_small_image_is_not_upscaled(): void
+    {
+        $this->upload(UploadedFile::fake()->image('petite.png', 400, 250))->assertCreated();
+
+        $this->assertSame([400, 250], $this->storedSize(Image::sole()));
+    }
+
+    public function test_a_gif_is_stored_untouched_to_preserve_animation(): void
+    {
+        $this->upload(UploadedFile::fake()->image('anim.gif', 300, 200))->assertCreated();
+
+        $image = Image::sole();
+        $this->assertSame('image/gif', $image->mime);
+        $this->assertStringEndsWith('.gif', $image->path);
+    }
+
+    public function test_the_quota_counts_the_compressed_size_not_the_source(): void
+    {
+        $this->upload(UploadedFile::fake()->image('grande.png', 3000, 1500))->assertCreated();
+
+        $image = Image::sole();
+        $stored = strlen(Storage::disk('public')->get($image->path));
+
+        // La taille enregistrée est celle du fichier compressé sur le disque.
+        $this->assertSame($stored, $image->size);
     }
 
     // ── Quota par plan ───────────────────────────────────────────────────────
@@ -98,14 +150,14 @@ class ImageTest extends TestCase
 
     public function test_free_plan_is_capped_by_total_stored_bytes(): void
     {
-        // 3 images de 8 Mo = 24 Mo : bien en deçà des 10 images, mais proche des 25 Mo.
-        $this->fill(3, size: 8 * 1024 * 1024);
+        // Le plafond porte sur le poids STOCKÉ (après compression) : on remplit donc
+        // la bibliothèque jusqu'aux 25 Mo. Une seule image → le nombre (1/10) n'est
+        // pas en cause, seul le poids l'est.
+        $this->fill(1, size: 25 * 1024 * 1024);
 
-        // Une image de 2 Mo ferait 26 Mo > 25 Mo → refusée sur le poids, pas le nombre.
-        $this->upload(UploadedFile::fake()->image('lourde.png')->size(2048))
-            ->assertForbidden();
+        $this->upload()->assertForbidden();
 
-        $this->assertSame(3, $this->user->images()->count());
+        $this->assertSame(1, $this->user->images()->count());
     }
 
     public function test_upload_fits_when_it_stays_under_the_byte_cap(): void

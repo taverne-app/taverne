@@ -5,16 +5,21 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\ImageResource;
 use App\Models\Image;
+use App\Services\ImageProcessor;
 use App\Services\PlanLimits;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class ImageController extends Controller
 {
-    /** Formats acceptés et taille max (Ko) d'une image de la bibliothèque. */
+    /** Formats acceptés et taille max (Ko) de la source envoyée. */
     private const MIMES = 'jpeg,jpg,png,webp,gif';
-    private const MAX_KB = 5120; // 5 Mo
+
+    /** Source généreuse : elle est redimensionnée et recompressée avant stockage. */
+    private const MAX_KB = 12288; // 12 Mo
 
     public function index(Request $request): AnonymousResourceCollection
     {
@@ -25,7 +30,7 @@ class ImageController extends Controller
         ]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, ImageProcessor $processor): JsonResponse
     {
         $user = $request->user();
         $plan = $user->plan ?? 'free';
@@ -42,25 +47,37 @@ class ImageController extends Controller
 
         $file = $request->file('file');
 
+        // Compression AVANT le contrôle de quota : le plafond porte sur le fichier
+        // réellement stocké, pas sur la source envoyée.
+        $processed = $processor->process($file);
+
+        $size = $processed ? strlen($processed['contents']) : (int) $file->getSize();
+        $mime = $processed['mime'] ?? $file->getClientMimeType();
+
         // Deuxième plafond, indépendant du nombre : le poids cumulé.
         $maxBytes  = PlanLimits::maxStorageBytes($plan);
         $usedBytes = (int) $user->images()->sum('size');
 
         abort_if(
-            $usedBytes + $file->getSize() > $maxBytes,
+            $usedBytes + $size > $maxBytes,
             403,
             'Espace de stockage insuffisant pour votre plan — supprimez une image.',
         );
 
         // Un dossier par utilisateur : évite les collisions et facilite le ménage.
-        $path = $file->store("images/{$user->id}", 'public');
+        if ($processed) {
+            $path = "images/{$user->id}/".Str::random(40).'.'.$processed['extension'];
+            Storage::disk('public')->put($path, $processed['contents']);
+        } else {
+            $path = $file->store("images/{$user->id}", 'public');
+        }
 
         $image = $user->images()->create([
             'disk'          => 'public',
             'path'          => $path,
             'original_name' => $file->getClientOriginalName(),
-            'mime'          => $file->getClientMimeType(),
-            'size'          => $file->getSize(),
+            'mime'          => $mime,
+            'size'          => $size,
         ]);
 
         return (new ImageResource($image))
