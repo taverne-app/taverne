@@ -176,6 +176,33 @@ class CombatRealtimeTest extends TestCase
             ->assertForbidden();
     }
 
+    public function test_a_combatant_stores_its_challenge_rating(): void
+    {
+        $campaign = $this->campaign();
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/combatants", [
+                // Le FP peut être fractionnaire : d'où une chaîne, pas un nombre.
+                'name' => 'Gobelin', 'cr' => '1/4', 'max_hp' => 7,
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.cr', '1/4');
+
+        // Persisté : l'XP reste dérivable après rechargement et même si on renomme
+        // le combattant — ce que la recherche par nom dans le bestiaire ne permettait pas.
+        $this->assertSame('1/4', $campaign->combatants()->sole()->cr);
+    }
+
+    public function test_a_combatant_without_a_challenge_rating_is_accepted(): void
+    {
+        $campaign = $this->campaign();
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/combatants", ['name' => 'PNJ', 'max_hp' => 5])
+            ->assertCreated()
+            ->assertJsonPath('data.cr', null);
+    }
+
     public function test_purge_empties_the_trash_of_that_campaign_only(): void
     {
         $campaign = $this->campaign();

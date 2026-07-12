@@ -29,6 +29,8 @@ class CombatantController extends Controller
 
         $validated = $request->validate([
             'name'            => ['required', 'string', 'max:100'],
+            // Le FP sert à déduire l'XP en fin de combat, sans dépendre du nom.
+            'cr'              => ['sometimes', 'nullable', 'string', 'max:10'],
             'faction'         => ['sometimes', 'string', 'in:ennemi,allié,neutre'],
             'max_hp'          => ['required', 'integer', 'min:1', 'max:9999'],
             'armor_class'     => ['sometimes', 'nullable', 'integer', 'min:0', 'max:30'],

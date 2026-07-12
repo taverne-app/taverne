@@ -13,6 +13,7 @@ class CombatantResource extends JsonResource
             'id'              => $this->id,
             'campaign_id'     => $this->campaign_id,
             'name'            => $this->name,
+            'cr'      => $this->cr,
             'faction'         => $this->faction ?? 'ennemi',
             'max_hp'          => $this->max_hp,
             'current_hp'      => $this->current_hp,

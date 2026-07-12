@@ -481,8 +481,14 @@ export function CombatPage() {
     if (tpl) resolvedMonsters[cb.id] = tpl
   })
 
-  /** XP d'un combattant : la fiche fait foi, à défaut on la déduit du FP. */
+  /**
+   * XP d'un combattant. Le FP STOCKÉ sur le combattant fait foi : il survit au
+   * rechargement et à un renommage. À défaut (combattants créés avant cette
+   * colonne), on retombe sur la fiche retrouvée par nom dans le bestiaire.
+   */
   const xpForCombatant = (id: number): number => {
+    const cb = combatants.find(c => c.id === id)
+    if (cb?.cr) return crToXp(cb.cr)
     const tpl = resolvedMonsters[id]
     if (!tpl) return 0
     return tpl.xp || crToXp(tpl.cr)
@@ -640,7 +646,7 @@ export function CombatPage() {
 
   // Add combatant form
   const [addingCombatant, setAddingCombatant] = useState(false)
-  const [combatantDraft, setCombatantDraft] = useState({ name: '', faction: 'ennemi' as CombatantFaction, max_hp: '', ac: '', initiative: '' })
+  const [combatantDraft, setCombatantDraft] = useState({ name: '', faction: 'ennemi' as CombatantFaction, max_hp: '', ac: '', initiative: '', cr: '' })
   const [monsterSuggestions, setMonsterSuggestions] = useState<MonsterTemplate[]>([])
   const [showBestiary, setShowBestiary] = useState(false)
   const [bestiarySearch, setBestiarySearch] = useState('')
@@ -1109,13 +1115,14 @@ export function CombatPage() {
     try {
       const created = await createCombatant(campaignId, {
         name: combatantDraft.name.trim(),
+        cr: combatantDraft.cr.trim() || null,
         faction: combatantDraft.faction,
         max_hp: maxHp,
         armor_class: combatantDraft.ac ? parseInt(combatantDraft.ac, 10) || null : null,
         initiative_roll: combatantDraft.initiative ? parseInt(combatantDraft.initiative, 10) || null : null,
       })
       setCombatants(prev => [...prev, created])
-      setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' })
+      setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '', cr: '' })
       setAddingCombatant(false)
       logEvent('join', `${created.name} entre dans le combat`)
     } catch (e) {
@@ -1131,6 +1138,7 @@ export function CombatPage() {
     try {
       const created = await createCombatant(campaignId, {
         name: m.name,
+        cr: m.cr,
         max_hp: hp,
         armor_class: m.ac,
         initiative_roll: initRoll,
@@ -2913,7 +2921,7 @@ export function CombatPage() {
                               key={m.name}
                               type="button"
                               onMouseDown={() => {
-                                setCombatantDraft(prev => ({ ...prev, name: m.name, max_hp: String(m.hp_avg), ac: String(m.ac) }))
+                                setCombatantDraft(prev => ({ ...prev, name: m.name, cr: m.cr, max_hp: String(m.hp_avg), ac: String(m.ac) }))
                                 setMonsterSuggestions([])
                               }}
                               className="w-full flex items-center justify-between px-3 py-2 hover:bg-stone-700 text-left transition-colors"
@@ -2947,6 +2955,19 @@ export function CombatPage() {
                       placeholder="Initiative"
                       className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                     />
+                    {/* FP : c'est lui qui donnera l'XP en fin de combat, même pour une
+                        créature inventée dont le nom n'existe dans aucun bestiaire. */}
+                    <select
+                      value={combatantDraft.cr}
+                      onChange={e => setCombatantDraft(prev => ({ ...prev, cr: e.target.value }))}
+                      title="Facteur de puissance — détermine l'XP accordée en fin de combat"
+                      className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                    >
+                      <option value="">FP (XP)…</option>
+                      {CR_VALUES.map(cr => (
+                        <option key={cr} value={cr}>FP {cr} · {crToXp(cr)} XP</option>
+                      ))}
+                    </select>
                   </div>
                   <div className="flex items-center gap-2">
                     <button
@@ -2957,7 +2978,7 @@ export function CombatPage() {
                       Ajouter
                     </button>
                     <button
-                      onClick={() => { setAddingCombatant(false); setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '' }); setMonsterSuggestions([]) }}
+                      onClick={() => { setAddingCombatant(false); setCombatantDraft({ name: '', faction: 'ennemi', max_hp: '', ac: '', initiative: '', cr: '' }); setMonsterSuggestions([]) }}
                       className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
                     >
                       Annuler

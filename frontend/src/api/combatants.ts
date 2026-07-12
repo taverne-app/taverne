@@ -6,6 +6,8 @@ export interface Combatant {
   id: number
   campaign_id: number
   name: string
+  /** Facteur de puissance (« 1/4 », « 2 »…). Sert à déduire l'XP de fin de combat. */
+  cr: string | null
   faction: CombatantFaction
   max_hp: number
   current_hp: number
@@ -25,7 +27,7 @@ export async function listCombatants(campaignId: number): Promise<Combatant[]> {
 
 export async function createCombatant(
   campaignId: number,
-  data: { name: string; faction?: CombatantFaction; max_hp: number; armor_class?: number | null; initiative_roll?: number | null },
+  data: { name: string; cr?: string | null; faction?: CombatantFaction; max_hp: number; armor_class?: number | null; initiative_roll?: number | null },
 ): Promise<Combatant> {
   const res = await apiFetch(`/campaigns/${campaignId}/combatants`, {
     method: 'POST',

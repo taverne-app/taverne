@@ -17,6 +17,7 @@ class Combatant extends Model
     protected $fillable = [
         'campaign_id',
         'name',
+        'cr',
         'faction',
         'max_hp',
         'current_hp',
