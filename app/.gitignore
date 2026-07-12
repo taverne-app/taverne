@@ -25,7 +25,3 @@ _ide_helper.php
 Homestead.json
 Homestead.yaml
 Thumbs.db
-
-# Créé à l'exécution par Storage::fake() sous l'utilisateur du container (0700),
-# illisible depuis l'hôte : git s'y casse les dents à chaque run de tests.
-/storage/framework/testing
