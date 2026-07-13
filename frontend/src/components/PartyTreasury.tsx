@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { updateCampaign, type Campaign, type TreasureItem } from '../api/campaigns'
+import { updateCampaign, formatGold, treasureLineGold, treasuryGold, type Campaign, type TreasureItem } from '../api/campaigns'
 import { updateInventory, type Character } from '../api/characters'
 import { useToast } from '../contexts/ToastContext'
 
@@ -20,7 +20,7 @@ export function PartyTreasury({
   characters: Character[]
 }) {
   const toast = useToast()
-  const emptyDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
+  const emptyDraft = (): TreasureItem => ({ name: '', quantity: 1, value_gp: null, notes: '' })
 
   const [adding, setAdding] = useState(false)
   const [draft, setDraft] = useState<TreasureItem>(emptyDraft)
@@ -78,11 +78,13 @@ export function PartyTreasury({
     const item = treasury[index]
     if (!item) return
 
+    // L'inventaire d'un personnage garde une valeur en texte libre : on la formate.
+    const valueText = formatGold(item.value_gp)
     const items = character.inventory?.items ?? []
-    const existing = items.findIndex(i => i.name === item.name && i.value === item.value)
+    const existing = items.findIndex(i => i.name === item.name && i.value === valueText)
     const nextItems = existing >= 0
       ? items.map((i, idx) => (idx === existing ? { ...i, quantity: i.quantity + item.quantity } : i))
-      : [...items, { name: item.name, quantity: item.quantity, weight: 0, value: item.value, notes: item.notes, equipped: false }]
+      : [...items, { name: item.name, quantity: item.quantity, weight: 0, value: valueText, notes: item.notes, equipped: false }]
 
     try {
       await updateInventory(character.id, nextItems)
@@ -100,8 +102,13 @@ export function PartyTreasury({
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
+        <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
           Trésor du groupe ({treasury.length})
+          {treasuryGold(treasury) > 0 && (
+            <span className="text-amber-400 normal-case tracking-normal font-medium">
+              · {formatGold(treasuryGold(treasury))}
+            </span>
+          )}
         </h2>
         <button
           onClick={() => { setAdding(v => !v); setDraft(emptyDraft()) }}
@@ -131,10 +138,13 @@ export function PartyTreasury({
               className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors"
             />
             <input
-              type="text"
-              placeholder="Valeur (ex: 50 po)"
-              value={draft.value}
-              onChange={e => setDraft(d => ({ ...d, value: e.target.value }))}
+              type="number"
+              min={0}
+              step="0.01"
+              placeholder="Valeur (po)"
+              value={draft.value_gp ?? ''}
+              onChange={e => setDraft(d => ({ ...d, value_gp: e.target.value === '' ? null : Math.max(0, parseFloat(e.target.value) || 0) }))}
+              title="Valeur unitaire en pièces d'or — laissez vide si l'objet n'a pas de prix"
               className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
             />
           </div>
@@ -199,7 +209,7 @@ export function PartyTreasury({
             .sort((a, b) => {
               if (sort === 'name') return a.item.name.localeCompare(b.item.name, 'fr')
               if (sort === 'quantity') return b.item.quantity - a.item.quantity
-              if (sort === 'value') return (a.item.value ?? '').localeCompare(b.item.value ?? '', 'fr')
+              if (sort === 'value') return treasureLineGold(b.item) - treasureLineGold(a.item)
               return 0
             })
             .map(({ item, i }) => (
@@ -216,10 +226,12 @@ export function PartyTreasury({
                         className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
                       />
                       <input
-                        type="text"
-                        value={editDraft.value}
-                        onChange={e => setEditDraft(d => ({ ...d, value: e.target.value }))}
-                        placeholder="Valeur (ex: 50 po)"
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        value={editDraft.value_gp ?? ''}
+                        onChange={e => setEditDraft(d => ({ ...d, value_gp: e.target.value === '' ? null : Math.max(0, parseFloat(e.target.value) || 0) }))}
+                        placeholder="Valeur (po)"
                         className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
                       />
                     </div>
@@ -260,8 +272,13 @@ export function PartyTreasury({
                               ×{item.quantity}
                             </span>
                           )}
-                          {item.value && (
-                            <span className="text-xs text-amber-400 font-medium">{item.value}</span>
+                          {item.value_gp != null && (
+                            <span className="text-xs text-amber-400 font-medium">
+                              {formatGold(item.value_gp)}
+                              {item.quantity > 1 && (
+                                <span className="text-stone-500"> · {formatGold(treasureLineGold(item))} au total</span>
+                              )}
+                            </span>
                           )}
                         </div>
                         {item.notes && <p className="text-stone-500 text-xs mt-1">{item.notes}</p>}

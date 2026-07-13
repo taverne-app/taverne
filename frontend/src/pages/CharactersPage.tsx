@@ -235,7 +235,7 @@ export function CharactersPage() {
         {/* Les stats du groupe ne parlent que des personnages : leur place est ici. */}
         {characters.length > 0 && (
           <div className="mt-8">
-            <PartyStats characters={characters} setCharacters={setCharacters} />
+            <PartyStats characters={characters} setCharacters={setCharacters} treasury={campaign?.party_treasury ?? []} />
           </div>
         )}
 

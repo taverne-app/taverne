@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { updateIdentity, type Character } from '../api/characters'
+import { treasuryGold, type TreasureItem } from '../api/campaigns'
 import { useToast } from '../contexts/ToastContext'
 
 /**
@@ -16,9 +17,12 @@ import { useToast } from '../contexts/ToastContext'
 export function PartyStats({
   characters,
   setCharacters,
+  treasury = [],
 }: {
   characters: Character[]
   setCharacters: (updater: (prev: Character[]) => Character[]) => void
+  /** Le coffre du groupe : sa valeur entre dans l'or total. */
+  treasury?: TreasureItem[]
 }) {
   const toast = useToast()
   const [xpInput, setXpInput] = useState('')
@@ -34,17 +38,20 @@ export function PartyStats({
   const hpPct      = totalMaxHp > 0 ? Math.round((totalHp / totalMaxHp) * 100) : null
 
   /**
-   * Or total, en pièces d'or. Le reste des monnaies y est converti au taux D&D 5e
-   * (1 pp = 10 po, 1 pe = 0,5 po, 1 pa = 0,1 po, 1 pc = 0,01 po) — sans quoi le
-   * chiffre ne voudrait rien dire.
+   * Or total : les bourses des personnages PLUS le coffre du groupe.
    *
-   * Il ne compte QUE les bourses des personnages : le coffre du groupe, en dessous,
-   * contient des objets dont la valeur est un texte libre (« 50 po », « inestimable »).
+   * Les monnaies sont converties en po au taux D&D 5e (1 pp = 10 po, 1 pe = 0,5 po,
+   * 1 pa = 0,1 po, 1 pc = 0,01 po). Le coffre y entre depuis que la valeur de ses
+   * objets est un nombre de po et non plus un texte libre — un objet sans valeur
+   * chiffrée compte pour zéro, il ne fausse rien.
    */
-  const totalGold = characters.reduce((sum, c) => sum + (
+  const purseGold = characters.reduce((sum, c) => sum + (
     c.currency.pp * 10 + c.currency.po + c.currency.pe * 0.5
     + c.currency.pa * 0.1 + c.currency.pc * 0.01
   ), 0)
+  const chestGold = treasuryGold(treasury)
+  const totalGold = purseGold + chestGold
+  const gold = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
 
   /**
    * Chaque personnage reçoit le montant PLEIN — l'XP d'une rencontre n'est pas
@@ -102,10 +109,14 @@ export function PartyStats({
 
         <div className="bg-stone-800 rounded-lg p-3 text-center flex flex-col justify-center">
           <p className="text-stone-500 text-xs mb-1">Or total</p>
-          <p className="text-amber-400 font-bold text-xl">
-            {totalGold.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}
+          <p className="text-amber-400 font-bold text-xl">{gold(totalGold)}</p>
+          {/* Les parts sont formatées comme le total : arrondies séparément, elles
+              ne se sommeraient plus (173,5 + 3 532,5 donnerait « 174 + 3533 = 3707 »). */}
+          <p className="text-stone-600 text-xs">
+            {chestGold > 0
+              ? `po · ${gold(purseGold)} bourses + ${gold(chestGold)} coffre`
+              : 'po · bourses des PJ'}
           </p>
-          <p className="text-stone-600 text-xs">po · bourses des PJ</p>
         </div>
 
         <div className="bg-stone-800 rounded-lg p-3 text-center flex flex-col justify-between">

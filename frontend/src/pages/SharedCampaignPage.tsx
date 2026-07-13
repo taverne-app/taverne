@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCampaign } from '../api/share'
 import type { Campaign, CampaignSession, TreasureItem } from '../api/campaigns'
+import { formatGold } from '../api/campaigns'
 import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
@@ -760,7 +761,9 @@ export function SharedCampaignPage() {
                     {item.notes && <p className="text-stone-500 text-xs mt-0.5 truncate">{item.notes}</p>}
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
-                    {item.value && <span className="text-amber-400 text-xs font-medium">{item.value}</span>}
+                    {item.value_gp != null && (
+                      <span className="text-amber-400 text-xs font-medium">{formatGold(item.value_gp)}</span>
+                    )}
                     {item.quantity > 1 && <span className="text-stone-400 text-xs">×{item.quantity}</span>}
                   </div>
                 </div>
