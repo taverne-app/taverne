@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { updateIdentity, type Character } from '../api/characters'
-import { treasuryGold, type TreasureItem } from '../api/campaigns'
+import type { TreasureItem } from '../api/campaigns'
+import { coinsToGold, itemsGold, formatGoldNumber } from '../lib/gold'
 import { useToast } from '../contexts/ToastContext'
 
 /**
@@ -38,20 +39,18 @@ export function PartyStats({
   const hpPct      = totalMaxHp > 0 ? Math.round((totalHp / totalMaxHp) * 100) : null
 
   /**
-   * Or total : les bourses des personnages PLUS le coffre du groupe.
+   * Or total : les bourses des personnages, le coffre du groupe, et l'équipement porté.
    *
-   * Les monnaies sont converties en po au taux D&D 5e (1 pp = 10 po, 1 pe = 0,5 po,
-   * 1 pa = 0,1 po, 1 pc = 0,01 po). Le coffre y entre depuis que la valeur de ses
-   * objets est un nombre de po et non plus un texte libre — un objet sans valeur
-   * chiffrée compte pour zéro, il ne fausse rien.
+   * Les trois entrent depuis que toutes les valeurs sont des nombres de po et non plus
+   * des textes libres. Un objet sans valeur chiffrée compte pour zéro : il ne fausse rien.
+   * Le détail est affiché sous le total, pour qu'on sache d'où vient le chiffre — un
+   * équipement coûteux n'est pas de l'argent liquide.
    */
-  const purseGold = characters.reduce((sum, c) => sum + (
-    c.currency.pp * 10 + c.currency.po + c.currency.pe * 0.5
-    + c.currency.pa * 0.1 + c.currency.pc * 0.01
-  ), 0)
-  const chestGold = treasuryGold(treasury)
-  const totalGold = purseGold + chestGold
-  const gold = (n: number) => n.toLocaleString('fr-FR', { maximumFractionDigits: 1 })
+  const purseGold = characters.reduce((sum, c) => sum + coinsToGold(c.currency), 0)
+  const chestGold = itemsGold(treasury)
+  const gearGold  = characters.reduce((sum, c) => sum + itemsGold(c.inventory?.items ?? []), 0)
+  const totalGold = purseGold + chestGold + gearGold
+  const gold = formatGoldNumber
 
   /**
    * Chaque personnage reçoit le montant PLEIN — l'XP d'une rencontre n'est pas
@@ -112,10 +111,15 @@ export function PartyStats({
           <p className="text-amber-400 font-bold text-xl">{gold(totalGold)}</p>
           {/* Les parts sont formatées comme le total : arrondies séparément, elles
               ne se sommeraient plus (173,5 + 3 532,5 donnerait « 174 + 3533 = 3707 »). */}
-          <p className="text-stone-600 text-xs">
-            {chestGold > 0
-              ? `po · ${gold(purseGold)} bourses + ${gold(chestGold)} coffre`
-              : 'po · bourses des PJ'}
+          <p
+            className="text-stone-600 text-xs"
+            title={`Bourses ${gold(purseGold)} po · Coffre ${gold(chestGold)} po · Équipement ${gold(gearGold)} po`}
+          >
+            po · {[
+              `${gold(purseGold)} bourses`,
+              chestGold > 0 ? `${gold(chestGold)} coffre` : null,
+              gearGold > 0 ? `${gold(gearGold)} équip.` : null,
+            ].filter(Boolean).join(' + ')}
           </p>
         </div>
 

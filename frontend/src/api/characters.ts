@@ -11,7 +11,8 @@ export interface InventoryItem {
   name: string
   quantity: number
   weight: number
-  value: string
+  /** Valeur unitaire en pièces d'or. `null` = objet sans prix. */
+  value_gp: number | null
   notes: string
   equipped: boolean
   magical?: boolean

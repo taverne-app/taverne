@@ -74,20 +74,7 @@ export interface TreasureItem {
   notes: string
 }
 
-/** Valeur totale d'une ligne du coffre : la valeur unitaire × la quantité. */
-export function treasureLineGold(item: TreasureItem): number {
-  return (item.value_gp ?? 0) * item.quantity
-}
 
-/** Or total du coffre, en po. */
-export function treasuryGold(items: TreasureItem[]): number {
-  return items.reduce((sum, i) => sum + treasureLineGold(i), 0)
-}
-
-/** « 1 500 po », ou une chaîne vide si l'objet n'a pas de valeur chiffrée. */
-export function formatGold(gp: number | null): string {
-  return gp == null ? '' : `${gp.toLocaleString('fr-FR', { maximumFractionDigits: 2 })} po`
-}
 
 export interface Location {
   name: string

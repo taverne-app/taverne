@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { updateCampaign, formatGold, treasureLineGold, treasuryGold, type Campaign, type TreasureItem } from '../api/campaigns'
+import { updateCampaign, type Campaign, type TreasureItem } from '../api/campaigns'
+import { formatGold, lineGold, itemsGold } from '../lib/gold'
 import { updateInventory, type Character } from '../api/characters'
 import { useToast } from '../contexts/ToastContext'
 
@@ -78,13 +79,12 @@ export function PartyTreasury({
     const item = treasury[index]
     if (!item) return
 
-    // L'inventaire d'un personnage garde une valeur en texte libre : on la formate.
-    const valueText = formatGold(item.value_gp)
+    // Coffre et inventaire parlent désormais la même langue : plus rien à reformater.
     const items = character.inventory?.items ?? []
-    const existing = items.findIndex(i => i.name === item.name && i.value === valueText)
+    const existing = items.findIndex(i => i.name === item.name && i.value_gp === item.value_gp)
     const nextItems = existing >= 0
       ? items.map((i, idx) => (idx === existing ? { ...i, quantity: i.quantity + item.quantity } : i))
-      : [...items, { name: item.name, quantity: item.quantity, weight: 0, value: valueText, notes: item.notes, equipped: false }]
+      : [...items, { name: item.name, quantity: item.quantity, weight: 0, value_gp: item.value_gp, notes: item.notes, equipped: false }]
 
     try {
       await updateInventory(character.id, nextItems)
@@ -104,9 +104,9 @@ export function PartyTreasury({
       <div className="flex items-center justify-between mb-4">
         <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
           Trésor du groupe ({treasury.length})
-          {treasuryGold(treasury) > 0 && (
+          {itemsGold(treasury) > 0 && (
             <span className="text-amber-400 normal-case tracking-normal font-medium">
-              · {formatGold(treasuryGold(treasury))}
+              · {formatGold(itemsGold(treasury))}
             </span>
           )}
         </h2>
@@ -209,7 +209,7 @@ export function PartyTreasury({
             .sort((a, b) => {
               if (sort === 'name') return a.item.name.localeCompare(b.item.name, 'fr')
               if (sort === 'quantity') return b.item.quantity - a.item.quantity
-              if (sort === 'value') return treasureLineGold(b.item) - treasureLineGold(a.item)
+              if (sort === 'value') return lineGold(b.item) - lineGold(a.item)
               return 0
             })
             .map(({ item, i }) => (
@@ -276,7 +276,7 @@ export function PartyTreasury({
                             <span className="text-xs text-amber-400 font-medium">
                               {formatGold(item.value_gp)}
                               {item.quantity > 1 && (
-                                <span className="text-stone-500"> · {formatGold(treasureLineGold(item))} au total</span>
+                                <span className="text-stone-500"> · {formatGold(lineGold(item))} au total</span>
                               )}
                             </span>
                           )}

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getCharacter, type Character, type AbilityName } from '../api/characters'
+import { formatGold } from '../lib/gold'
 
 const ABILITY_LABELS: [AbilityName, string][] = [
   ['strength', 'FOR'], ['dexterity', 'DEX'], ['constitution', 'CON'],
@@ -305,7 +306,7 @@ export function CharacterPrintPage() {
               <p key={i} className="text-xs">
                 {item.equipped ? '⊙ ' : ''}<span className={item.equipped ? 'font-semibold' : ''}>{item.name}</span>
                 {item.quantity > 1 ? ` ×${item.quantity}` : ''}
-                {item.value ? ` (${item.value})` : ''}
+                {item.value_gp != null ? ` (${formatGold(item.value_gp)})` : ''}
               </p>
             ))}
           </div>

@@ -58,6 +58,7 @@ import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { ConditionTag } from '../components/ConditionTag'
 import { CONDITIONS_FR } from '../data/conditions'
 import { XpBar } from '../components/XpBar'
+import { formatGold, lineGold } from '../lib/gold'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -1195,7 +1196,7 @@ export function CharacterPage() {
       name:     itemDraft.name.trim(),
       quantity: Math.max(1, parseInt(itemDraft.quantity, 10) || 1),
       weight:   parseFloat(itemDraft.weight) || 0,
-      value:    itemDraft.value.trim(),
+      value_gp: itemDraft.value.trim() === '' ? null : Math.max(0, parseFloat(itemDraft.value) || 0),
       notes:    itemDraft.notes.trim(),
       equipped: false,
       magical:  false,
@@ -1267,7 +1268,7 @@ export function CharacterPage() {
       name:     magicItem.name,
       quantity: 1,
       weight:   0,
-      value:    '',
+      value_gp: null,
       notes:    magicItem.description,
       equipped: false,
       magical:  true,
@@ -3116,10 +3117,13 @@ export function CharacterPage() {
                 className="w-16 bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
               <input
-                type="text"
-                placeholder="Valeur (ex: 15 po)"
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="Valeur (po)"
                 value={itemDraft.value}
                 onChange={e => setItemDraft(d => ({ ...d, value: e.target.value }))}
+                title="Valeur unitaire en pièces d'or — laissez vide si l'objet n'a pas de prix"
                 className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
               />
               <input
@@ -3231,8 +3235,10 @@ export function CharacterPage() {
                   )}
 
                   {/* Value */}
-                  {item.value && (
-                    <span className="text-amber-600 text-xs w-16 text-right shrink-0 truncate">{item.value}</span>
+                  {item.value_gp != null && (
+                    <span className="text-amber-600 text-xs w-16 text-right shrink-0 truncate" title={formatGold(lineGold(item))}>
+                      {formatGold(item.value_gp)}
+                    </span>
                   )}
 
                   {/* Notes */}

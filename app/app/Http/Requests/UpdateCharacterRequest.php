@@ -86,8 +86,15 @@ class UpdateCharacterRequest extends FormRequest
             'inventory.*.name'         => ['required_with:inventory', 'string', 'max:100'],
             'inventory.*.quantity'     => ['sometimes', 'integer', 'min:0'],
             'inventory.*.weight'       => ['sometimes', 'numeric', 'min:0'],
-            'inventory.*.value'        => ['sometimes', 'nullable', 'string', 'max:50'],
+            // La valeur est un nombre de pièces d'or, plus un texte libre : on peut
+            // enfin additionner ce que l'équipe possède.
+            'inventory.*.value_gp'     => ['sometimes', 'nullable', 'numeric', 'min:0'],
             'inventory.*.equipped'     => ['sometimes', 'boolean'],
+            // Ces trois-là n'étaient PAS déclarés : validate() les supprimait en silence.
+            // Un objet magique perdait son attribut et son harmonisation à chaque écriture.
+            'inventory.*.notes'        => ['sometimes', 'nullable', 'string', 'max:500'],
+            'inventory.*.magical'      => ['sometimes', 'boolean'],
+            'inventory.*.attuned'      => ['sometimes', 'boolean'],
 
             'features'                    => ['sometimes', 'nullable', 'array'],
             'features.*.name'             => ['required_with:features', 'string', 'max:150'],

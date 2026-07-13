@@ -308,4 +308,47 @@ class CharacterTest extends TestCase
             ->assertJsonPath('data.state.death_saves_successes', 3)
             ->assertJsonPath('data.state.death_saves_failures', 2);
     }
+
+    // ── Inventaire ───────────────────────────────────────────────────────────
+
+    public function test_inventory_keeps_notes_magical_and_attunement(): void
+    {
+        // Ces trois champs n'étaient pas déclarés dans la validation : validate() les
+        // supprimait en silence. Un objet magique perdait son attribut à chaque écriture.
+        $character = Character::factory()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/characters/{$character->id}", [
+                'inventory' => [[
+                    'name'     => 'Épée solaire',
+                    'quantity' => 1,
+                    'weight'   => 3,
+                    'value_gp' => 500,
+                    'notes'    => 'Trouvée dans la grotte',
+                    'equipped' => true,
+                    'magical'  => true,
+                    'attuned'  => true,
+                ]],
+            ])
+            ->assertOk();
+
+        $item = $character->fresh()->inventory[0];
+
+        $this->assertSame('Trouvée dans la grotte', $item['notes']);
+        $this->assertTrue($item['magical']);
+        $this->assertTrue($item['attuned']);
+        // Et la valeur est bien un NOMBRE de po, plus un texte.
+        $this->assertSame(500, $item['value_gp']);
+    }
+
+    public function test_inventory_rejects_a_negative_value(): void
+    {
+        $character = Character::factory()->create(['user_id' => $this->user->id]);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/characters/{$character->id}", [
+                'inventory' => [['name' => 'Dette', 'quantity' => 1, 'value_gp' => -10]],
+            ])
+            ->assertJsonValidationErrors('inventory.0.value_gp');
+    }
 }
