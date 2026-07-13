@@ -1,6 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
 import { setCampaignTimeOfDay } from '../../api/campaigns'
-import { updateInventory, type Character } from '../../api/characters'
 import { TIME_OF_DAY, TIME_OF_DAY_CONFIG, type TimeOfDay } from '../../lib/timeOfDay'
 import { MarkdownText } from '../../components/MarkdownText'
 import { MicButton } from '../../components/MicButton'
@@ -9,7 +8,6 @@ import {
   type SessionPrep,
   type PrepScene,
   type SceneKind,
-  type TreasureItem,
   type RandomTable,
   type RandomTableEntry,
 } from '../../api/campaigns'
@@ -45,14 +43,6 @@ export default function CampaignSessionSection(props: SectionProps) {
   const [dmNotesDraft, setDmNotesDraft] = useState(campaign.dm_notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
   const [dmNotesPreview, setDmNotesPreview] = useState(false)
-  const emptyTreasureDraft = (): TreasureItem => ({ name: '', quantity: 1, value: '', notes: '' })
-  const [addingTreasury, setAddingTreasury]   = useState(false)
-  const [treasuryDraft, setTreasuryDraft]     = useState<TreasureItem>(emptyTreasureDraft)
-  const [distributingIdx, setDistributingIdx] = useState<number | null>(null)
-  const [editingTreasureIdx, setEditingTreasureIdx] = useState<number | null>(null)
-  const [editTreasureDraft, setEditTreasureDraft]   = useState<TreasureItem>(emptyTreasureDraft())
-  const [treasurySearch, setTreasurySearch] = useState('')
-  const [treasurySort, setTreasurySort] = useState<'default' | 'name' | 'quantity' | 'value'>('default')
   const emptyTableDraft = (): RandomTable => ({ name: '', entries: [] })
   const [tableDraft, setTableDraft] = useState<RandomTable>(emptyTableDraft())
   const [addingTable, setAddingTable] = useState(false)
@@ -83,58 +73,6 @@ export default function CampaignSessionSection(props: SectionProps) {
       const updated = await updateCampaign(campaign.id, { dm_notes: dmNotesDraft })
       setCampaign(updated)
     } finally { setSavingNotes(false) }
-  }
-  async function handleAddTreasureItem() {
-    if (!campaign || !treasuryDraft.name.trim()) return
-    const next = [...(campaign.party_treasury ?? []), { ...treasuryDraft, name: treasuryDraft.name.trim() }]
-    const updated = await updateCampaign(campaign.id, { party_treasury: next })
-    setCampaign(updated)
-    setTreasuryDraft(emptyTreasureDraft())
-    setAddingTreasury(false)
-  }
-  async function handleRemoveTreasureItem(index: number) {
-    if (!campaign) return
-    const next = (campaign.party_treasury ?? []).filter((_, i) => i !== index)
-    const updated = await updateCampaign(campaign.id, { party_treasury: next })
-    setCampaign(updated)
-    if (distributingIdx === index) setDistributingIdx(null)
-  }
-  async function handleUpdateTreasureItem(index: number) {
-    if (!campaign || !editTreasureDraft.name.trim()) return
-    const next = (campaign.party_treasury ?? []).map((item, i) =>
-      i === index ? { ...editTreasureDraft, name: editTreasureDraft.name.trim() } : item
-    )
-    const updated = await updateCampaign(campaign.id, { party_treasury: next })
-    setCampaign(updated)
-    setEditingTreasureIdx(null)
-  }
-  async function handleDuplicateTreasureItem(index: number) {
-    if (!campaign) return
-    const src = (campaign.party_treasury ?? [])[index]
-    if (!src) return
-    const copy: TreasureItem = { ...src, name: `${src.name} (copie)` }
-    const next = [...(campaign.party_treasury ?? []), copy]
-    const updated = await updateCampaign(campaign.id, { party_treasury: next })
-    setCampaign(updated)
-  }
-  async function handleDistributeItem(index: number, character: Character) {
-    if (!campaign) return
-    const item = campaign.party_treasury[index]
-    const existingItems = character.inventory?.items ?? []
-    const existing = existingItems.findIndex(i => i.name === item.name && i.value === item.value)
-    let nextItems
-    if (existing >= 0) {
-      nextItems = existingItems.map((i, idx) =>
-        idx === existing ? { ...i, quantity: i.quantity + item.quantity } : i
-      )
-    } else {
-      nextItems = [...existingItems, { name: item.name, quantity: item.quantity, weight: 0, value: item.value, notes: item.notes, equipped: false }]
-    }
-    await updateInventory(character.id, nextItems)
-    const next = (campaign.party_treasury ?? []).filter((_, i) => i !== index)
-    const updated = await updateCampaign(campaign.id, { party_treasury: next })
-    setCampaign(updated)
-    setDistributingIdx(null)
   }
   async function handleAddTable() {
     if (!campaign || !tableDraft.name.trim()) return
@@ -1060,224 +998,6 @@ export default function CampaignSessionSection(props: SectionProps) {
               rows={6}
               className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
             />
-          )}
-        </div>
-
-        {/* Trésor partagé */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
-              Trésor du groupe ({(campaign?.party_treasury ?? []).length})
-            </h2>
-            <button
-              onClick={() => { setAddingTreasury(v => !v); setTreasuryDraft(emptyTreasureDraft()) }}
-              className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-            >
-              {addingTreasury ? 'Annuler' : '+ Ajouter'}
-            </button>
-          </div>
-
-          {addingTreasury && (
-            <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 mb-4 space-y-3">
-              <div className="flex gap-3">
-                <input
-                  type="text"
-                  placeholder="Nom de l'objet *"
-                  value={treasuryDraft.name}
-                  onChange={e => setTreasuryDraft(d => ({ ...d, name: e.target.value }))}
-                  autoFocus
-                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
-                />
-                <input
-                  type="number"
-                  min={1}
-                  placeholder="Qté"
-                  value={treasuryDraft.quantity}
-                  onChange={e => setTreasuryDraft(d => ({ ...d, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
-                  className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors"
-                />
-                <input
-                  type="text"
-                  placeholder="Valeur (ex: 50 po)"
-                  value={treasuryDraft.value}
-                  onChange={e => setTreasuryDraft(d => ({ ...d, value: e.target.value }))}
-                  className="w-36 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
-                />
-              </div>
-              <input
-                type="text"
-                placeholder="Notes (optionnel)"
-                value={treasuryDraft.notes}
-                onChange={e => setTreasuryDraft(d => ({ ...d, notes: e.target.value }))}
-                className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
-              />
-              <div className="flex justify-end">
-                <button
-                  onClick={handleAddTreasureItem}
-                  disabled={!treasuryDraft.name.trim()}
-                  className="text-amber-400 hover:text-amber-300 text-sm font-semibold transition-colors disabled:opacity-40"
-                >
-                  Ajouter
-                </button>
-              </div>
-            </div>
-          )}
-
-          {(campaign?.party_treasury ?? []).length === 0 && !addingTreasury ? (
-            <div className="bg-stone-900 border border-stone-800 rounded-xl p-8 text-center">
-              <p className="text-stone-500 text-sm">
-                Aucun objet dans le trésor.{' '}
-                <button onClick={() => setAddingTreasury(true)} className="text-amber-400 hover:text-amber-300 transition-colors">
-                  Ajouter le premier
-                </button>
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {(campaign?.party_treasury ?? []).length > 2 && (
-                <div className="flex gap-2 mb-1">
-                  <input
-                    type="text"
-                    value={treasurySearch}
-                    onChange={e => setTreasurySearch(e.target.value)}
-                    placeholder="Rechercher un objet…"
-                    className="flex-1 bg-stone-900 border border-stone-800 rounded-lg px-3 py-1.5 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
-                  />
-                  <select
-                    value={treasurySort}
-                    onChange={e => setTreasurySort(e.target.value as typeof treasurySort)}
-                    className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1.5 text-stone-300 text-sm focus:outline-none focus:border-stone-600 transition-colors"
-                  >
-                    <option value="default">Défaut</option>
-                    <option value="name">Nom A→Z</option>
-                    <option value="quantity">Quantité ↓</option>
-                    <option value="value">Valeur</option>
-                  </select>
-                </div>
-              )}
-              {(campaign?.party_treasury ?? [])
-                .map((item, i) => ({ item, i }))
-                .filter(({ item }) => !treasurySearch || item.name.toLowerCase().includes(treasurySearch.toLowerCase()) || (item.notes ?? '').toLowerCase().includes(treasurySearch.toLowerCase()))
-                .sort((a, b) => {
-                  if (treasurySort === 'name') return a.item.name.localeCompare(b.item.name, 'fr')
-                  if (treasurySort === 'quantity') return b.item.quantity - a.item.quantity
-                  if (treasurySort === 'value') return (a.item.value ?? '').localeCompare(b.item.value ?? '', 'fr')
-                  return 0
-                })
-                .map(({ item, i }) => (
-                <div key={i} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
-                  {editingTreasureIdx === i ? (
-                    <div className="space-y-2">
-                      <div className="grid grid-cols-2 gap-2">
-                        <input
-                          type="text"
-                          value={editTreasureDraft.name}
-                          onChange={e => setEditTreasureDraft(d => ({ ...d, name: e.target.value }))}
-                          autoFocus
-                          placeholder="Nom *"
-                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
-                        />
-                        <input
-                          type="text"
-                          value={editTreasureDraft.value}
-                          onChange={e => setEditTreasureDraft(d => ({ ...d, value: e.target.value }))}
-                          placeholder="Valeur (ex: 50 po)"
-                          className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
-                        />
-                      </div>
-                      <div className="flex gap-2 items-center">
-                        <label className="text-stone-500 text-xs shrink-0">Qté</label>
-                        <input
-                          type="number"
-                          value={editTreasureDraft.quantity}
-                          onChange={e => setEditTreasureDraft(d => ({ ...d, quantity: Math.max(1, parseInt(e.target.value) || 1) }))}
-                          min={1}
-                          className="w-20 bg-stone-800 border border-stone-700 rounded-lg px-2 py-1.5 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
-                        />
-                        <input
-                          type="text"
-                          value={editTreasureDraft.notes}
-                          onChange={e => setEditTreasureDraft(d => ({ ...d, notes: e.target.value }))}
-                          placeholder="Notes"
-                          className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-amber-500 transition-colors"
-                        />
-                      </div>
-                      <div className="flex justify-between items-center">
-                        <button onClick={() => setEditingTreasureIdx(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
-                        <button
-                          onClick={() => handleUpdateTreasureItem(i)}
-                          disabled={!editTreasureDraft.name.trim()}
-                          className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors disabled:opacity-40"
-                        >Enregistrer</button>
-                      </div>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-start gap-3">
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-stone-100 text-sm font-semibold">{item.name}</span>
-                            {item.quantity > 1 && (
-                              <span className="text-xs bg-stone-800 border border-stone-700 text-stone-400 rounded px-1.5 py-0.5">
-                                ×{item.quantity}
-                              </span>
-                            )}
-                            {item.value && (
-                              <span className="text-xs text-amber-400 font-medium">{item.value}</span>
-                            )}
-                          </div>
-                          {item.notes && (
-                            <p className="text-stone-500 text-xs mt-1">{item.notes}</p>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <button
-                            onClick={() => { setEditingTreasureIdx(i); setEditTreasureDraft({ ...item }); setDistributingIdx(null) }}
-                            className="text-xs text-stone-500 hover:text-amber-400 transition-colors"
-                            title="Modifier"
-                          >✎</button>
-                          <button
-                            onClick={() => handleDuplicateTreasureItem(i)}
-                            className="text-xs text-stone-600 hover:text-sky-400 transition-colors"
-                            title="Dupliquer"
-                          >⎘</button>
-                          <button
-                            onClick={() => setDistributingIdx(distributingIdx === i ? null : i)}
-                            className="text-xs text-sky-400 hover:text-sky-300 transition-colors font-medium"
-                          >
-                            Distribuer
-                          </button>
-                          <button
-                            onClick={() => handleRemoveTreasureItem(i)}
-                            className="text-xs text-stone-600 hover:text-red-400 transition-colors"
-                            title="Retirer du trésor"
-                          >
-                            ✕
-                          </button>
-                        </div>
-                      </div>
-
-                      {distributingIdx === i && characters.length > 0 && (
-                        <div className="mt-3 pt-3 border-t border-stone-800">
-                          <p className="text-stone-500 text-xs mb-2">Donner à :</p>
-                          <div className="flex flex-wrap gap-2">
-                            {characters.map(c => (
-                              <button
-                                key={c.id}
-                                onClick={() => handleDistributeItem(i, c)}
-                                className="text-xs bg-stone-800 hover:bg-sky-900/40 border border-stone-700 hover:border-sky-700/50 text-stone-300 hover:text-sky-200 rounded-lg px-3 py-1.5 transition-colors"
-                              >
-                                {c.name}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                    </>
-                  )}
-                </div>
-              ))}
-            </div>
           )}
         </div>
 

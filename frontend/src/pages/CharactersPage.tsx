@@ -7,6 +7,8 @@ import { canLevelUp } from '../data/xp'
 import { PartyStats } from '../components/PartyStats'
 import { PartyBoard } from '../components/PartyBoard'
 import { XpBar } from '../components/XpBar'
+import { PartyTreasury } from '../components/PartyTreasury'
+import type { Campaign } from '../api/campaigns'
 
 function HpBar({ current, max }: { current: number; max: number }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100))
@@ -127,12 +129,19 @@ function CharacterCard({
 }
 
 export function CharactersPage() {
-  const { current, loading: campaignLoading } = useCampaigns()
+  const { current, reload: reloadCampaigns, loading: campaignLoading } = useCampaigns()
   const navigate = useNavigate()
   const [characters, setCharacters] = useState<Character[]>([])
   const [loading, setLoading] = useState(true)
   const [showCreate, setShowCreate] = useState(false)
   const [search, setSearch] = useState('')
+
+  /**
+   * Copie locale de la campagne : le coffre du groupe s'y écrit. On repasse par le
+   * contexte après coup pour qu'il ne serve pas une version périmée ailleurs.
+   */
+  const [campaign, setCampaign] = useState<Campaign | null>(null)
+  useEffect(() => { setCampaign(current) }, [current])
 
   const campaignId = current?.id
 
@@ -227,6 +236,17 @@ export function CharactersPage() {
         {characters.length > 0 && (
           <div className="mt-8">
             <PartyStats characters={characters} setCharacters={setCharacters} />
+          </div>
+        )}
+
+        {/* Le coffre du groupe : ce que l'équipe possède mais n'a pas encore réparti. */}
+        {campaign && (
+          <div className="mt-8">
+            <PartyTreasury
+              campaign={campaign}
+              onCampaignChange={c => { setCampaign(c); reloadCampaigns() }}
+              characters={characters}
+            />
           </div>
         )}
       </main>

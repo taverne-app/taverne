@@ -34,6 +34,19 @@ export function PartyStats({
   const hpPct      = totalMaxHp > 0 ? Math.round((totalHp / totalMaxHp) * 100) : null
 
   /**
+   * Or total, en pièces d'or. Le reste des monnaies y est converti au taux D&D 5e
+   * (1 pp = 10 po, 1 pe = 0,5 po, 1 pa = 0,1 po, 1 pc = 0,01 po) — sans quoi le
+   * chiffre ne voudrait rien dire.
+   *
+   * Il ne compte QUE les bourses des personnages : le coffre du groupe, en dessous,
+   * contient des objets dont la valeur est un texte libre (« 50 po », « inestimable »).
+   */
+  const totalGold = characters.reduce((sum, c) => sum + (
+    c.currency.pp * 10 + c.currency.po + c.currency.pe * 0.5
+    + c.currency.pa * 0.1 + c.currency.pc * 0.01
+  ), 0)
+
+  /**
    * Chaque personnage reçoit le montant PLEIN — l'XP d'une rencontre n'est pas
    * divisée par le nombre de PJ, c'est la règle D&D 5e (le partage est déjà fait
    * dans le calcul de l'XP de rencontre).
@@ -66,14 +79,14 @@ export function PartyStats({
   return (
     <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
       <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">Statistiques du groupe</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
-        <div className="bg-stone-800 rounded-lg p-3 text-center">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="bg-stone-800 rounded-lg p-3 text-center flex flex-col justify-center">
           <p className="text-stone-500 text-xs mb-1">Personnages</p>
           <p className="text-white font-bold text-xl">{characters.length}</p>
         </div>
 
         {hpPct != null && (
-          <div className="bg-stone-800 rounded-lg p-3 text-center">
+          <div className="bg-stone-800 rounded-lg p-3 text-center flex flex-col justify-center">
             <p className="text-stone-500 text-xs mb-1">PV groupe</p>
             <p className={`font-bold text-xl ${dying > 0 ? 'text-red-400' : hpPct > 50 ? 'text-emerald-400' : 'text-amber-400'}`}>
               {hpPct}%
@@ -82,12 +95,20 @@ export function PartyStats({
           </div>
         )}
 
-        <div className="bg-stone-800 rounded-lg p-3 text-center">
+        <div className="bg-stone-800 rounded-lg p-3 text-center flex flex-col justify-center">
           <p className="text-stone-500 text-xs mb-1">Niveau moyen</p>
           <p className="text-white font-bold text-xl">{avgLevel}</p>
         </div>
 
-        <div className="bg-stone-800 rounded-lg p-3 text-center">
+        <div className="bg-stone-800 rounded-lg p-3 text-center flex flex-col justify-center">
+          <p className="text-stone-500 text-xs mb-1">Or total</p>
+          <p className="text-amber-400 font-bold text-xl">
+            {totalGold.toLocaleString('fr-FR', { maximumFractionDigits: 1 })}
+          </p>
+          <p className="text-stone-600 text-xs">po · bourses des PJ</p>
+        </div>
+
+        <div className="bg-stone-800 rounded-lg p-3 text-center flex flex-col justify-between">
           <p className="text-stone-500 text-xs mb-1">XP total</p>
           <p className="text-white font-bold text-xl">{totalXp.toLocaleString('fr-FR')}</p>
 
