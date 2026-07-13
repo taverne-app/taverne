@@ -273,6 +273,13 @@ class CharacterController extends Controller
         unset($res);
 
         $character->update([
+            // L'effet principal d'un repos long : on récupère TOUS ses points de vie.
+            // Il manquait — le repos rendait les sorts et les dés de vie, mais pas les PV.
+            'current_hp'            => $character->max_hp,
+            // Les PV temporaires ne survivent pas à un repos long (PHB).
+            'temporary_hp'          => 0,
+            // Un repos long retire un niveau d'épuisement.
+            'exhaustion_level'      => max(0, ($character->exhaustion_level ?? 0) - 1),
             'spell_slots'           => $slots,
             'death_saves_successes' => 0,
             'death_saves_failures'  => 0,

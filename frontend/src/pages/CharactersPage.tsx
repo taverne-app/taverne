@@ -5,6 +5,7 @@ import { useCampaigns } from '../contexts/CampaignContext'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
 import { canLevelUp } from '../data/xp'
 import { PartyStats } from '../components/PartyStats'
+import { PartyBoard } from '../components/PartyBoard'
 
 function HpBar({ current, max }: { current: number; max: number }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100))
@@ -199,21 +200,25 @@ export function CharactersPage() {
             </p>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {characters
-              .filter(c => {
-                if (!search.trim()) return true
-                const q = search.toLowerCase()
-                return (
-                  c.name.toLowerCase().includes(q) ||
-                  c.race.toLowerCase().includes(q) ||
-                  c.character_class.toLowerCase().includes(q)
-                )
-              })
-              .map(c => (
-                <CharacterCard key={c.id} character={c} onDelete={handleDelete} />
-              ))}
-          </div>
+          /* Bascule Vue MJ / Cartes et repos de groupe : des gestes sur l'équipe,
+             rapatriés depuis la page Session où ils faisaient doublon. */
+          <PartyBoard characters={characters} setCharacters={setCharacters}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {characters
+                .filter(c => {
+                  if (!search.trim()) return true
+                  const q = search.toLowerCase()
+                  return (
+                    c.name.toLowerCase().includes(q) ||
+                    c.race.toLowerCase().includes(q) ||
+                    c.character_class.toLowerCase().includes(q)
+                  )
+                })
+                .map(c => (
+                  <CharacterCard key={c.id} character={c} onDelete={handleDelete} />
+                ))}
+            </div>
+          </PartyBoard>
         )}
 
         {/* Les stats du groupe ne parlent que des personnages : leur place est ici. */}

@@ -49,6 +49,31 @@ class CharacterActionsTest extends TestCase
         $this->assertSame(2, $fresh->hit_dice_remaining);
     }
 
+    public function test_long_rest_restores_all_hit_points(): void
+    {
+        // Le cœur d'un repos long — et c'est justement ce qui manquait : il rendait
+        // les sorts et les dés de vie, mais laissait le groupe blessé.
+        $character = $this->character([
+            'level'            => 4,
+            'max_hp'           => 40,
+            'current_hp'       => 12,
+            'temporary_hp'     => 5,
+            'exhaustion_level' => 3,
+        ]);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/characters/{$character->id}/rest")
+            ->assertOk()
+            ->assertJsonPath('data.combat.current_hp', 40);
+
+        $fresh = $character->fresh();
+        $this->assertSame(40, $fresh->current_hp);
+        // Les PV temporaires ne survivent pas au repos.
+        $this->assertSame(0, $fresh->temporary_hp);
+        // Un repos long retire UN niveau d'épuisement, pas tous.
+        $this->assertSame(2, $fresh->exhaustion_level);
+    }
+
     // ── Repos court ──────────────────────────────────────────────────────────
 
     public function test_short_rest_spends_hit_dice_and_heals(): void

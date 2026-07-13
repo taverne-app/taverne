@@ -1,11 +1,6 @@
 import { useState, useMemo, useEffect } from 'react'
-import { Link } from 'react-router-dom'
-import { getCampaign, setCampaignTimeOfDay } from '../../api/campaigns'
-import {
-  deleteCharacter, listCharacters, longRest, shortRest, updateConditions, updateDeathSaves,
-  updateExhaustion, updateHp, updateIdentity, updateInspiration, updateInventory,
-  type Character,
-} from '../../api/characters'
+import { setCampaignTimeOfDay } from '../../api/campaigns'
+import { updateIdentity, updateInventory, type Character } from '../../api/characters'
 import { TIME_OF_DAY, TIME_OF_DAY_CONFIG, type TimeOfDay } from '../../lib/timeOfDay'
 import { canLevelUp, xpForNextLevel } from '../../data/xp'
 import { MarkdownText } from '../../components/MarkdownText'
@@ -21,7 +16,7 @@ import {
 } from '../../api/campaigns'
 import { useToast } from '../../contexts/ToastContext'
 import type { SectionProps } from './shared'
-import { uuid, sign, hpColor, CONDITIONS_FR } from './shared'
+import { uuid } from './shared'
 import { createCombatant } from '../../api/combatants'
 import { useNavigate } from 'react-router-dom'
 import { computeEncounterDifficulty, difficultyColor } from '../../data/encounter_difficulty'
@@ -42,16 +37,12 @@ import CampaignJournalSection from './CampaignJournalSection'
 export default function CampaignSessionSection(props: SectionProps) {
   const {
     campaign, setCampaign, characters, setCharacters, saving, setSaving,
-    setAllChars, setShowAddModal, sessions, setSessions,
+    sessions, setSessions,
   } = props
   const toast = useToast()
   const navigate = useNavigate()
 
   const [todSaving, setTodSaving]   = useState(false)
-  const [confirmRemove, setConfirmRemove]       = useState<number | null>(null)
-  const [restingAll, setRestingAll] = useState(false)
-  const [restDone, setRestDone]     = useState<'long' | 'short' | null>(null)
-  const [showDmScreen, setShowDmScreen] = useState(false)
   const [dmNotesDraft, setDmNotesDraft] = useState(campaign.dm_notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
   const [dmNotesPreview, setDmNotesPreview] = useState(false)
@@ -78,25 +69,6 @@ export default function CampaignSessionSection(props: SectionProps) {
   const [editEntryDraft, setEditEntryDraft] = useState<RandomTableEntry>({ weight: 1, text: '' })
   const [tableSearch, setTableSearch] = useState('')
   const [showDashboard, setShowDashboard] = useState(true)
-  const [hpEditCharId, setHpEditCharId] = useState<number | null>(null)
-  const [hpDeltaValue, setHpDeltaValue] = useState(5)
-  async function openAddModal() {
-    const all = await listCharacters()
-    const inCampaign = new Set(characters.map(c => c.id))
-    setAllChars(all.filter(c => !inCampaign.has(c.id)))
-    setShowAddModal(true)
-  }
-  async function handleDeleteCharacter(characterId: number) {
-    if (!campaign) return
-    setSaving(true)
-    try {
-      await deleteCharacter(characterId)
-      const fresh = await getCampaign(campaign.id)
-      setCampaign(fresh)
-      setCharacters(fresh.characters)
-      setConfirmRemove(null)
-    } finally { setSaving(false) }
-  }
   async function handleSetTimeOfDay(value: TimeOfDay) {
     if (!campaign || todSaving) return
     setTodSaving(true)
@@ -116,51 +88,6 @@ export default function CampaignSessionSection(props: SectionProps) {
       const updated = await updateCampaign(campaign.id, { dm_notes: dmNotesDraft })
       setCampaign(updated)
     } finally { setSavingNotes(false) }
-  }
-  async function handleToggleInspiration(charId: number, current: boolean) {
-    const updated = await updateInspiration(charId, !current)
-    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
-  }
-  async function handleQuickHp(charId: number, amount: number, type: 'damage' | 'heal' | 'temporary') {
-    if (amount <= 0) return
-    const updated = await updateHp(charId, amount, type)
-    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
-    setHpEditCharId(null)
-  }
-  async function handleToggleDeathSave(charId: number, kind: 'success' | 'failure', current: number) {
-    const char = characters.find(c => c.id === charId)
-    if (!char) return
-    const next = current >= 3 ? 0 : current + 1
-    const updated = await updateDeathSaves(
-      charId,
-      kind === 'success' ? next : char.state.death_saves_successes,
-      kind === 'failure' ? next : char.state.death_saves_failures,
-    )
-    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
-  }
-  async function handleGroupShortRest() {
-    if (restingAll || characters.length === 0) return
-    setRestingAll(true)
-    try {
-      const results = await Promise.all(characters.map(c => shortRest(c.id, 1)))
-      setCharacters(results.map(r => r.character))
-      setRestDone('short')
-      setTimeout(() => setRestDone(null), 4000)
-    } finally {
-      setRestingAll(false)
-    }
-  }
-  async function handleGroupLongRest() {
-    if (restingAll || characters.length === 0) return
-    setRestingAll(true)
-    try {
-      const updated = await Promise.all(characters.map(c => longRest(c.id)))
-      setCharacters(updated)
-      setRestDone('long')
-      setTimeout(() => setRestDone(null), 4000)
-    } finally {
-      setRestingAll(false)
-    }
   }
   async function handleAddTreasureItem() {
     if (!campaign || !treasuryDraft.name.trim()) return
@@ -293,20 +220,6 @@ export default function CampaignSessionSection(props: SectionProps) {
     }
     setTableResults(prev => ({ ...prev, [tableIdx]: table.entries[table.entries.length - 1].text }))
   }
-  async function handleRemoveCondition(charId: number, cond: string) {
-    const char = characters.find(c => c.id === charId)
-    if (!char) return
-    const next = char.state.conditions.filter(c => c !== cond)
-    const updated = await updateConditions(charId, next)
-    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
-  }
-  async function handleAddCondition(charId: number, cond: string) {
-    const char = characters.find(c => c.id === charId)
-    if (!char || !cond || char.state.conditions.includes(cond)) return
-    const next = [...char.state.conditions, cond]
-    const updated = await updateConditions(charId, next)
-    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
-  }
   async function handleDuplicateTable(index: number) {
     if (!campaign) return
     const src = (campaign.random_tables ?? [])[index]
@@ -315,13 +228,6 @@ export default function CampaignSessionSection(props: SectionProps) {
     const next = [...(campaign.random_tables ?? []), copy]
     const updated = await updateCampaign(campaign.id, { random_tables: next })
     setCampaign(updated)
-  }
-  async function handleChangeExhaustion(charId: number, delta: number) {
-    const char = characters.find(c => c.id === charId)
-    if (!char) return
-    const next = Math.max(0, Math.min(6, char.state.exhaustion_level + delta))
-    const updated = await updateExhaustion(charId, next)
-    setCharacters(prev => prev.map(c => c.id === charId ? updated : c))
   }
 
   const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
@@ -1246,439 +1152,6 @@ export default function CampaignSessionSection(props: SectionProps) {
               {characters.length === 0 && !campaign.game_calendar?.date && upcoming.length === 0 && (
                 <p className="text-stone-600 text-sm text-center py-2">Ajoutez des personnages et configurez le calendrier pour voir le résumé ici.</p>
               )}
-            </div>
-          )}
-        </div>
-
-        {/* Characters */}
-        <div>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
-              Personnages ({characters.length})
-            </h2>
-            <div className="flex items-center gap-3">
-              {characters.length > 0 && (
-                <>
-                  <button
-                    onClick={() => setShowDmScreen(v => !v)}
-                    className={`text-xs font-medium transition-colors ${
-                      showDmScreen
-                        ? 'text-violet-400 hover:text-violet-300'
-                        : 'text-stone-500 hover:text-violet-400'
-                    }`}
-                    title="Vue MJ — toutes les infos en tableau"
-                  >
-                    {showDmScreen ? '⊞ Cartes' : '☰ Vue MJ'}
-                  </button>
-                  <button
-                    onClick={handleGroupShortRest}
-                    disabled={restingAll}
-                    className="text-stone-500 hover:text-sky-400 text-xs font-medium transition-colors disabled:opacity-40"
-                    title="Repos court — 1 dé de vie par personnage"
-                  >
-                    {restingAll ? '…' : restDone === 'short' ? '✓ Repos terminé' : '☀ Repos court'}
-                  </button>
-                  <button
-                    onClick={handleGroupLongRest}
-                    disabled={restingAll}
-                    className="text-stone-500 hover:text-amber-400 text-xs font-medium transition-colors disabled:opacity-40 flex items-center gap-1"
-                    title="Appliquer un repos long à tous les personnages"
-                  >
-                    {restingAll ? '…' : restDone === 'long' ? '✓ Repos terminé' : '🌙 Repos long'}
-                  </button>
-                </>
-              )}
-              <button
-                onClick={openAddModal}
-                className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-              >
-                + Ajouter
-              </button>
-            </div>
-          </div>
-
-          {characters.length === 0 ? (
-            <div className="bg-stone-900 border border-stone-800 rounded-xl p-10 text-center">
-              <p className="text-stone-500 text-sm">
-                Aucun personnage dans cette campagne.{' '}
-                <button onClick={openAddModal} className="text-amber-400 hover:text-amber-300 transition-colors">
-                  Ajouter un personnage
-                </button>
-              </p>
-            </div>
-          ) : showDmScreen ? (
-            /* ── Vue MJ ── */
-            <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
-              <div className="divide-y divide-stone-800">
-                {characters.map(c => {
-                  const hpPct = Math.max(0, Math.min(100, (c.combat.current_hp / c.combat.max_hp) * 100))
-                  const isDying = c.combat.current_hp <= 0
-                  const levelUp = canLevelUp(c.level, c.experience_points)
-                  return (
-                    <div key={c.id} className="px-4 py-3 hover:bg-stone-800/40 transition-colors relative group">
-                      <Link to={`/characters/${c.id}`} className="absolute inset-0" />
-                      <div className="flex items-center gap-4 min-w-0">
-
-                        {/* Name + class */}
-                        <div className="w-44 shrink-0 min-w-0">
-                          <div className="flex items-center gap-1.5 min-w-0">
-                            <span className={`font-semibold text-sm truncate ${isDying ? 'text-red-400' : 'text-white'}`}>
-                              {c.name}
-                            </span>
-                            {levelUp && (
-                              <span className="shrink-0 text-xs bg-amber-900/50 border border-amber-600/50 text-amber-400 rounded px-1 py-0.5 font-semibold">
-                                ⬆ Niv
-                              </span>
-                            )}
-                            <button
-                              onClick={e => { e.preventDefault(); handleToggleInspiration(c.id, c.combat.inspiration) }}
-                              title={c.combat.inspiration ? 'Retirer l\'inspiration' : 'Accorder l\'inspiration'}
-                              className={`shrink-0 text-xs transition-colors ${c.combat.inspiration ? 'text-amber-400 hover:text-amber-300' : 'text-stone-700 hover:text-amber-500'}`}
-                            >✦</button>
-                          </div>
-                          <p className="text-stone-500 text-xs truncate mt-0.5">
-                            {c.character_class} Niv.{c.level} · CA {c.combat.armor_class}
-                            {(c.currency.pp + c.currency.po + c.currency.pe + c.currency.pa + c.currency.pc) > 0 && (
-                              <> · {Math.round(c.currency.pp * 10 + c.currency.po + c.currency.pe * 0.5 + c.currency.pa * 0.1 + c.currency.pc * 0.01)} po</>
-                            )}
-                          </p>
-                        </div>
-
-                        {/* HP — cliquable pour soins/dégâts rapides */}
-                        <div className="w-40 shrink-0" onClick={e => e.preventDefault()}>
-                          <div className="flex items-center justify-between mb-1">
-                            <button
-                              onClick={e => { e.preventDefault(); setHpEditCharId(hpEditCharId === c.id ? null : c.id); setHpDeltaValue(5) }}
-                              className={`text-sm font-bold transition-colors ${isDying ? 'text-red-400 hover:text-red-300' : 'text-white hover:text-amber-300'}`}
-                              title="Cliquer pour modifier les PV"
-                            >
-                              {c.combat.current_hp}
-                            </button>
-                            <span className="text-stone-500 text-xs">/ {c.combat.max_hp}</span>
-                            {c.combat.temporary_hp > 0 && (
-                              <span className="text-sky-400 text-xs">+{c.combat.temporary_hp}</span>
-                            )}
-                          </div>
-                          <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-300 ${hpColor(c.combat.current_hp, c.combat.max_hp)}`}
-                              style={{ width: `${hpPct}%` }}
-                            />
-                          </div>
-                          {hpEditCharId === c.id && (
-                            <div className="mt-1.5 flex items-center gap-1">
-                              <input
-                                type="number"
-                                value={hpDeltaValue}
-                                onChange={e => setHpDeltaValue(Math.max(1, parseInt(e.target.value) || 1))}
-                                min={1}
-                                className="w-12 bg-stone-800 border border-stone-700 rounded px-1.5 py-0.5 text-white text-xs text-center focus:outline-none"
-                                onClick={e => e.preventDefault()}
-                              />
-                              <button
-                                onClick={e => { e.preventDefault(); handleQuickHp(c.id, hpDeltaValue, 'heal') }}
-                                className="flex-1 bg-emerald-900/60 hover:bg-emerald-900/80 border border-emerald-800/50 text-emerald-400 text-xs font-bold rounded py-0.5 transition-colors"
-                              >+</button>
-                              <button
-                                onClick={e => { e.preventDefault(); handleQuickHp(c.id, hpDeltaValue, 'damage') }}
-                                className="flex-1 bg-red-900/40 hover:bg-red-900/60 border border-red-800/40 text-red-400 text-xs font-bold rounded py-0.5 transition-colors"
-                              >−</button>
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Death saves — cliquables */}
-                        {isDying && (
-                          <div className="flex items-center gap-1 shrink-0" title="Cliquer pour ajouter un jet (cycle 0→3→0)">
-                            {[1,2,3].map(n => (
-                              <button
-                                key={n}
-                                onClick={e => { e.preventDefault(); handleToggleDeathSave(c.id, 'success', c.state.death_saves_successes) }}
-                                className={`w-3.5 h-3.5 rounded-full border transition-colors ${n <= c.state.death_saves_successes ? 'bg-emerald-500 border-emerald-400 hover:bg-emerald-400' : 'border-stone-600 hover:border-emerald-500'}`}
-                              />
-                            ))}
-                            <span className="text-stone-600 text-xs mx-0.5">/</span>
-                            {[1,2,3].map(n => (
-                              <button
-                                key={n}
-                                onClick={e => { e.preventDefault(); handleToggleDeathSave(c.id, 'failure', c.state.death_saves_failures) }}
-                                className={`w-3.5 h-3.5 rounded-full border transition-colors ${n <= c.state.death_saves_failures ? 'bg-red-500 border-red-400 hover:bg-red-400' : 'border-stone-600 hover:border-red-500'}`}
-                              />
-                            ))}
-                          </div>
-                        )}
-
-                        {/* Conditions — cliquables pour retirer, + select pour ajouter */}
-                        <div className="flex flex-wrap gap-1 flex-1 min-w-0 items-center" onClick={e => e.preventDefault()}>
-                          {c.state.conditions.map(cond => (
-                            <button
-                              key={cond}
-                              onClick={e => { e.preventDefault(); handleRemoveCondition(c.id, cond) }}
-                              title="Cliquer pour retirer"
-                              className="text-xs bg-purple-900/50 border border-purple-700 text-purple-300 hover:bg-red-900/40 hover:border-red-700 hover:text-red-300 rounded px-1.5 py-0.5 transition-colors"
-                            >
-                              {CONDITIONS_FR[cond] ?? cond} ×
-                            </button>
-                          ))}
-                          <select
-                            value=""
-                            onChange={e => { if (e.target.value) { handleAddCondition(c.id, e.target.value); e.target.value = '' } }}
-                            onClick={e => e.preventDefault()}
-                            className="text-xs bg-transparent border border-stone-700 text-stone-600 hover:text-stone-400 rounded px-1 py-0.5 focus:outline-none cursor-pointer transition-colors"
-                            title="Ajouter une condition"
-                          >
-                            <option value="">+ cond.</option>
-                            {Object.entries(CONDITIONS_FR).filter(([k]) => !c.state.conditions.includes(k)).map(([k, v]) => (
-                              <option key={k} value={k}>{v}</option>
-                            ))}
-                          </select>
-                        </div>
-
-                        {/* Passive perception */}
-                        <div className="hidden lg:flex flex-col items-center shrink-0 w-12" title="Perception passive">
-                          <span className="text-stone-500 text-[10px] uppercase tracking-wide">PP</span>
-                          <span className="text-stone-200 text-sm font-semibold">{c.passive_perception}</span>
-                        </div>
-
-                        {/* Spell slots + exhaustion + concentration */}
-                        <div className="hidden xl:flex flex-col gap-1 shrink-0 min-w-[120px]">
-                          {c.state.concentrating_on && (
-                            <span className="text-xs bg-violet-900/50 border border-violet-700/50 text-violet-300 rounded px-1.5 py-0.5 truncate max-w-[140px]" title={`◈ ${c.state.concentrating_on}`}>
-                              ◈ {c.state.concentrating_on}
-                            </span>
-                          )}
-                          <div className="flex items-center gap-1" onClick={e => e.preventDefault()}>
-                            {c.state.exhaustion_level > 0 && (
-                              <span className={`text-xs rounded px-1.5 py-0.5 border ${
-                                c.state.exhaustion_level <= 2 ? 'bg-amber-900/40 border-amber-700/50 text-amber-400' :
-                                c.state.exhaustion_level <= 4 ? 'bg-orange-900/40 border-orange-700/50 text-orange-400' :
-                                'bg-red-900/40 border-red-700/50 text-red-400'
-                              }`}>
-                                Épuis. {c.state.exhaustion_level}
-                              </span>
-                            )}
-                            <button
-                              onClick={e => { e.preventDefault(); handleChangeExhaustion(c.id, -1) }}
-                              disabled={c.state.exhaustion_level <= 0}
-                              title="Réduire l'épuisement"
-                              className="text-stone-600 hover:text-stone-400 text-xs disabled:opacity-20 transition-colors"
-                            >−</button>
-                            <button
-                              onClick={e => { e.preventDefault(); handleChangeExhaustion(c.id, +1) }}
-                              disabled={c.state.exhaustion_level >= 6}
-                              title="Augmenter l'épuisement"
-                              className="text-stone-600 hover:text-amber-400 text-xs disabled:opacity-20 transition-colors"
-                            >+</button>
-                          </div>
-                          {c.spellcasting.ability && Object.entries(c.spellcasting.slots)
-                            .filter(([, s]) => s.max > 0)
-                            .sort(([a], [b]) => Number(a) - Number(b))
-                            .slice(0, 4)
-                            .map(([lvl, slot]) => {
-                              const available = slot.max - slot.used
-                              return (
-                                <div key={lvl} className="flex items-center gap-1">
-                                  <span className="text-stone-600 text-xs w-3">{lvl}</span>
-                                  <div className="flex gap-0.5">
-                                    {Array.from({ length: slot.max }, (_, i) => (
-                                      <span
-                                        key={i}
-                                        className={`w-2.5 h-2.5 rounded-full border ${
-                                          i < available ? 'bg-violet-500 border-violet-400' : 'bg-transparent border-stone-600'
-                                        }`}
-                                      />
-                                    ))}
-                                  </div>
-                                </div>
-                              )
-                            })
-                          }
-                          {c.resources.length > 0 && (
-                            <div className="flex flex-wrap gap-1">
-                              {c.resources.map((r, i) => (
-                                <span key={i} className={`text-xs rounded px-1.5 py-0.5 border ${
-                                  r.current === 0
-                                    ? 'bg-stone-800 border-stone-700 text-stone-600'
-                                    : 'bg-stone-800 border-stone-600 text-stone-300'
-                                }`}>
-                                  {r.name} {r.current}/{r.max}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Link arrow */}
-                        <span className="text-stone-700 group-hover:text-stone-500 text-sm transition-colors shrink-0 relative z-10">↗</span>
-                      </div>
-                    </div>
-                  )
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {characters.map(c => {
-                const hpPct = Math.max(0, Math.min(100, (c.combat.current_hp / c.combat.max_hp) * 100))
-                const isDying = c.combat.current_hp <= 0
-
-                return (
-                  <div
-                    key={c.id}
-                    className="bg-stone-900 border border-stone-800 rounded-xl p-4 hover:border-stone-700 transition-colors group relative"
-                  >
-                    <Link to={`/characters/${c.id}`} className="absolute inset-0 rounded-xl" />
-
-                    {/* Header */}
-                    <div className="flex items-start justify-between mb-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        {c.portrait_url && (
-                          <img
-                            src={c.portrait_url}
-                            alt={c.name}
-                            className="w-10 h-10 rounded-full object-cover shrink-0 border border-stone-700"
-                            onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
-                          />
-                        )}
-                        <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className={`font-semibold text-sm ${isDying ? 'text-red-400' : 'text-white'}`}>
-                            {c.name}
-                          </h3>
-                          {canLevelUp(c.level, c.experience_points) && (
-                            <span className="text-xs bg-amber-900/50 border border-amber-600/50 text-amber-400 rounded px-1 py-0.5 font-semibold">
-                              ⬆ Niv
-                            </span>
-                          )}
-                          <button
-                            onClick={e => { e.preventDefault(); handleToggleInspiration(c.id, c.combat.inspiration) }}
-                            title={c.combat.inspiration ? "Retirer l'inspiration" : "Accorder l'inspiration"}
-                            className={`relative z-10 text-xs transition-colors ${c.combat.inspiration ? 'text-amber-400 hover:text-amber-300' : 'text-stone-700 hover:text-amber-500'}`}
-                          >✦</button>
-                        </div>
-                        <p className="text-stone-500 text-xs mt-0.5">
-                          {c.race} · {c.character_class} · Niv. {c.level}
-                        </p>
-                        </div>
-                      </div>
-                      {/* Remove button */}
-                      <div className="relative z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                        {confirmRemove === c.id ? (
-                          <div className="flex gap-1.5">
-                            <button
-                              onClick={() => setConfirmRemove(null)}
-                              className="text-stone-500 text-xs hover:text-stone-300 transition-colors"
-                            >
-                              ✕
-                            </button>
-                            <button
-                              onClick={() => handleDeleteCharacter(c.id)}
-                              className="text-red-400 text-xs hover:text-red-300 transition-colors"
-                            >
-                              Supprimer définitivement
-                            </button>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmRemove(c.id)}
-                            className="text-stone-700 hover:text-red-400 text-xs transition-colors"
-                          >
-                            Retirer
-                          </button>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Stats row */}
-                    <div className="flex gap-3 text-center mb-3">
-                      <div className="flex-1 bg-stone-800 rounded-lg py-1.5">
-                        <p className="text-stone-500 text-xs">CA</p>
-                        <p className="text-white font-bold text-sm">{c.combat.armor_class}</p>
-                      </div>
-                      <div className="flex-1 bg-stone-800 rounded-lg py-1.5">
-                        <p className="text-stone-500 text-xs">Init.</p>
-                        <p className="text-white font-bold text-sm">{sign(c.combat.initiative)}</p>
-                      </div>
-                      <div className="flex-1 bg-stone-800 rounded-lg py-1.5">
-                        <p className="text-stone-500 text-xs">Maît.</p>
-                        <p className="text-white font-bold text-sm">+{c.proficiency_bonus}</p>
-                      </div>
-                    </div>
-
-                    {/* HP bar */}
-                    <div>
-                      <div className="flex justify-between text-xs mb-1">
-                        <span className={isDying ? 'text-red-400 font-semibold' : 'text-stone-400'}>PV</span>
-                        <span className="text-stone-400">
-                          {c.combat.current_hp} / {c.combat.max_hp}
-                          {c.combat.temporary_hp > 0 && (
-                            <span className="text-sky-400 ml-1">+{c.combat.temporary_hp}</span>
-                          )}
-                        </span>
-                      </div>
-                      <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
-                        <div
-                          className={`h-full rounded-full transition-all duration-300 ${hpColor(c.combat.current_hp, c.combat.max_hp)}`}
-                          style={{ width: `${hpPct}%` }}
-                        />
-                      </div>
-                    </div>
-
-                    {/* Conditions */}
-                    {c.state.conditions.length > 0 && (
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {c.state.conditions.map(cond => (
-                          <span
-                            key={cond}
-                            className="text-xs bg-purple-900/50 border border-purple-700 text-purple-300 rounded px-1.5 py-0.5"
-                          >
-                            {CONDITIONS_FR[cond] ?? cond}
-                          </span>
-                        ))}
-                      </div>
-                    )}
-
-                    {/* Hover card — spell slots, concentration, resources */}
-                    {(() => {
-                      const slots = Object.entries(c.spellcasting.slots).filter(([, s]) => s.max > 0)
-                      const resources = c.resources.filter(r => r.max > 0)
-                      const hasExtras = c.state.concentrating_on || slots.length > 0 || resources.length > 0
-                      if (!hasExtras) return null
-                      return (
-                        <div className="opacity-0 group-hover:opacity-100 transition-opacity mt-2 pt-2 border-t border-stone-800">
-                          {c.state.concentrating_on && (
-                            <p className="text-violet-400 text-xs mb-1">⊙ {c.state.concentrating_on}</p>
-                          )}
-                          {slots.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5 mb-1">
-                              {slots.map(([lvl, s]) => (
-                                <span
-                                  key={lvl}
-                                  className={`text-xs font-mono px-1 rounded ${s.used >= s.max ? 'text-stone-600 bg-stone-800' : 'text-amber-400 bg-amber-900/30'}`}
-                                >
-                                  {lvl}:{s.max - s.used}/{s.max}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                          {resources.length > 0 && (
-                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
-                              {resources.map(r => (
-                                <span
-                                  key={r.name}
-                                  className={`text-xs ${r.current === 0 ? 'text-stone-600' : 'text-sky-400'}`}
-                                >
-                                  {r.name} {r.current}/{r.max}
-                                </span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )
-                    })()}
-                  </div>
-                )
-              })}
             </div>
           )}
         </div>
