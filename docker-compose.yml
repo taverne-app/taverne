@@ -3,7 +3,7 @@ services:
     build:
       context: ./app
       dockerfile: ../docker/Dockerfile.app
-    restart: unless-stopped
+    restart: always
     volumes:
       - ./app:/var/www/html
       - vendor:/var/www/html/vendor
@@ -27,7 +27,7 @@ services:
         VITE_REVERB_HOST: ${VITE_REVERB_HOST:-reverb}
         VITE_REVERB_PORT: ${VITE_REVERB_PORT:-8080}
         VITE_REVERB_SCHEME: ${VITE_REVERB_SCHEME:-http}
-    restart: unless-stopped
+    restart: always
     # Publier sans préfixe d'adresse ferait écouter docker-proxy sur 0.0.0.0 ET
     # [::]. L'IPv6 de cette machine est globale et sans NAT : le port serait
     # joignable depuis internet. Les services sont donc liés au loopback ; en
@@ -41,7 +41,7 @@ services:
 
   db:
     image: postgres:16-alpine
-    restart: unless-stopped
+    restart: always
     environment:
       POSTGRES_DB: ${DB_DATABASE:-taverne}
       POSTGRES_USER: ${DB_USERNAME:-taverne}
@@ -60,7 +60,7 @@ services:
     build:
       context: ./app
       dockerfile: ../docker/Dockerfile.app
-    restart: unless-stopped
+    restart: always
     command: php artisan reverb:start --host=0.0.0.0 --port=8080
     ports:
       - "127.0.0.1:8080:8080"
@@ -81,7 +81,7 @@ services:
 
   redis:
     image: redis:7-alpine
-    restart: unless-stopped
+    restart: always
     volumes:
       - redis_data:/data
     networks:
@@ -89,7 +89,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    restart: unless-stopped
+    restart: always
     ports:
       - "127.0.0.1:8025:8025"
     networks:
@@ -97,7 +97,7 @@ services:
 
   nginx:
     image: nginx:alpine
-    restart: unless-stopped
+    restart: always
     ports:
       - "127.0.0.1:8000:80"
     volumes:
