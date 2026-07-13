@@ -1,8 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
 import { setCampaignTimeOfDay } from '../../api/campaigns'
-import { updateIdentity, updateInventory, type Character } from '../../api/characters'
+import { updateInventory, type Character } from '../../api/characters'
 import { TIME_OF_DAY, TIME_OF_DAY_CONFIG, type TimeOfDay } from '../../lib/timeOfDay'
-import { canLevelUp, xpForNextLevel } from '../../data/xp'
 import { MarkdownText } from '../../components/MarkdownText'
 import { MicButton } from '../../components/MicButton'
 import {
@@ -36,7 +35,7 @@ import CampaignJournalSection from './CampaignJournalSection'
  */
 export default function CampaignSessionSection(props: SectionProps) {
   const {
-    campaign, setCampaign, characters, setCharacters, saving, setSaving,
+    campaign, setCampaign, characters, saving, setSaving,
     sessions, setSessions,
   } = props
   const toast = useToast()
@@ -54,9 +53,6 @@ export default function CampaignSessionSection(props: SectionProps) {
   const [editTreasureDraft, setEditTreasureDraft]   = useState<TreasureItem>(emptyTreasureDraft())
   const [treasurySearch, setTreasurySearch] = useState('')
   const [treasurySort, setTreasurySort] = useState<'default' | 'name' | 'quantity' | 'value'>('default')
-  const [xpInput, setXpInput] = useState('')
-  const [showXpPanel, setShowXpPanel] = useState(false)
-  const [savingXp, setSavingXp] = useState(false)
   const emptyTableDraft = (): RandomTable => ({ name: '', entries: [] })
   const [tableDraft, setTableDraft] = useState<RandomTable>(emptyTableDraft())
   const [addingTable, setAddingTable] = useState(false)
@@ -68,7 +64,6 @@ export default function CampaignSessionSection(props: SectionProps) {
   const [editingEntryKey, setEditingEntryKey] = useState<string | null>(null)
   const [editEntryDraft, setEditEntryDraft] = useState<RandomTableEntry>({ weight: 1, text: '' })
   const [tableSearch, setTableSearch] = useState('')
-  const [showDashboard, setShowDashboard] = useState(true)
   async function handleSetTimeOfDay(value: TimeOfDay) {
     if (!campaign || todSaving) return
     setTodSaving(true)
@@ -140,20 +135,6 @@ export default function CampaignSessionSection(props: SectionProps) {
     const updated = await updateCampaign(campaign.id, { party_treasury: next })
     setCampaign(updated)
     setDistributingIdx(null)
-  }
-  async function handleAwardXp() {
-    if (!campaign || !xpInput.trim() || characters.length === 0) return
-    const amount = parseInt(xpInput)
-    if (isNaN(amount) || amount <= 0) return
-    setSavingXp(true)
-    try {
-      const updated = await Promise.all(
-        characters.map(c => updateIdentity(c.id, { experience_points: c.experience_points + amount }))
-      )
-      setCharacters(updated)
-      setXpInput('')
-      setShowXpPanel(false)
-    } finally { setSavingXp(false) }
   }
   async function handleAddTable() {
     if (!campaign || !tableDraft.name.trim()) return
@@ -1039,120 +1020,6 @@ export default function CampaignSessionSection(props: SectionProps) {
           </div>
           {campaign?.share_token && (
             <p className="text-stone-600 text-xs mt-2">Visible en temps réel sur les fiches joueurs</p>
-          )}
-        </div>
-
-        {/* Tableau de bord MJ */}
-        <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
-          <button
-            onClick={() => setShowDashboard(v => !v)}
-            className="w-full flex items-center justify-between px-5 py-3 text-left hover:bg-stone-800/50 transition-colors"
-          >
-            <span className="text-stone-300 text-sm font-semibold">Tableau de bord</span>
-            <span className="text-stone-500 text-xs">{showDashboard ? '▲' : '▼'}</span>
-          </button>
-          {showDashboard && (
-            <div className="px-5 pb-5 space-y-4 border-t border-stone-800">
-              <div className="grid grid-cols-2 gap-4">
-                {/* Calendrier */}
-                {(campaign.game_calendar?.date || campaign.game_calendar?.weather) && (
-                  <div>
-                    <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Calendrier</p>
-                    <div className="bg-stone-800 rounded-lg p-3 space-y-1">
-                      {campaign.game_calendar.date && (
-                        <p className="text-stone-200 text-sm">📅 {campaign.game_calendar.date}</p>
-                      )}
-                      {campaign.game_calendar.weather && (
-                        <p className="text-stone-300 text-sm">🌤 {campaign.game_calendar.weather}</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-
-                {/* Prochaine session */}
-                {activeSession && activePrep && (
-                  <div>
-                    <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Prochaine session</p>
-                    <div className="bg-sky-950/40 border border-sky-800/30 rounded-lg p-3 space-y-1">
-                      <p className="text-sky-200 text-sm font-medium">{activePrep.title || activeSession.title || 'Sans titre'}</p>
-                      {activePrep.date && (
-                        <p className="text-sky-400 text-xs">📅 {activePrep.date}</p>
-                      )}
-                      {activePrep.npc_names.length > 0 && (
-                        <p className="text-stone-400 text-xs">{activePrep.npc_names.length} PNJ · {activePrep.encounter_names.length} rencontres</p>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Progression XP */}
-              {characters.length > 0 && (
-                <div>
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-stone-500 text-xs uppercase tracking-widest">Progression XP</p>
-                    <button
-                      onClick={() => setShowXpPanel(v => !v)}
-                      className="text-amber-400 hover:text-amber-300 text-xs font-semibold transition-colors"
-                    >
-                      {showXpPanel ? 'Annuler' : '+ Attribuer XP'}
-                    </button>
-                  </div>
-                  {showXpPanel && (
-                    <div className="flex items-center gap-2 mb-3">
-                      <input
-                        type="number"
-                        value={xpInput}
-                        onChange={e => setXpInput(e.target.value)}
-                        placeholder="XP à distribuer à tous…"
-                        autoFocus
-                        className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors"
-                      />
-                      <button
-                        onClick={handleAwardXp}
-                        disabled={savingXp || !xpInput.trim()}
-                        className="bg-amber-500 hover:bg-amber-400 text-black text-sm font-semibold rounded-lg px-3 py-2 transition-colors disabled:opacity-40"
-                      >
-                        Distribuer
-                      </button>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {characters.map(c => {
-                      const nextXp = xpForNextLevel(c.level)
-                      const prevXp = xpForNextLevel(c.level - 1) ?? 0
-                      const pct = nextXp ? Math.min(1, Math.max(0, (c.experience_points - prevXp) / (nextXp - prevXp))) : 1
-                      const levelUp = canLevelUp(c.level, c.experience_points)
-                      return (
-                        <div key={c.id} className="bg-stone-800 rounded-lg p-3">
-                          <div className="flex items-center justify-between mb-1">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <span className="text-stone-200 text-xs font-medium truncate">{c.name}</span>
-                              {levelUp && (
-                                <span className="text-xs bg-amber-500 text-black font-bold rounded px-1.5 py-0.5 shrink-0">↑ NIV</span>
-                              )}
-                            </div>
-                            <span className="text-stone-500 text-xs shrink-0 ml-2">Niv.{c.level} · {c.experience_points.toLocaleString()} XP</span>
-                          </div>
-                          <div className="h-1.5 bg-stone-700 rounded-full overflow-hidden">
-                            <div className="h-full bg-amber-500 rounded-full transition-all" style={{ width: `${pct * 100}%` }} />
-                          </div>
-                          {nextXp && (
-                            <p className="text-stone-600 text-[10px] mt-0.5 text-right">
-                              {nextXp.toLocaleString()} XP pour niv.{c.level + 1}
-                            </p>
-                          )}
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {characters.length === 0 && !campaign.game_calendar?.date && upcoming.length === 0 && (
-                <p className="text-stone-600 text-sm text-center py-2">Ajoutez des personnages et configurez le calendrier pour voir le résumé ici.</p>
-              )}
-            </div>
           )}
         </div>
 

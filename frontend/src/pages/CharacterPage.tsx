@@ -57,6 +57,7 @@ import { MicButton } from '../components/MicButton'
 import { canLevelUp, xpForNextLevel } from '../data/xp'
 import { ConditionTag } from '../components/ConditionTag'
 import { CONDITIONS_FR } from '../data/conditions'
+import { XpBar } from '../components/XpBar'
 
 // ── Constantes ────────────────────────────────────────────────────────────────
 
@@ -1814,9 +1815,10 @@ export function CharacterPage() {
                   {character.alignment && (
                     <span className="text-stone-500 text-xs">{character.alignment}</span>
                   )}
-                  {character.experience_points > 0 && (
-                    <span className="text-stone-500 text-xs">{character.experience_points} XP</span>
-                  )}
+                </div>
+                {/* La progression se lit d'un coup d'œil, plutôt qu'un nombre brut. */}
+                <div className="mt-3 max-w-xs">
+                  <XpBar level={character.level} xp={character.experience_points} />
                 </div>
               </div>
               </div>

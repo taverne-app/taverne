@@ -6,6 +6,7 @@ import { CreateCharacterModal } from '../components/CreateCharacterModal'
 import { canLevelUp } from '../data/xp'
 import { PartyStats } from '../components/PartyStats'
 import { PartyBoard } from '../components/PartyBoard'
+import { XpBar } from '../components/XpBar'
 
 function HpBar({ current, max }: { current: number; max: number }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100))
@@ -81,6 +82,7 @@ function CharacterCard({
       </div>
 
       <HpBar current={character.combat.current_hp} max={character.combat.max_hp} />
+      <XpBar level={character.level} xp={character.experience_points} compact />
 
       {character.state.conditions.length > 0 && (
         <div className="mt-2 flex flex-wrap gap-1">
@@ -224,7 +226,7 @@ export function CharactersPage() {
         {/* Les stats du groupe ne parlent que des personnages : leur place est ici. */}
         {characters.length > 0 && (
           <div className="mt-8">
-            <PartyStats characters={characters} />
+            <PartyStats characters={characters} setCharacters={setCharacters} />
           </div>
         )}
       </main>

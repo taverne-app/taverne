@@ -1,12 +1,29 @@
-import type { Character } from '../api/characters'
+import { useState } from 'react'
+import { updateIdentity, type Character } from '../api/characters'
+import { useToast } from '../contexts/ToastContext'
 
 /**
- * Statistiques du groupe. Elles vivaient dans l'onglet « Journal » de la campagne,
- * mais ne parlent que des personnages — leur place est en bas de la page Personnages.
+ * Statistiques du groupe, et distribution d'XP.
  *
- * Le nombre de séances, lui, a été abandonné : il n'apprenait rien.
+ * Elles vivaient dans l'onglet « Journal » de la campagne, et la distribution d'XP
+ * dans le tableau de bord de la page Session. Les deux ne parlent que des
+ * personnages : leur place est en bas de la page Personnages.
+ *
+ * L'ordre des tuiles n'est pas anodin : « Niveau moyen » est collé à « XP total »,
+ * parce que c'est la même notion vue de deux façons — et c'est sous l'XP qu'on
+ * en distribue.
  */
-export function PartyStats({ characters }: { characters: Character[] }) {
+export function PartyStats({
+  characters,
+  setCharacters,
+}: {
+  characters: Character[]
+  setCharacters: (updater: (prev: Character[]) => Character[]) => void
+}) {
+  const toast = useToast()
+  const [xpInput, setXpInput] = useState('')
+  const [saving, setSaving] = useState(false)
+
   if (characters.length === 0) return null
 
   const totalHp    = characters.reduce((s, c) => s + c.combat.current_hp, 0)
@@ -16,18 +33,45 @@ export function PartyStats({ characters }: { characters: Character[] }) {
   const dying      = characters.filter(c => c.combat.current_hp <= 0).length
   const hpPct      = totalMaxHp > 0 ? Math.round((totalHp / totalMaxHp) * 100) : null
 
+  /**
+   * Chaque personnage reçoit le montant PLEIN — l'XP d'une rencontre n'est pas
+   * divisée par le nombre de PJ, c'est la règle D&D 5e (le partage est déjà fait
+   * dans le calcul de l'XP de rencontre).
+   */
+  async function handleAwardXp() {
+    const amount = parseInt(xpInput, 10)
+    if (isNaN(amount) || amount === 0) return
+
+    setSaving(true)
+    try {
+      const updated = await Promise.all(
+        characters.map(c => updateIdentity(c.id, {
+          experience_points: Math.max(0, c.experience_points + amount),
+        })),
+      )
+      setCharacters(() => updated)
+      setXpInput('')
+      toast.success(
+        amount > 0
+          ? `+${amount.toLocaleString('fr-FR')} XP pour chaque personnage.`
+          : `${amount.toLocaleString('fr-FR')} XP pour chaque personnage.`,
+      )
+    } catch {
+      toast.error("L'XP n'a pas pu être distribuée. Rechargez la page.")
+    } finally {
+      setSaving(false)
+    }
+  }
+
   return (
     <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
       <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">Statistiques du groupe</h2>
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 items-start">
         <div className="bg-stone-800 rounded-lg p-3 text-center">
           <p className="text-stone-500 text-xs mb-1">Personnages</p>
           <p className="text-white font-bold text-xl">{characters.length}</p>
         </div>
-        <div className="bg-stone-800 rounded-lg p-3 text-center">
-          <p className="text-stone-500 text-xs mb-1">Niveau moyen</p>
-          <p className="text-white font-bold text-xl">{avgLevel}</p>
-        </div>
+
         {hpPct != null && (
           <div className="bg-stone-800 rounded-lg p-3 text-center">
             <p className="text-stone-500 text-xs mb-1">PV groupe</p>
@@ -37,11 +81,39 @@ export function PartyStats({ characters }: { characters: Character[] }) {
             <p className="text-stone-600 text-xs">{totalHp}/{totalMaxHp}</p>
           </div>
         )}
+
+        <div className="bg-stone-800 rounded-lg p-3 text-center">
+          <p className="text-stone-500 text-xs mb-1">Niveau moyen</p>
+          <p className="text-white font-bold text-xl">{avgLevel}</p>
+        </div>
+
         <div className="bg-stone-800 rounded-lg p-3 text-center">
           <p className="text-stone-500 text-xs mb-1">XP total</p>
           <p className="text-white font-bold text-xl">{totalXp.toLocaleString('fr-FR')}</p>
+
+          {/* Distribution : le montant saisi va à CHACUN, tel quel. */}
+          <div className="mt-2 pt-2 border-t border-stone-700 flex items-center gap-1">
+            <input
+              type="number"
+              value={xpInput}
+              onChange={e => setXpInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleAwardXp() }}
+              placeholder="XP à chacun"
+              disabled={saving}
+              className="w-full min-w-0 bg-stone-900 border border-stone-700 rounded px-2 py-1 text-white text-xs text-center placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors disabled:opacity-50"
+            />
+            <button
+              onClick={handleAwardXp}
+              disabled={saving || !xpInput.trim()}
+              title="Ajouter ce montant d'XP à chaque personnage"
+              className="shrink-0 bg-amber-500 hover:bg-amber-400 text-black text-xs font-bold rounded px-2 py-1 transition-colors disabled:opacity-40"
+            >
+              {saving ? '…' : '+'}
+            </button>
+          </div>
         </div>
       </div>
+
       {dying > 0 && (
         <p className="text-red-400 text-xs mt-2 text-center">
           {dying} personnage{dying > 1 ? 's' : ''} à terre
