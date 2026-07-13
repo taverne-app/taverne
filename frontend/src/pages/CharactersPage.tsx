@@ -4,6 +4,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useCampaigns } from '../contexts/CampaignContext'
 import { CreateCharacterModal } from '../components/CreateCharacterModal'
 import { canLevelUp } from '../data/xp'
+import { PartyStats } from '../components/PartyStats'
 
 function HpBar({ current, max }: { current: number; max: number }) {
   const pct = Math.max(0, Math.min(100, (current / max) * 100))
@@ -212,6 +213,13 @@ export function CharactersPage() {
               .map(c => (
                 <CharacterCard key={c.id} character={c} onDelete={handleDelete} />
               ))}
+          </div>
+        )}
+
+        {/* Les stats du groupe ne parlent que des personnages : leur place est ici. */}
+        {characters.length > 0 && (
+          <div className="mt-8">
+            <PartyStats characters={characters} />
           </div>
         )}
       </main>

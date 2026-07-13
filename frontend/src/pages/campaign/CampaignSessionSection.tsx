@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { getCampaign, setCampaignTimeOfDay } from '../../api/campaigns'
 import {
@@ -25,18 +25,25 @@ import { uuid, sign, hpColor, CONDITIONS_FR } from './shared'
 import { createCombatant } from '../../api/combatants'
 import { useNavigate } from 'react-router-dom'
 import { computeEncounterDifficulty, difficultyColor } from '../../data/encounter_difficulty'
+import {
+  createSession, updateSession, deleteSession, reorderSessions,
+  type CampaignSession,
+} from '../../api/sessions'
+import CampaignJournalSection from './CampaignJournalSection'
 
 /**
- * Section « Session » : préparation de séance, calendrier, trésor de groupe,
- * tables aléatoires, ambiance, Vue MJ et distribution d'XP.
+ * Section « Session » : la file des séances à venir (réordonnable), la préparation
+ * de la séance sélectionnée (scènes typées), le journal des séances jouées, puis
+ * calendrier, trésor de groupe, tables aléatoires, ambiance, Vue MJ et XP.
  *
- * Extraite de CampaignPage. Ses 5 blocs JSX n'étaient séparés que par d'autres
- * onglets (mutuellement exclusifs), donc les regrouper ne change pas l'affichage.
+ * Une séance a un cycle de vie : on la prépare, on la joue, elle passe au journal.
+ * L'ordre n'est jamais un impératif — les joueurs dévient, on remonte une séance.
  */
-export default function CampaignSessionSection({
-  campaign, setCampaign, characters, setCharacters, saving, setSaving,
-  setAllChars, setShowAddModal,
-}: SectionProps) {
+export default function CampaignSessionSection(props: SectionProps) {
+  const {
+    campaign, setCampaign, characters, setCharacters, saving, setSaving,
+    setAllChars, setShowAddModal, sessions, setSessions,
+  } = props
   const toast = useToast()
   const navigate = useNavigate()
 
@@ -318,10 +325,59 @@ export default function CampaignSessionSection({
   }
 
   const emptySessionPrep = (): SessionPrep => ({ title: '', date: '', notes: '', npc_names: [], location_names: [], encounter_names: [], scenes: [] })
-  const [sessionPrepDraft, setSessionPrepDraft] = useState<SessionPrep>(campaign.session_prep ?? emptySessionPrep())
+
+  /**
+   * Une séance se prépare, puis se joue. Les séances à venir forment une file que le MJ
+   * réordonne — les joueurs prennent une quête plus tôt, changent de chemin. Les séances
+   * jouées tombent dans le journal, plus bas.
+   */
+  const upcoming = useMemo(
+    () => sessions.filter(s => s.status === 'planned').sort((a, b) => a.position - b.position),
+    [sessions],
+  )
+  const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
+  const activeSession = upcoming.find(s => s.id === activeSessionId) ?? upcoming[0] ?? null
+
+  /** La séance stockée, vue sous la forme SessionPrep attendue par l'éditeur de scènes. */
+  const sessionToPrep = (s: CampaignSession): SessionPrep => ({
+    title: s.title,
+    date: s.session_date ?? '',
+    notes: s.notes ?? '',
+    scenes: s.prep?.scenes ?? [],
+    npc_names: s.prep?.npc_names ?? [],
+    location_names: s.prep?.location_names ?? [],
+    encounter_names: s.prep?.encounter_names ?? [],
+  })
+  const activePrep: SessionPrep | null = activeSession ? sessionToPrep(activeSession) : null
+
+  const [sessionPrepDraft, setSessionPrepDraft] = useState<SessionPrep>(emptySessionPrep())
   const [editingSessionPrep, setEditingSessionPrep] = useState(false)
-  const [hasSessionPrep, setHasSessionPrep] = useState(!!campaign.session_prep)
+  const hasSessionPrep = !!activeSession
   const [savingSessionPrep, setSavingSessionPrep] = useState(false)
+
+  // Changer de séance recharge le brouillon d'édition.
+  useEffect(() => {
+    if (activeSession) setSessionPrepDraft(sessionToPrep(activeSession))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeSession?.id])
+
+  /** Écrit la prep de la séance active. Point de passage unique de tous les gestes de scène. */
+  async function savePrep(next: SessionPrep) {
+    if (!activeSession) return
+    const updated = await updateSession(campaign.id, activeSession.id, {
+      title: next.title || activeSession.title,
+      session_date: next.date || null,
+      notes: next.notes || null,
+      prep: {
+        scenes: next.scenes ?? [],
+        npc_names: next.npc_names ?? [],
+        location_names: next.location_names ?? [],
+        encounter_names: next.encounter_names ?? [],
+      },
+    })
+    setSessions(prev => prev.map(s => (s.id === updated.id ? updated : s)))
+    setSessionPrepDraft(sessionToPrep(updated))
+  }
   const emptyScene = (): PrepScene => ({
     id: uuid(),
     kind: 'event',
@@ -381,18 +437,76 @@ export default function CampaignSessionSection({
   const [sceneStatusFilter, setSceneStatusFilter] = useState<'all' | 'todo' | 'done'>('all')
   const [editSceneDraft, setEditSceneDraft] = useState<PrepScene>(emptyScene())
   async function handleSaveSessionPrep() {
-    if (!campaign) return
+    if (!activeSession) return
     setSavingSessionPrep(true)
     try {
-      const updated = await updateCampaign(campaign.id, { session_prep: sessionPrepDraft })
-      setCampaign(updated)
-      setHasSessionPrep(true)
+      await savePrep(sessionPrepDraft)
       setEditingSessionPrep(false)
+    } catch {
+      toast.error("La séance n'a pas pu être enregistrée.")
     } finally { setSavingSessionPrep(false) }
   }
+
+  /** Ajoute une séance en fin de file. */
+  async function handleAddUpcomingSession() {
+    setSavingSessionPrep(true)
+    try {
+      const created = await createSession(campaign.id, {
+        title: `Séance ${upcoming.length + 1}`,
+        status: 'planned',
+        prep: { scenes: [], npc_names: [], location_names: [], encounter_names: [] },
+      })
+      setSessions(prev => [...prev, created])
+      setActiveSessionId(created.id)
+      setEditingSessionPrep(true)
+    } catch {
+      toast.error("La séance n'a pas pu être créée.")
+    } finally { setSavingSessionPrep(false) }
+  }
+
+  /**
+   * Remonte ou descend une séance dans la file. Optimiste : l'ordre bouge tout de suite,
+   * et on revient en arrière si le serveur refuse — sinon l'affichage mentirait.
+   */
+  async function handleMoveSession(id: number, dir: -1 | 1) {
+    const idx = upcoming.findIndex(s => s.id === id)
+    const target = idx + dir
+    if (idx < 0 || target < 0 || target >= upcoming.length) return
+
+    const reordered = [...upcoming]
+    ;[reordered[idx], reordered[target]] = [reordered[target], reordered[idx]]
+
+    const snapshot = sessions
+    setSessions(prev => prev.map(s => {
+      const i = reordered.findIndex(r => r.id === s.id)
+      return i >= 0 ? { ...s, position: i + 1 } : s
+    }))
+    try {
+      const fresh = await reorderSessions(campaign.id, reordered.map(s => s.id))
+      setSessions(fresh)
+    } catch {
+      setSessions(snapshot)
+      toast.error("L'ordre des séances n'a pas pu être enregistré.")
+    }
+  }
+
+  /** La séance a été jouée : elle quitte la file et rejoint le journal. */
+  async function handleMarkSessionPlayed(id: number) {
+    try {
+      const updated = await updateSession(campaign.id, id, {
+        status: 'played',
+        session_date: new Date().toISOString().slice(0, 10),
+      })
+      setSessions(prev => prev.map(s => (s.id === updated.id ? updated : s)))
+      if (activeSessionId === id) setActiveSessionId(null)
+      toast.success(`« ${updated.title} » est passée au journal.`)
+    } catch {
+      toast.error("La séance n'a pas pu être clôturée.")
+    }
+  }
   function handleExportSessionPrepMarkdown() {
-    if (!campaign?.session_prep) return
-    const prep = campaign.session_prep
+    if (!activePrep) return
+    const prep = activePrep
     const lines: string[] = []
     lines.push(`# Préparation — ${prep.title || 'Session sans titre'}`)
     if (prep.date) lines.push(`**Date prévue :** ${prep.date}`)
@@ -440,95 +554,179 @@ export default function CampaignSessionSection({
     URL.revokeObjectURL(url)
   }
   async function handleClearSessionPrep() {
-    if (!campaign) return
-    const updated = await updateCampaign(campaign.id, { session_prep: null })
-    setCampaign(updated)
-    setSessionPrepDraft(emptySessionPrep())
-    setHasSessionPrep(false)
-    setEditingSessionPrep(false)
+    if (!activeSession) return
+    if (!confirm(`Supprimer la séance « ${activeSession.title} » et toutes ses scènes ?`)) return
+    const id = activeSession.id
+    try {
+      await deleteSession(campaign.id, id)
+      setSessions(prev => prev.filter(s => s.id !== id))
+      setActiveSessionId(null)
+      setSessionPrepDraft(emptySessionPrep())
+      setEditingSessionPrep(false)
+    } catch {
+      toast.error("La séance n'a pas pu être supprimée.")
+    }
   }
   async function handleAddScene() {
-    if (!campaign || !sceneDraft.title.trim()) return
-    const prep = campaign.session_prep ?? emptySessionPrep()
-    const next: SessionPrep = {
-      ...prep,
-      scenes: [...(prep.scenes ?? []), { ...sceneDraft, id: uuid(), title: sceneDraft.title.trim() }],
-    }
-    const updated = await updateCampaign(campaign.id, { session_prep: next })
-    setCampaign(updated)
-    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
-    setHasSessionPrep(true)
+    if (!activePrep || !sceneDraft.title.trim()) return
+    await savePrep({
+      ...activePrep,
+      scenes: [...(activePrep.scenes ?? []), { ...sceneDraft, id: uuid(), title: sceneDraft.title.trim() }],
+    })
     setSceneDraft(emptyScene())
     setAddingScene(false)
   }
   async function handleToggleSceneDone(sceneId: string) {
-    if (!campaign?.session_prep) return
-    const next: SessionPrep = {
-      ...campaign.session_prep,
-      scenes: (campaign.session_prep.scenes ?? []).map(s =>
-        s.id === sceneId ? { ...s, done: !s.done } : s
-      ),
-    }
-    const updated = await updateCampaign(campaign.id, { session_prep: next })
-    setCampaign(updated)
-    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    if (!activePrep) return
+    await savePrep({
+      ...activePrep,
+      scenes: (activePrep.scenes ?? []).map(s => (s.id === sceneId ? { ...s, done: !s.done } : s)),
+    })
   }
   async function handleDeleteScene(sceneId: string) {
-    if (!campaign?.session_prep) return
-    const next: SessionPrep = {
-      ...campaign.session_prep,
-      scenes: (campaign.session_prep.scenes ?? []).filter(s => s.id !== sceneId),
-    }
-    const updated = await updateCampaign(campaign.id, { session_prep: next })
-    setCampaign(updated)
-    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    if (!activePrep) return
+    await savePrep({
+      ...activePrep,
+      scenes: (activePrep.scenes ?? []).filter(s => s.id !== sceneId),
+    })
     if (expandedScene === sceneId) setExpandedScene(null)
   }
   async function handleMoveScene(sceneId: string, dir: -1 | 1) {
-    if (!campaign?.session_prep) return
-    const scenes = [...campaign.session_prep.scenes]
+    if (!activePrep) return
+    const scenes = [...(activePrep.scenes ?? [])]
     const idx = scenes.findIndex(s => s.id === sceneId)
     if (idx < 0) return
     const target = idx + dir
     if (target < 0 || target >= scenes.length) return
     ;[scenes[idx], scenes[target]] = [scenes[target], scenes[idx]]
-    const next: SessionPrep = { ...campaign.session_prep, scenes }
-    const updated = await updateCampaign(campaign.id, { session_prep: next })
-    setCampaign(updated)
-    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    await savePrep({ ...activePrep, scenes })
   }
   async function handleDuplicateScene(sceneId: string) {
-    if (!campaign?.session_prep) return
-    const src = campaign.session_prep.scenes.find(s => s.id === sceneId)
+    if (!activePrep) return
+    const src = (activePrep.scenes ?? []).find(s => s.id === sceneId)
     if (!src) return
     const copy = { ...src, id: uuid(), title: `${src.title} (copie)`, done: false }
-    const next: SessionPrep = { ...campaign.session_prep, scenes: [...campaign.session_prep.scenes, copy] }
-    const updated = await updateCampaign(campaign.id, { session_prep: next })
-    setCampaign(updated)
-    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    await savePrep({ ...activePrep, scenes: [...(activePrep.scenes ?? []), copy] })
   }
   async function handleUpdateScene(sceneId: string) {
-    if (!campaign?.session_prep || !editSceneDraft.title.trim()) return
-    const next: SessionPrep = {
-      ...campaign.session_prep,
-      scenes: (campaign.session_prep.scenes ?? []).map(s =>
+    if (!activePrep || !editSceneDraft.title.trim()) return
+    await savePrep({
+      ...activePrep,
+      scenes: (activePrep.scenes ?? []).map(s =>
         s.id === sceneId ? { ...editSceneDraft, id: sceneId, title: editSceneDraft.title.trim() } : s
       ),
-    }
-    const updated = await updateCampaign(campaign.id, { session_prep: next })
-    setCampaign(updated)
-    if (updated.session_prep) setSessionPrepDraft(updated.session_prep)
+    })
     setEditingSceneId(null)
   }
 
   return (
     <>
-        {/* Prochaine session */}
+        {/* File des séances à venir : l'ordre se remanie au gré des joueurs. */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex items-center justify-between mb-4">
             <div>
-              <h2 className="text-stone-300 text-sm font-semibold">Prochaine session</h2>
-              <p className="text-stone-500 text-xs mt-0.5">Planifiez la prochaine séance</p>
+              <h2 className="text-stone-300 text-sm font-semibold">Séances à venir</h2>
+              <p className="text-stone-500 text-xs mt-0.5">
+                L'ordre n'est qu'un fil conducteur — remontez une séance si les joueurs vous y emmènent
+              </p>
+            </div>
+            <button
+              onClick={handleAddUpcomingSession}
+              disabled={savingSessionPrep}
+              className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors disabled:opacity-50"
+            >
+              + Séance
+            </button>
+          </div>
+
+          {upcoming.length === 0 ? (
+            <p className="text-stone-600 text-xs text-center py-6">
+              Aucune séance planifiée. Ajoutez-en une, puis garnissez-la de combats, d'événements et de rencontres.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              {upcoming.map((sess, idx) => {
+                const prep = sessionToPrep(sess)
+                const isActive = activeSession?.id === sess.id
+                const scenes = prep.scenes ?? []
+                const doneCount = scenes.filter(sc => sc.done).length
+                return (
+                  <div
+                    key={sess.id}
+                    className={`border rounded-lg px-3 py-2 transition-colors ${
+                      isActive ? 'border-sky-700/60 bg-sky-950/20' : 'border-stone-800 bg-stone-950/40 hover:border-stone-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="flex flex-col">
+                        <button
+                          onClick={() => handleMoveSession(sess.id, -1)}
+                          disabled={idx === 0}
+                          className="text-stone-600 hover:text-stone-300 text-[10px] leading-none disabled:opacity-20 disabled:hover:text-stone-600"
+                          title="Monter"
+                        >▲</button>
+                        <button
+                          onClick={() => handleMoveSession(sess.id, 1)}
+                          disabled={idx === upcoming.length - 1}
+                          className="text-stone-600 hover:text-stone-300 text-[10px] leading-none disabled:opacity-20 disabled:hover:text-stone-600"
+                          title="Descendre"
+                        >▼</button>
+                      </div>
+                      <span className="text-stone-600 text-xs tabular-nums w-4">{idx + 1}</span>
+
+                      <button
+                        onClick={() => { setActiveSessionId(sess.id); setEditingSessionPrep(false) }}
+                        className="flex-1 text-left min-w-0"
+                      >
+                        <p className={`text-sm truncate ${isActive ? 'text-sky-200 font-medium' : 'text-stone-300'}`}>
+                          {sess.title || 'Séance sans titre'}
+                        </p>
+                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                          {sess.session_date && <span className="text-stone-500 text-[11px]">📅 {sess.session_date}</span>}
+                          {scenes.length === 0 ? (
+                            <span className="text-stone-600 text-[11px]">aucune scène</span>
+                          ) : (
+                            <>
+                              {(['combat', 'event', 'npc', 'exploration'] as SceneKind[]).map(k => {
+                                const n = scenes.filter(sc => sceneKind(sc) === k).length
+                                if (n === 0) return null
+                                return (
+                                  <span key={k} className="text-[11px] text-stone-400" title={SCENE_KINDS[k].label}>
+                                    {SCENE_KINDS[k].icon} {n}
+                                  </span>
+                                )
+                              })}
+                              <span className="text-stone-600 text-[11px]">· {doneCount}/{scenes.length} jouées</span>
+                            </>
+                          )}
+                        </div>
+                      </button>
+
+                      <button
+                        onClick={() => handleMarkSessionPlayed(sess.id)}
+                        className="text-emerald-500 hover:text-emerald-400 text-[11px] transition-colors shrink-0"
+                        title="Marquer comme jouée : la séance passe au journal"
+                      >✓ Jouée</button>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Préparation de la séance sélectionnée */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h2 className="text-stone-300 text-sm font-semibold">
+                {activeSession ? `Préparation — ${activeSession.title || 'Séance sans titre'}` : 'Préparation'}
+              </h2>
+              <p className="text-stone-500 text-xs mt-0.5">
+                {activeSession
+                  ? 'Combats, événements, rencontres PNJ, exploration'
+                  : 'Sélectionnez une séance ci-dessus'}
+              </p>
             </div>
             <div className="flex items-center gap-3">
               {savingSessionPrep && <div className="w-3 h-3 border-2 border-sky-400 border-t-transparent rounded-full animate-spin" />}
@@ -539,15 +737,12 @@ export default function CampaignSessionSection({
                 <button onClick={handleExportSessionPrepMarkdown} className="text-stone-500 hover:text-stone-300 text-xs transition-colors" title="Exporter en Markdown">↓ MD</button>
               )}
               {hasSessionPrep && (
-                <button onClick={handleClearSessionPrep} className="text-red-500 hover:text-red-400 text-xs transition-colors">Effacer</button>
-              )}
-              {!hasSessionPrep && !editingSessionPrep && (
-                <button onClick={() => setEditingSessionPrep(true)} className="text-sky-400 hover:text-sky-300 text-xs font-semibold transition-colors">+ Planifier</button>
+                <button onClick={handleClearSessionPrep} className="text-red-500 hover:text-red-400 text-xs transition-colors">Supprimer</button>
               )}
             </div>
           </div>
 
-          {(editingSessionPrep || hasSessionPrep) ? (
+          {hasSessionPrep ? (
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
@@ -691,7 +886,7 @@ export default function CampaignSessionSection({
                 <div className="pt-2 border-t border-stone-800">
                   <div className="flex items-center justify-between mb-3">
                     <p className="text-stone-500 text-xs uppercase tracking-widest">
-                      Scènes ({(campaign.session_prep?.scenes ?? []).length})
+                      Scènes ({(activePrep?.scenes ?? []).length})
                     </p>
                     <button
                       onClick={() => { setAddingScene(v => !v); setSceneDraft(emptyScene()) }}
@@ -775,7 +970,7 @@ export default function CampaignSessionSection({
                     </div>
                   )}
 
-                  {(campaign.session_prep?.scenes ?? []).length > 2 && (
+                  {(activePrep?.scenes ?? []).length > 2 && (
                     <div className="flex gap-2 mb-2">
                       <input
                         type="text"
@@ -798,9 +993,9 @@ export default function CampaignSessionSection({
                     </div>
                   )}
 
-                  {(campaign.session_prep?.scenes ?? []).length > 0 ? (
+                  {(activePrep?.scenes ?? []).length > 0 ? (
                     <div className="space-y-2">
-                      {(campaign.session_prep!.scenes).filter(s =>
+                      {(activePrep!.scenes ?? []).filter(s =>
                         (sceneStatusFilter === 'all' || (sceneStatusFilter === 'done' ? s.done : !s.done)) &&
                         (!sceneSearch || s.title.toLowerCase().includes(sceneSearch.toLowerCase()) || (s.location_name ?? '').toLowerCase().includes(sceneSearch.toLowerCase()) || (s.notes ?? '').toLowerCase().includes(sceneSearch.toLowerCase()))
                       ).map((scene, sceneIdx) => (
@@ -860,7 +1055,7 @@ export default function CampaignSessionSection({
                                     title="Monter"
                                   >↑</button>
                                 )}
-                                {!sceneSearch && sceneStatusFilter === 'all' && sceneIdx < (campaign.session_prep!.scenes.length - 1) && (
+                                {!sceneSearch && sceneStatusFilter === 'all' && sceneIdx < ((activePrep!.scenes ?? []).length - 1) && (
                                   <button
                                     onClick={e => { e.stopPropagation(); handleMoveScene(scene.id, 1) }}
                                     className="text-stone-700 hover:text-stone-400 text-xs leading-none shrink-0 transition-colors"
@@ -904,9 +1099,13 @@ export default function CampaignSessionSection({
               )}
             </div>
           ) : (
-            <p className="text-stone-600 text-sm text-center py-4">Aucune session planifiée. Cliquez sur "+ Planifier" pour préparer la prochaine séance.</p>
+            <p className="text-stone-600 text-sm text-center py-4">Sélectionnez une séance à venir, ou ajoutez-en une avec « + Séance ».</p>
           )}
         </div>
+
+        {/* Journal — les séances jouées et les jalons de la campagne.
+            Il occupait sa propre page ; il appartient au fil de la séance. */}
+        <CampaignJournalSection {...props} />
 
         {/* Moment de la journée */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
@@ -965,16 +1164,16 @@ export default function CampaignSessionSection({
                 )}
 
                 {/* Prochaine session */}
-                {campaign.session_prep && (
+                {activeSession && activePrep && (
                   <div>
                     <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Prochaine session</p>
                     <div className="bg-sky-950/40 border border-sky-800/30 rounded-lg p-3 space-y-1">
-                      <p className="text-sky-200 text-sm font-medium">{campaign.session_prep.title || 'Sans titre'}</p>
-                      {campaign.session_prep.date && (
-                        <p className="text-sky-400 text-xs">📅 {campaign.session_prep.date}</p>
+                      <p className="text-sky-200 text-sm font-medium">{activePrep.title || activeSession.title || 'Sans titre'}</p>
+                      {activePrep.date && (
+                        <p className="text-sky-400 text-xs">📅 {activePrep.date}</p>
                       )}
-                      {campaign.session_prep.npc_names.length > 0 && (
-                        <p className="text-stone-400 text-xs">{campaign.session_prep.npc_names.length} PNJ · {campaign.session_prep.encounter_names.length} rencontres</p>
+                      {activePrep.npc_names.length > 0 && (
+                        <p className="text-stone-400 text-xs">{activePrep.npc_names.length} PNJ · {activePrep.encounter_names.length} rencontres</p>
                       )}
                     </div>
                   </div>
@@ -1044,7 +1243,7 @@ export default function CampaignSessionSection({
                 </div>
               )}
 
-              {characters.length === 0 && !campaign.game_calendar?.date && !campaign.session_prep && (
+              {characters.length === 0 && !campaign.game_calendar?.date && upcoming.length === 0 && (
                 <p className="text-stone-600 text-sm text-center py-2">Ajoutez des personnages et configurez le calendrier pour voir le résumé ici.</p>
               )}
             </div>

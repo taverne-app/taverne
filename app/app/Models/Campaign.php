@@ -41,7 +41,10 @@ class Campaign extends Model
 
     public function sessions(): HasMany
     {
-        return $this->hasMany(CampaignSession::class)->orderByDesc('session_date')->orderByDesc('id');
+        return $this->hasMany(CampaignSession::class)
+            ->orderBy('position')
+            ->orderByDesc('session_date')
+            ->orderByDesc('id');
     }
 
     public function combatants(): HasMany

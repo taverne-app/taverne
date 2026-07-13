@@ -9,9 +9,21 @@ class CampaignSession extends Model
 {
     protected $table = 'campaign_sessions';
 
-    protected $fillable = ['campaign_id', 'title', 'session_date', 'notes', 'xp_awarded', 'loot_notes', 'xp_distributed'];
+    /** Une séance se prépare, puis se joue : le journal, ce sont les séances jouées. */
+    public const STATUS_PLANNED = 'planned';
+    public const STATUS_PLAYED  = 'played';
 
-    protected $casts = ['session_date' => 'date', 'xp_distributed' => 'boolean'];
+    protected $fillable = [
+        'campaign_id', 'title', 'session_date', 'notes', 'xp_awarded', 'loot_notes', 'xp_distributed',
+        'position', 'status', 'prep',
+    ];
+
+    protected $casts = [
+        'session_date'    => 'date',
+        'xp_distributed'  => 'boolean',
+        'prep'            => 'array',
+        'position'        => 'integer',
+    ];
 
     public function campaign(): BelongsTo
     {

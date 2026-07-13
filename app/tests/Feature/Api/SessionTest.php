@@ -163,4 +163,85 @@ class SessionTest extends TestCase
 
         $this->assertDatabaseHas('campaign_sessions', ['id' => $session->id]);
     }
+
+    // ── file des séances à venir ──────────────────────────────────────────────
+
+    public function test_a_new_session_is_planned_and_queued_at_the_end(): void
+    {
+        $campaign = $this->campaign();
+
+        $first = $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/sessions", ['title' => 'Première'])
+            ->assertCreated()
+            ->assertJsonPath('data.status', 'planned')
+            ->assertJsonPath('data.position', 1);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/sessions", ['title' => 'Deuxième'])
+            ->assertCreated()
+            ->assertJsonPath('data.position', 2);
+
+        $this->assertSame(1, $first->json('data.position'));
+    }
+
+    public function test_a_played_session_leaves_the_queue(): void
+    {
+        $campaign = $this->campaign();
+        $session  = $campaign->sessions()->create([
+            'title' => 'À jouer', 'status' => 'planned', 'position' => 3,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}/sessions/{$session->id}", ['status' => 'played'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'played')
+            ->assertJsonPath('data.position', 0);
+    }
+
+    public function test_reorder_moves_a_session_up_the_queue(): void
+    {
+        $campaign = $this->campaign();
+        $a = $campaign->sessions()->create(['title' => 'A', 'status' => 'planned', 'position' => 1]);
+        $b = $campaign->sessions()->create(['title' => 'B', 'status' => 'planned', 'position' => 2]);
+        $c = $campaign->sessions()->create(['title' => 'C', 'status' => 'planned', 'position' => 3]);
+
+        // Les joueurs filent droit sur C : elle passe en tête.
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/sessions/reorder", [
+                'ids' => [$c->id, $a->id, $b->id],
+            ])
+            ->assertOk();
+
+        $this->assertSame(1, $c->fresh()->position);
+        $this->assertSame(2, $a->fresh()->position);
+        $this->assertSame(3, $b->fresh()->position);
+    }
+
+    public function test_reorder_never_touches_another_campaigns_session(): void
+    {
+        $mine     = $this->campaign();
+        $stranger = Campaign::factory()->create(['user_id' => User::factory()->create()->id]);
+
+        $ours   = $mine->sessions()->create(['title' => 'Mienne', 'status' => 'planned', 'position' => 1]);
+        $theirs = $stranger->sessions()->create(['title' => 'Autre', 'status' => 'planned', 'position' => 1]);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$mine->id}/sessions/reorder", [
+                'ids' => [$theirs->id, $ours->id],
+            ])
+            ->assertOk();
+
+        // L'id étranger est ignoré, jamais déplacé.
+        $this->assertSame(1, $theirs->fresh()->position);
+        $this->assertSame(1, $ours->fresh()->position);
+    }
+
+    public function test_reorder_is_forbidden_for_someone_elses_campaign(): void
+    {
+        $stranger = Campaign::factory()->create(['user_id' => User::factory()->create()->id]);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$stranger->id}/sessions/reorder", ['ids' => []])
+            ->assertForbidden();
+    }
 }

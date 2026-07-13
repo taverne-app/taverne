@@ -9,6 +9,7 @@ use App\Models\CampaignSession;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
+use Illuminate\Validation\Rule;
 
 class SessionController extends Controller
 {
@@ -29,7 +30,16 @@ class SessionController extends Controller
             'notes'        => ['sometimes', 'nullable', 'string'],
             'xp_awarded'   => ['sometimes', 'nullable', 'integer', 'min:0'],
             'loot_notes'   => ['sometimes', 'nullable', 'string'],
+            'status'       => ['sometimes', Rule::in([CampaignSession::STATUS_PLANNED, CampaignSession::STATUS_PLAYED])],
+            'prep'         => ['sometimes', 'nullable', 'array'],
         ]);
+
+        // Une séance à venir s'ajoute en fin de liste ; une séance jouée n'a pas de rang
+        // (elle se classe par date dans le journal).
+        $validated['status'] ??= CampaignSession::STATUS_PLANNED;
+        $validated['position'] = $validated['status'] === CampaignSession::STATUS_PLANNED
+            ? ((int) $campaign->sessions()->where('status', CampaignSession::STATUS_PLANNED)->max('position')) + 1
+            : 0;
 
         $session = $campaign->sessions()->create($validated);
 
@@ -48,11 +58,52 @@ class SessionController extends Controller
             'xp_awarded'     => ['sometimes', 'nullable', 'integer', 'min:0'],
             'loot_notes'     => ['sometimes', 'nullable', 'string'],
             'xp_distributed' => ['sometimes', 'boolean'],
+            'status'         => ['sometimes', Rule::in([CampaignSession::STATUS_PLANNED, CampaignSession::STATUS_PLAYED])],
+            'prep'           => ['sometimes', 'nullable', 'array'],
+            'position'       => ['sometimes', 'integer', 'min:0'],
         ]);
+
+        // Une séance qui bascule au journal quitte la file d'attente.
+        if (($validated['status'] ?? null) === CampaignSession::STATUS_PLAYED) {
+            $validated['position'] = 0;
+        }
 
         $session->update($validated);
 
         return new SessionResource($session->fresh());
+    }
+
+    /**
+     * Réordonne les séances à venir. Les joueurs prennent un chemin imprévu :
+     * le MJ fait remonter ou descendre une séance sans rien ressaisir.
+     */
+    public function reorder(Request $request, Campaign $campaign): AnonymousResourceCollection
+    {
+        $this->authorize($request, $campaign);
+
+        $validated = $request->validate([
+            'ids'   => ['required', 'array'],
+            'ids.*' => ['integer'],
+        ]);
+
+        // On ne réordonne que des séances de CETTE campagne : un id étranger est ignoré,
+        // jamais déplacé.
+        $owned = $campaign->sessions()
+            ->where('status', CampaignSession::STATUS_PLANNED)
+            ->pluck('id')
+            ->all();
+
+        $position = 0;
+
+        foreach ($validated['ids'] as $id) {
+            if (! in_array($id, $owned, true)) {
+                continue;
+            }
+
+            CampaignSession::where('id', $id)->update(['position' => ++$position]);
+        }
+
+        return SessionResource::collection($campaign->sessions()->get());
     }
 
     public function destroy(Request $request, Campaign $campaign, CampaignSession $session): JsonResponse

@@ -57,6 +57,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::delete('share',                  [CampaignController::class, 'revokeShare']);
         Route::post('combat-turn',              [CampaignController::class, 'broadcastTurn']);
         Route::patch('time-of-day',             [CampaignController::class, 'setTimeOfDay']);
+        Route::post('sessions/reorder', [SessionController::class, 'reorder']);
         Route::apiResource('sessions', SessionController::class)->except(['show']);
         Route::apiResource('combatants', CombatantController::class)->except(['show', 'update']);
         Route::patch('combatants/{combatant}/hp',         [CombatantController::class, 'updateHp']);

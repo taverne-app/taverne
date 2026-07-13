@@ -5,7 +5,6 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 const CampaignWorldSection = lazy(() => import('./campaign/CampaignWorldSection'))
 const CampaignSessionSection = lazy(() => import('./campaign/CampaignSessionSection'))
 const CampaignAdventureSection = lazy(() => import('./campaign/CampaignAdventureSection'))
-const CampaignJournalSection = lazy(() => import('./campaign/CampaignJournalSection'))
 const CampaignOverviewSection = lazy(() => import('./campaign/CampaignOverviewSection'))
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
@@ -91,7 +90,7 @@ export function CampaignPage() {
   // Carte de campagne
 
   // Navigation par onglets
-  const VALID_TABS = ['session', 'monde', 'aventure', 'journal', 'campagne'] as const
+  const VALID_TABS = ['session', 'monde', 'aventure', 'campagne'] as const
   type Tab = typeof VALID_TABS[number]
   /**
    * L'onglet vit dans l'URL, pas dans le localStorage : sans ça, aucun lien
@@ -518,14 +517,6 @@ export function CampaignPage() {
         <Suspense fallback={<p className="text-stone-600 text-sm py-8 text-center">Chargement…</p>}>
           {activeTab === 'campagne' && <CampaignOverviewSection {...sectionProps} />}
         </Suspense>
-
-
-        {/* Section Journal : chunk séparé. */}
-        <Suspense fallback={<p className="text-stone-600 text-sm py-8 text-center">Chargement…</p>}>
-          {activeTab === 'journal' && <CampaignJournalSection {...sectionProps} />}
-        </Suspense>
-
-
 
         {/* Section Monde : chunk séparé, chargé seulement si on ouvre l'onglet. */}
         <Suspense fallback={<p className="text-stone-600 text-sm py-8 text-center">Chargement…</p>}>

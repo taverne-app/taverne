@@ -33,10 +33,37 @@ class SharedCampaignResource extends JsonResource
             'time_of_day'         => $this->time_of_day,
             'characters'          => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'          => CombatantResource::collection($this->whenLoaded('combatants')),
-            'sessions'            => SessionResource::collection($this->whenLoaded('sessions')),
+            'sessions'            => $this->playerSessions(),
             'created_at'          => $this->created_at,
             'updated_at'          => $this->updated_at,
         ];
+    }
+
+    /**
+     * Le journal des séances JOUÉES, et rien d'autre.
+     *
+     * Une séance à venir porte sa préparation (`prep`) : scènes, accroches, trésors,
+     * rencontres à monter. C'est du matériau de MJ — le diffuser vendrait la mèche.
+     * On ne renvoie donc ni les séances à venir, ni le champ `prep`.
+     */
+    private function playerSessions(): array
+    {
+        if (! $this->resource->relationLoaded('sessions')) {
+            return [];
+        }
+
+        return $this->sessions
+            ->where('status', '!=', \App\Models\CampaignSession::STATUS_PLANNED)
+            ->map(fn ($session) => [
+                'id'           => $session->id,
+                'title'        => $session->title,
+                'session_date' => $session->session_date?->toDateString(),
+                'notes'        => $session->notes,
+                'xp_awarded'   => $session->xp_awarded,
+                'loot_notes'   => $session->loot_notes,
+            ])
+            ->values()
+            ->all();
     }
 
     /**

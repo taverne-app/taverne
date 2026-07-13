@@ -18,6 +18,9 @@ class SessionResource extends JsonResource
             'xp_awarded'    => $this->xp_awarded,
             'loot_notes'    => $this->loot_notes,
             'xp_distributed' => (bool) $this->xp_distributed,
+            'position'     => (int) $this->position,
+            'status'       => $this->status,
+            'prep'         => $this->prep,
             'created_at'   => $this->created_at,
             'updated_at'   => $this->updated_at,
         ];

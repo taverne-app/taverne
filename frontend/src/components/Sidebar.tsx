@@ -44,15 +44,13 @@ export function Sidebar() {
    */
   /**
    * Badges des sections — repris de l'ancienne barre d'onglets. Tout vient déjà de la
-   * campagne courante, sauf le nombre de séances, compté côté serveur (`sessions_count`)
-   * pour ne pas charger leur contenu juste pour afficher un chiffre.
+   * campagne courante, sans requête supplémentaire.
    */
   const badges = current
     ? {
         session:  current.characters?.length || undefined,
         monde:    ((current.npcs?.length ?? 0) + (current.locations?.length ?? 0)) || undefined,
         aventure: (current.quests ?? []).filter(q => q.status === 'active').length || undefined,
-        journal:  current.sessions_count || undefined,
       }
     : {}
 
@@ -61,7 +59,6 @@ export function Sidebar() {
         { to: `/campaigns/${current.id}/session`,  icon: '🎲', label: 'Session',     end: false, sep: false , badge: badges.session },
         { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false , badge: badges.monde },
         { to: `/campaigns/${current.id}/aventure`, icon: '📜', label: 'Aventure',    end: false, sep: false , badge: badges.aventure },
-        { to: `/campaigns/${current.id}/journal`,  icon: '📖', label: 'Journal',     end: false, sep: false , badge: badges.journal },
         { to: `/campaigns/${current.id}/campagne`, icon: '🏰', label: 'Campagne',    end: false, sep: false },
         { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false, sep: true },
         { to: `/combat?campaign=${current.id}`,     icon: '⚔', label: 'Combat',      end: false, sep: false },

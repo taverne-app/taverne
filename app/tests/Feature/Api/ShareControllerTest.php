@@ -5,6 +5,7 @@ namespace Tests\Feature\Api;
 use App\Events\CharacterUpdated;
 use App\Events\DiceRolled;
 use App\Models\Campaign;
+use App\Models\CampaignSession;
 use App\Models\Character;
 use App\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -26,6 +27,48 @@ class ShareControllerTest extends TestCase
     }
 
     // ── Consultation de la campagne (public, lecture seule) ───────────────────
+
+    public function test_share_never_leaks_the_preparation_of_upcoming_sessions(): void
+    {
+        $campaign = $this->sharedCampaign();
+
+        CampaignSession::create([
+            'campaign_id' => $campaign->id,
+            'title'       => 'Le piège du sorcier',
+            'status'      => CampaignSession::STATUS_PLANNED,
+            'position'    => 1,
+            'prep'        => [
+                'scenes' => [[
+                    'id' => 'sc1', 'kind' => 'combat', 'title' => 'Embuscade',
+                    'hook' => 'Le sorcier est en réalité le maire',
+                    'treasure' => 'Anneau de Vecna',
+                    'notes' => 'Ne pas révéler avant le round 3',
+                    'done' => false, 'npc_names' => [], 'encounter_name' => '', 'location_name' => '',
+                ]],
+                'npc_names' => [], 'location_names' => [], 'encounter_names' => [],
+            ],
+        ]);
+
+        CampaignSession::create([
+            'campaign_id' => $campaign->id,
+            'title'       => 'La taverne en flammes',
+            'status'      => CampaignSession::STATUS_PLAYED,
+            'position'    => 0,
+        ]);
+
+        $response = $this->getJson("/api/share/{$campaign->share_token}")->assertOk();
+
+        // Les joueurs voient le journal des séances jouées…
+        $response->assertJsonCount(1, 'data.sessions')
+            ->assertJsonPath('data.sessions.0.title', 'La taverne en flammes');
+
+        // …mais rien de la séance à venir, ni son titre, ni ses secrets.
+        $body = $response->getContent();
+        $this->assertStringNotContainsString('Le piège du sorcier', $body);
+        $this->assertStringNotContainsString('Le sorcier est en réalité le maire', $body);
+        $this->assertStringNotContainsString('Anneau de Vecna', $body);
+        $this->assertStringNotContainsString('Ne pas révéler avant le round 3', $body);
+    }
 
     public function test_show_returns_the_campaign_for_a_valid_token(): void
     {

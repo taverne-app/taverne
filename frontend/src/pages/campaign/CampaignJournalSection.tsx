@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { updateCampaign, type Milestone } from '../../api/campaigns'
 import {
   createSession, updateSession, deleteSession, type CampaignSession,
@@ -17,8 +17,14 @@ import { uuid } from './shared'
  */
 export default function CampaignJournalSection({
   campaign, setCampaign, characters, setCharacters, saving, setSaving,
-  sessions, setSessions,
+  sessions: allSessions, setSessions,
 }: SectionProps) {
+
+  /**
+   * Le journal, ce sont les séances JOUÉES. Les séances à venir sont affichées
+   * au-dessus, dans la file de préparation : les lister ici les montrerait deux fois.
+   */
+  const sessions = useMemo(() => allSessions.filter(s => s.status !== 'planned'), [allSessions])
 
   const emptySessionDraft = () => ({ title: '', session_date: '', notes: '', xp_awarded: '', loot_notes: '' })
   const [addingSession, setAddingSession]     = useState(false)
@@ -47,6 +53,7 @@ export default function CampaignJournalSection({
         notes: sessionDraft.notes || null,
         xp_awarded: sessionDraft.xp_awarded ? parseInt(sessionDraft.xp_awarded, 10) || null : null,
         loot_notes: sessionDraft.loot_notes.trim() || null,
+        status: 'played',
       })
       setSessions(prev => [s, ...prev])
       setAddingSession(false)
@@ -116,76 +123,6 @@ export default function CampaignJournalSection({
 
   return (
     <>
-        {/* Statistiques de campagne */}
-        {(characters.length > 0 || sessions.length > 0) && (() => {
-          const totalHp = characters.reduce((s, c) => s + c.combat.current_hp, 0)
-          const totalMaxHp = characters.reduce((s, c) => s + c.combat.max_hp, 0)
-          const avgLevel = characters.length > 0
-            ? (characters.reduce((s, c) => s + c.level, 0) / characters.length).toFixed(1)
-            : null
-          const totalXp = characters.reduce((s, c) => s + c.experience_points, 0)
-          const dying = characters.filter(c => c.combat.current_hp <= 0).length
-          const hpPct = totalMaxHp > 0 ? Math.round((totalHp / totalMaxHp) * 100) : null
-
-          const dates = sessions
-            .filter(s => s.session_date)
-            .map(s => new Date(s.session_date! + 'T00:00:00').getTime())
-          const firstDate = dates.length > 0 ? Math.min(...dates) : null
-          const lastDate  = dates.length > 0 ? Math.max(...dates) : null
-          const durationDays = firstDate && lastDate
-            ? Math.ceil((lastDate - firstDate) / (1000 * 60 * 60 * 24))
-            : null
-
-          return (
-            <div className="bg-stone-900 border border-stone-800 rounded-xl p-4">
-              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-3">Statistiques</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-stone-800 rounded-lg p-3 text-center">
-                  <p className="text-stone-500 text-xs mb-1">Sessions</p>
-                  <p className="text-white font-bold text-xl">{sessions.length}</p>
-                </div>
-                {avgLevel && (
-                  <div className="bg-stone-800 rounded-lg p-3 text-center">
-                    <p className="text-stone-500 text-xs mb-1">Niveau moyen</p>
-                    <p className="text-white font-bold text-xl">{avgLevel}</p>
-                  </div>
-                )}
-                {hpPct != null && (
-                  <div className="bg-stone-800 rounded-lg p-3 text-center">
-                    <p className="text-stone-500 text-xs mb-1">PV groupe</p>
-                    <p className={`font-bold text-xl ${dying > 0 ? 'text-red-400' : hpPct > 50 ? 'text-emerald-400' : 'text-amber-400'}`}>
-                      {hpPct}%
-                    </p>
-                    <p className="text-stone-600 text-xs">{totalHp}/{totalMaxHp}</p>
-                  </div>
-                )}
-                {characters.length > 0 && (
-                  <div className="bg-stone-800 rounded-lg p-3 text-center">
-                    <p className="text-stone-500 text-xs mb-1">XP total</p>
-                    <p className="text-white font-bold text-xl">{totalXp.toLocaleString('fr-FR')}</p>
-                  </div>
-                )}
-                {sessions.some(s => s.xp_awarded != null) && (
-                  <div className="bg-stone-800 rounded-lg p-3 text-center">
-                    <p className="text-stone-500 text-xs mb-1">XP sessions</p>
-                    <p className="text-amber-400 font-bold text-xl">
-                      {sessions.reduce((sum, s) => sum + (s.xp_awarded ?? 0), 0).toLocaleString('fr-FR')}
-                    </p>
-                  </div>
-                )}
-              </div>
-              {durationDays != null && (
-                <p className="text-stone-600 text-xs mt-2 text-center">
-                  {durationDays === 0
-                    ? `${sessions.length} session${sessions.length > 1 ? 's' : ''} enregistrée${sessions.length > 1 ? 's' : ''}`
-                    : `${durationDays} jour${durationDays > 1 ? 's' : ''} de campagne · ${sessions.length} session${sessions.length > 1 ? 's' : ''}`
-                  }
-                </p>
-              )}
-            </div>
-          )
-        })()}
-
         {/* Sessions */}
         <div>
           <div className="flex items-center justify-between mb-4">
