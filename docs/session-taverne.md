@@ -22,27 +22,33 @@ Le critère est simple : **si ça touche `app/` ou `frontend/`, c'est ici.**
 ## Ce qui ne se fait pas ici
 
 - Terraform, DNS, certificats, provisioning de serveurs.
-- Stripe : clés, produits, webhooks, portail client, relances d'impayés.
+- La **configuration** de la facturation : clés, produits, prix, secrets de production.
+  Attention : le **code** de facturation, lui, est ici (voir la frontière plus bas).
 - Monitoring, alerting, sauvegardes, CI de déploiement.
 
 Ces sujets partent dans la session `taverne-cloud`.
 
 ---
 
-## Frontière concrète : les plans tarifaires
+## Frontière concrète : la facturation
 
 C'est le seul endroit où les deux dépôts se parlent, et c'est là qu'on se marche
 dessus si on n'est pas net.
 
-| Question | Qui répond |
-|---|---|
-| « Cet utilisateur a-t-il le droit de créer une 2ᵉ campagne ? » | **taverne** — une règle métier, dans Laravel |
-| « Cet utilisateur a-t-il payé ? » | **taverne-cloud** — Stripe |
+La ligne ne passe pas entre « le paiement » et « le reste ». Elle passe entre **le
+code** et **la configuration** :
 
-`taverne` expose un **plan** sur le compte (`free`, `adventurer`, `guild`) et applique
-les limites. Il **ne parle jamais à Stripe** : `taverne-cloud` écrit le plan, `taverne`
-le lit et l'applique. Le produit reste auto-hébergeable sans aucune brique payante — un
-utilisateur qui clone ce dépôt n'a pas de Stripe, et tout doit fonctionner.
+- **le code est ici.** L'abonnement se traduit par un plan sur le compte, écrit et lu
+  en base — et seul le produit a accès à la base. Le traitement du paiement, le plan et
+  les limites sont donc du Laravel, dans ce dépôt.
+- **la configuration est là-bas.** Clés, identifiants de produits et de prix, réglages
+  du fournisseur de paiement : rien de tout ça ne s'écrit en PHP. C'est de
+  l'exploitation, et sa documentation est dans `taverne-cloud`.
+
+**Contrainte à ne jamais casser : la facturation doit rester optionnelle.** Quelqu'un
+qui clone ce dépôt pour s'auto-héberger n'a aucune clé de paiement. Sans elles, la
+facturation se désactive et l'application tourne — sans plan, sans limite, sans écran
+d'abonnement. Le SaaS est une configuration du produit, pas une dépendance du produit.
 
 ---
 

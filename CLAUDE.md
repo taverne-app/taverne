@@ -12,11 +12,16 @@ donc dans **deux sessions Claude Code distinctes**. La frontière est le dépôt
 thème :
 
 - **Ce dépôt (`taverne`)** → tout ce qui change le produit. Y compris ce qui existe
-  *à cause* du SaaS : multi-tenant, quotas, gating par plan. C'est du Laravel et du
-  React, donc c'est ici. Voir [docs/session-taverne.md](docs/session-taverne.md).
+  *à cause* du SaaS : multi-tenant, quotas, gating par plan, et le **code** de
+  facturation — l'abonnement se lit et s'applique en base, donc c'est du Laravel.
+  Voir [docs/session-taverne.md](docs/session-taverne.md).
 - **`taverne-cloud`** (privé) → tout ce qui n'est pas le produit : infra, domaine,
-  Stripe, monitoring, sauvegardes. Aucune logique métier.
-  Voir [docs/session-taverne-cloud.md](docs/session-taverne-cloud.md).
+  monitoring, sauvegardes, et la **configuration** de la facturation. Aucune logique
+  métier. Sa documentation vit là-bas, pas ici.
+
+La facturation doit rester **optionnelle** : sans configuration de paiement,
+l'auto-hébergement fonctionne, sans plan ni limite. Le SaaS est une configuration du
+produit, jamais une dépendance du produit.
 
 Si une tâche « SaaS » te fait ouvrir un modèle Eloquent ou un composant React, elle
 n'appartient pas à `taverne-cloud` : elle appartient ici.
