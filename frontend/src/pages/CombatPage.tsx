@@ -1866,7 +1866,9 @@ export function CombatPage() {
 
         {/* Initiative table */}
         <div className={`bg-stone-900 border border-stone-800 rounded-xl overflow-hidden ${hideInitiative ? 'hidden' : ''}`}>
-          <div className="flex items-center justify-between px-5 py-3 border-b border-stone-800">
+          {/* La carte est en `overflow-hidden` : sans repli, les boutons de droite
+              (« Fin du combat », « … ») sortaient de l'écran et devenaient inatteignables. */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-stone-800">
             <button
               onClick={() => setShowInitList(v => !v)}
               className="text-stone-400 hover:text-stone-200 text-xs font-semibold uppercase tracking-widest flex items-center gap-2 transition-colors"
@@ -1876,7 +1878,7 @@ export function CombatPage() {
               Ordre d'initiative
               <span className="text-stone-600 normal-case tracking-normal font-normal">({withRollDisplay.length})</span>
             </button>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               {displayRows.length > 4 && (
                 <input
                   type="text"
@@ -2042,7 +2044,7 @@ export function CombatPage() {
                         'hover:bg-stone-800/40'
                       }`}
                     >
-                      <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2 sm:gap-4">
                         {/* Reorder handle */}
                         {manualOrder && !combatTrackerSearch && (
                           <div className="flex flex-col gap-0.5 shrink-0 select-none">
@@ -2074,8 +2076,9 @@ export function CombatPage() {
                           )}
                         </div>
 
-                        {/* Initiative */}
-                        <div className="w-36 shrink-0">
+                        {/* Initiative — 144 px de large écrasaient la colonne du nom à zéro
+                            sur mobile, et rejetaient ses contrôles PV hors de l'écran. */}
+                        <div className="w-24 sm:w-36 shrink-0">
                           <InitInput
                             value={character.combat.initiative_roll}
                             mod={character.combat.initiative}
@@ -2085,7 +2088,7 @@ export function CombatPage() {
 
                         {/* Name */}
                         <div className="flex-1 min-w-0">
-                          <div className="flex items-center gap-2 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2 min-w-0">
                             {character.portrait_url && (
                               <img
                                 src={character.portrait_url}
@@ -2096,7 +2099,7 @@ export function CombatPage() {
                             )}
                             <Link
                               to={`/characters/${character.id}`}
-                              className={`font-semibold truncate hover:underline ${
+                              className={`font-semibold truncate hover:underline basis-full sm:basis-auto ${
                                 isActive ? 'text-amber-300' : isDying ? 'text-red-400' : 'text-white'
                               }`}
                             >
@@ -2537,7 +2540,7 @@ export function CombatPage() {
                       'hover:bg-stone-800/40'
                     }`}
                   >
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-2 sm:gap-4">
                       {/* Reorder handle */}
                       {manualOrder && (
                         <div className="flex flex-col gap-0.5 shrink-0 select-none">
@@ -2569,8 +2572,8 @@ export function CombatPage() {
                         )}
                       </div>
 
-                      {/* Initiative */}
-                      <div className="w-36 shrink-0">
+                      {/* Initiative — cf. la rangée des personnages : étroite sur mobile. */}
+                      <div className="w-24 sm:w-36 shrink-0">
                         <InitInput
                           value={cb.initiative_roll}
                           mod={0}
@@ -2580,7 +2583,7 @@ export function CombatPage() {
 
                       {/* Name */}
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 min-w-0">
+                        <div className="flex flex-wrap items-center gap-2 min-w-0">
                           {renamingCombatantId === cb.id ? (
                             <form
                               onSubmit={e => { e.preventDefault(); handleRenameCombatant(cb.id) }}
@@ -2603,7 +2606,7 @@ export function CombatPage() {
                               }}
                               onDoubleClick={() => { setRenamingCombatantId(cb.id); setRenameDraft(cb.name) }}
                               title={(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'Voir les stats — double-clic pour renommer' : 'Double-clic pour renommer'}
-                              className={`font-semibold truncate text-left ${(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'hover:underline cursor-pointer' : 'cursor-default'} ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}
+                              className={`font-semibold truncate text-left basis-full sm:basis-auto ${(campaign?.custom_monsters ?? []).some(m => m.name === cb.name) ? 'hover:underline cursor-pointer' : 'cursor-default'} ${isActive ? 'text-red-300' : isDying ? 'text-red-400' : 'text-white'}`}
                             >
                               {cb.name}
                             </button>
@@ -3391,7 +3394,7 @@ export function CombatPage() {
                           placeholder="Nom de la rencontre…"
                           value={saveEncounterName}
                           onChange={e => setSaveEncounterName(e.target.value)}
-                          className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                          className="flex-1 min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
                         />
                         <button
                           onClick={handleSaveEncounter}

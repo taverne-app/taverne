@@ -1790,7 +1790,7 @@ export function CharacterPage() {
             </div>
           ) : (
             <>
-            <div className="flex items-start justify-between gap-4">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-start gap-4 min-w-0">
                 {character.portrait_url && (
                   <img
@@ -1800,8 +1800,8 @@ export function CharacterPage() {
                     onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 )}
-              <div>
-                <h1 className="text-2xl font-bold text-white">{character.name}</h1>
+              <div className="min-w-0">
+                <h1 className="text-2xl font-bold text-white break-words">{character.name}</h1>
                 <p className="text-stone-400 mt-0.5">
                   {character.race} · {character.character_class}
                   {character.subclass && <span className="text-stone-500"> ({character.subclass})</span>}
@@ -2042,8 +2042,8 @@ export function CharacterPage() {
           {/* Right — Combat + Conditions + Death saves */}
           <div className="space-y-4">
 
-            {/* Combat stats */}
-            <div className="grid grid-cols-4 gap-3">
+            {/* Combat stats — deux par ligne sur mobile : « Inspiration » ne tient pas en quatre. */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               <StatBox label="CA" value={character.combat.armor_class} />
               <StatBox label="Initiative" value={sign(character.combat.initiative)} />
               <StatBox label="Vitesse" value={`${character.combat.speed ?? 9}m`} />
@@ -2081,8 +2081,9 @@ export function CharacterPage() {
                 </div>
               </div>
 
-              {/* Damage / Heal */}
-              <div className="flex gap-2">
+              {/* Damage / Heal — `min-w-0` sur le champ : un input ne rétrécit pas sous sa
+                  taille intrinsèque, et poussait « Soigner » hors de l'écran. */}
+              <div className="flex flex-wrap gap-2">
                 <input
                   ref={hpRef}
                   type="number"
@@ -2093,7 +2094,7 @@ export function CharacterPage() {
                     if (e.key === 'Enter') handleHp('damage')
                   }}
                   placeholder="Montant"
-                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
+                  className="flex-1 min-w-0 basis-32 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
                 />
                 <button
                   onClick={() => handleHp('damage')}
@@ -4165,19 +4166,19 @@ export function CharacterPage() {
                 <h2 className="text-white font-semibold">Compendium d'objets magiques</h2>
                 <button onClick={() => setShowItemCompendium(false)} className="text-stone-500 hover:text-stone-300 transition-colors">✕</button>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 <input
                   type="text"
                   placeholder="Rechercher…"
                   value={compendiumSearch}
                   onChange={e => setCompendiumSearch(e.target.value)}
                   autoFocus
-                  className="flex-1 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                  className="flex-1 min-w-0 basis-40 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
                 />
                 <select
                   value={compendiumRarity}
                   onChange={e => setCompendiumRarity(e.target.value as ItemRarity | 'toutes')}
-                  className="bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-stone-300 text-sm focus:outline-none focus:border-violet-500 transition-colors"
+                  className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-2 py-2 text-stone-300 text-sm focus:outline-none focus:border-violet-500 transition-colors"
                 >
                   <option value="toutes">Toutes raretés</option>
                   <option value="commun">Commun</option>

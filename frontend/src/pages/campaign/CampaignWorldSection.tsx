@@ -253,11 +253,11 @@ export default function CampaignWorldSection({
     <>
         {/* Tracker de PNJs */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               PNJ rencontrés ({(campaign.npcs ?? []).length})
             </h2>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={npcSort}
                 onChange={e => setNpcSort(e.target.value as typeof npcSort)}
@@ -666,11 +666,11 @@ export default function CampaignWorldSection({
 
         {/* Lieux */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Lieux ({(campaign?.locations ?? []).length})
             </h2>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={locationSort}
                 onChange={e => setLocationSort(e.target.value as typeof locationSort)}
@@ -1168,11 +1168,11 @@ export default function CampaignWorldSection({
 
         {/* Factions */}
         <div>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
               Factions ({(campaign.factions ?? []).length})
             </h2>
-            <div className="flex items-center gap-3">
+            <div className="flex flex-wrap items-center gap-2">
               {(campaign.factions ?? []).length > 0 && (
                 <button onClick={() => exportSection('factions', campaign.factions ?? [])} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Exporter les factions">⬇ Export</button>
               )}
