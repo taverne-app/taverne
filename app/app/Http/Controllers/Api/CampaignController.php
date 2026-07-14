@@ -22,8 +22,8 @@ class CampaignController extends Controller
             ->campaigns()
             ->with(['characters', 'combatants'])
             // Compte seulement : la barre latérale affiche un badge, elle n'a pas
-            // besoin du contenu des séances.
-            ->withCount('sessions')
+            // besoin du contenu des chapitres.
+            ->withCount('chapters')
             ->orderByDesc('updated_at')
             ->get();
 
@@ -76,7 +76,6 @@ class CampaignController extends Controller
             'random_tables'    => ['sometimes', 'nullable', 'array'],
             'campaign_map'          => ['sometimes', 'nullable', 'array'],
             'battle_map'            => ['sometimes', 'nullable', 'array'],
-            'campaign_milestones'   => ['sometimes', 'nullable', 'array'],
             'quests'                => ['sometimes', 'nullable', 'array'],
         ]);
 

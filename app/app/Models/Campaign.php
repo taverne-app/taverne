@@ -11,7 +11,7 @@ class Campaign extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'locations', 'session_prep', 'custom_monsters', 'factions', 'random_tables', 'campaign_map', 'battle_map', 'campaign_milestones', 'quests', 'share_token', 'time_of_day'];
+    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'locations', 'session_prep', 'custom_monsters', 'factions', 'random_tables', 'campaign_map', 'battle_map', 'quests', 'share_token', 'time_of_day'];
 
     protected $casts = [
         'saved_encounters' => 'array',
@@ -25,7 +25,6 @@ class Campaign extends Model
         'random_tables'    => 'array',
         'campaign_map'          => 'array',
         'battle_map'            => 'array',
-        'campaign_milestones'   => 'array',
         'quests'                => 'array',
     ];
 
@@ -39,12 +38,16 @@ class Campaign extends Model
         return $this->hasMany(Character::class)->orderBy('name');
     }
 
-    public function sessions(): HasMany
+    /**
+     * Les chapitres, dans l'ordre où ils se lisent : les terminés tombent en fin de
+     * liste sans perdre leur rang les uns par rapport aux autres.
+     */
+    public function chapters(): HasMany
     {
-        return $this->hasMany(CampaignSession::class)
+        return $this->hasMany(Chapter::class)
+            ->orderBy('done')
             ->orderBy('position')
-            ->orderByDesc('session_date')
-            ->orderByDesc('id');
+            ->orderBy('id');
     }
 
     public function combatants(): HasMany

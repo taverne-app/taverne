@@ -9,9 +9,14 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * Projection « joueurs » d'une campagne, servie par le lien de partage public.
  *
  * Contrairement à CampaignResource (vue MJ authentifiée), elle n'expose que les
- * informations destinées aux joueurs : ni notes du MJ, ni préparation de session,
- * ni rencontres/monstres/tables réservés au MJ, et les pions cachés du plateau
- * (embuscades, pièges) sont retirés — pas seulement masqués côté client.
+ * informations destinées aux joueurs : ni notes du MJ, ni rencontres/monstres/tables
+ * réservés au MJ, et les pions cachés du plateau (embuscades, pièges) sont retirés
+ * — pas seulement masqués côté client.
+ *
+ * Les chapitres n'y figurent PAS, même terminés. Un chapitre porte la préparation du
+ * MJ — secrets, accroches, trésors à venir : le publier vendrait la mèche. Ce que les
+ * joueurs savent du passé sera leur wiki, écrit pour eux, pas un sous-produit de mes
+ * notes.
  */
 class SharedCampaignResource extends JsonResource
 {
@@ -27,43 +32,14 @@ class SharedCampaignResource extends JsonResource
             'factions'            => $this->factions ?? [],
             'game_calendar'       => $this->game_calendar ?? [],
             'party_treasury'      => $this->party_treasury ?? [],
-            'campaign_milestones' => $this->campaign_milestones ?? [],
             'campaign_map'        => $this->campaign_map ?? null,
             'battle_map'          => $this->playerBattleMap(),
             'time_of_day'         => $this->time_of_day,
             'characters'          => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'          => CombatantResource::collection($this->whenLoaded('combatants')),
-            'sessions'            => $this->playerSessions(),
             'created_at'          => $this->created_at,
             'updated_at'          => $this->updated_at,
         ];
-    }
-
-    /**
-     * Le journal des séances JOUÉES, et rien d'autre.
-     *
-     * Une séance à venir porte sa préparation (`prep`) : scènes, accroches, trésors,
-     * rencontres à monter. C'est du matériau de MJ — le diffuser vendrait la mèche.
-     * On ne renvoie donc ni les séances à venir, ni le champ `prep`.
-     */
-    private function playerSessions(): array
-    {
-        if (! $this->resource->relationLoaded('sessions')) {
-            return [];
-        }
-
-        return $this->sessions
-            ->where('status', '!=', \App\Models\CampaignSession::STATUS_PLANNED)
-            ->map(fn ($session) => [
-                'id'           => $session->id,
-                'title'        => $session->title,
-                'session_date' => $session->session_date?->toDateString(),
-                'notes'        => $session->notes,
-                'xp_awarded'   => $session->xp_awarded,
-                'loot_notes'   => $session->loot_notes,
-            ])
-            ->values()
-            ->all();
     }
 
     /**

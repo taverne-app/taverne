@@ -5,7 +5,7 @@ namespace Tests\Feature\Api;
 use App\Events\CharacterUpdated;
 use App\Events\DiceRolled;
 use App\Models\Campaign;
-use App\Models\CampaignSession;
+use App\Models\Chapter;
 use App\Models\Character;
 use App\Models\User;
 use Illuminate\Support\Facades\Event;
@@ -28,15 +28,22 @@ class ShareControllerTest extends TestCase
 
     // ── Consultation de la campagne (public, lecture seule) ───────────────────
 
-    public function test_share_never_leaks_the_preparation_of_upcoming_sessions(): void
+    /**
+     * Aucun chapitre ne part chez les joueurs — pas même un chapitre terminé.
+     *
+     * Un chapitre porte la préparation du MJ (accroches, trésors, secrets). Cocher
+     * « terminé » ne transforme pas ces notes en compte rendu : les publier vendrait
+     * la mèche. Ce que les joueurs savent du passé sera écrit pour eux, ailleurs.
+     */
+    public function test_share_never_leaks_chapters_even_finished_ones(): void
     {
         $campaign = $this->sharedCampaign();
 
-        CampaignSession::create([
+        Chapter::create([
             'campaign_id' => $campaign->id,
             'title'       => 'Le piège du sorcier',
-            'status'      => CampaignSession::STATUS_PLANNED,
             'position'    => 1,
+            'done'        => false,
             'prep'        => [
                 'scenes' => [[
                     'id' => 'sc1', 'kind' => 'combat', 'title' => 'Embuscade',
@@ -49,25 +56,27 @@ class ShareControllerTest extends TestCase
             ],
         ]);
 
-        CampaignSession::create([
+        Chapter::create([
             'campaign_id' => $campaign->id,
             'title'       => 'La taverne en flammes',
-            'status'      => CampaignSession::STATUS_PLAYED,
-            'position'    => 0,
+            'position'    => 2,
+            'done'        => true,
+            'notes'       => 'Le baron survit, il reviendra au chapitre 7',
         ]);
 
         $response = $this->getJson("/api/share/{$campaign->share_token}")->assertOk();
 
-        // Les joueurs voient le journal des séances jouées…
-        $response->assertJsonCount(1, 'data.sessions')
-            ->assertJsonPath('data.sessions.0.title', 'La taverne en flammes');
+        $response->assertJsonMissingPath('data.chapters');
 
-        // …mais rien de la séance à venir, ni son titre, ni ses secrets.
         $body = $response->getContent();
         $this->assertStringNotContainsString('Le piège du sorcier', $body);
         $this->assertStringNotContainsString('Le sorcier est en réalité le maire', $body);
         $this->assertStringNotContainsString('Anneau de Vecna', $body);
         $this->assertStringNotContainsString('Ne pas révéler avant le round 3', $body);
+
+        // Le chapitre TERMINÉ non plus : ses notes sont des notes de MJ, pas un récit.
+        $this->assertStringNotContainsString('La taverne en flammes', $body);
+        $this->assertStringNotContainsString('il reviendra au chapitre 7', $body);
     }
 
     public function test_show_returns_the_campaign_for_a_valid_token(): void

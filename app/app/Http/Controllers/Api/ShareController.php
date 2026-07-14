@@ -17,7 +17,7 @@ class ShareController extends Controller
     public function show(string $token): SharedCampaignResource
     {
         $campaign = Campaign::where('share_token', $token)
-            ->with(['characters', 'combatants', 'sessions'])
+            ->with(['characters', 'combatants'])
             ->firstOrFail();
 
         return new SharedCampaignResource($campaign);
