@@ -6,7 +6,7 @@ import { logout } from '../api/auth'
 
 export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
   const { user, clearAuth } = useAuth()
-  const { campaigns, current, select, sessions } = useCampaigns()
+  const { campaigns, current, select, chapters } = useCampaigns()
   const navigate = useNavigate()
   const { pathname, search } = useLocation()
   const [switcherOpen, setSwitcherOpen] = useState(false)
@@ -42,7 +42,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
   function goToCampaign(id: number) {
     select(id)
     setSwitcherOpen(false)
-    navigate(`/campaigns/${id}/session`)
+    navigate(`/campaigns/${id}/chapitres`)
   }
 
   /**
@@ -51,31 +51,32 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
    */
   const badges = current
     ? {
-        session:  current.characters?.length || undefined,
+        chapitres: (chapters ?? []).filter(c => !c.done).length || undefined,
         monde:    ((current.npcs?.length ?? 0) + (current.locations?.length ?? 0)) || undefined,
         aventure: (current.quests ?? []).filter(q => q.status === 'active').length || undefined,
       }
     : {}
 
   /**
-   * Les éléments de chaque section : séances, personnages, rencontres. On saute de
+   * Les éléments de chaque section : chapitres, personnages, rencontres. On saute de
    * l'un à l'autre depuis n'importe quelle page, sans repasser par une liste.
    */
-  const activeSessionId = Number(new URLSearchParams(search).get('session')) || null
+  const activeChapterId = Number(new URLSearchParams(search).get('chapitre')) || null
   const activeEncounter = new URLSearchParams(search).get('encounter')
   const openCharacterId = Number(pathname.match(/^\/characters\/(\d+)/)?.[1]) || null
 
   const children = useMemo(() => {
-    if (!current) return { session: [], characters: [], encounters: [] }
-    const upcoming = sessions
-      .filter(s => s.status === 'planned')
-      .sort((a, b) => a.position - b.position)
+    if (!current) return { chapitres: [], characters: [], encounters: [] }
+    // Les chapitres terminés sont derrière nous : la navigation sert à préparer la suite.
+    const todo = [...chapters]
+      .filter(c => !c.done)
+      .sort((a, b) => a.position - b.position || a.id - b.id)
     return {
-      session: upcoming.map(s => ({
-        key: `sess-${s.id}`,
-        to: `/campaigns/${current.id}/session?session=${s.id}`,
-        label: s.title || 'Séance sans titre',
-        active: activeSessionId === s.id,
+      chapitres: todo.map(c => ({
+        key: `chap-${c.id}`,
+        to: `/campaigns/${current.id}/chapitres?chapitre=${c.id}`,
+        label: c.title || 'Chapitre sans titre',
+        active: activeChapterId === c.id,
       })),
       characters: (current.characters ?? []).map(c => ({
         key: `char-${c.id}`,
@@ -90,7 +91,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
         active: activeEncounter === String(i),
       })),
     }
-  }, [current, sessions, activeSessionId, activeEncounter, openCharacterId])
+  }, [current, chapters, activeChapterId, activeEncounter, openCharacterId])
 
   type NavChild = { key: string; to: string; label: string; active: boolean }
   type NavEntry = {
@@ -100,7 +101,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
 
   const navLinks: NavEntry[] = current
     ? [
-        { to: `/campaigns/${current.id}/session`,  icon: '🎲', label: 'Session',     end: false, sep: false , badge: badges.session, children: children.session },
+        { to: `/campaigns/${current.id}/chapitres`, icon: '📖', label: 'Chapitres',   end: false, sep: false , badge: badges.chapitres, children: children.chapitres },
         { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false , badge: badges.monde },
         { to: `/campaigns/${current.id}/aventure`, icon: '📜', label: 'Aventure',    end: false, sep: false , badge: badges.aventure },
         { to: `/campaigns/${current.id}/campagne`, icon: '🏰', label: 'Campagne',    end: false, sep: false },
@@ -274,8 +275,23 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
         ))}
       </nav>
 
-      {/* Bottom: compte + déconnexion */}
+      {/* Bottom: outils + compte + déconnexion. Les outils ne dépendent d'aucune
+          campagne : leur place est ici, avec les réglages, pas dans le fil du récit. */}
       <div className="border-t border-stone-800 py-3 space-y-0.5 overflow-hidden">
+        <NavLink
+          to="/outils"
+          title="Outils"
+          className={({ isActive }) =>
+            `flex items-center h-10 px-3 mx-1 rounded-lg transition-colors ${
+              isActive
+                ? 'bg-amber-500/10 text-amber-400'
+                : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800'
+            }`
+          }
+        >
+          <span className="text-base shrink-0 w-6 text-center">🎲</span>
+          <span className={`ml-3 text-sm whitespace-nowrap ${openLabels}`}>Outils</span>
+        </NavLink>
         <NavLink
           to="/account"
           title={user?.name ?? 'Compte'}

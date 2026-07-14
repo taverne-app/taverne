@@ -1,9 +1,6 @@
 import { apiFetch, ApiError } from './client'
 import type { Character } from './characters'
 import type { Combatant } from './combatants'
-import type { CampaignSession } from './sessions'
-
-export type { CampaignSession }
 
 export interface SavedEncounter {
   name: string
@@ -37,16 +34,6 @@ export interface PrepScene {
   hook: string
   notes: string
   done: boolean
-}
-
-export interface SessionPrep {
-  title: string
-  date: string
-  notes: string
-  npc_names: string[]
-  location_names: string[]
-  encounter_names: string[]
-  scenes: PrepScene[]
 }
 
 export interface RandomTableEntry {
@@ -177,14 +164,6 @@ export interface ActiveRef {
   id: number
 }
 
-export interface Milestone {
-  id: string
-  date: string
-  title: string
-  type: 'discovery' | 'death' | 'arc' | 'combat' | 'other'
-  notes: string
-}
-
 export interface Quest {
   id: string
   title: string
@@ -195,8 +174,8 @@ export interface Quest {
 }
 
 export interface Campaign {
-  /** Nombre de séances — compté côté serveur pour le badge de la barre latérale. */
-  sessions_count?: number
+  /** Nombre de chapitres — compté côté serveur pour le badge de la barre latérale. */
+  chapters_count?: number
   id: number
   name: string
   description: string | null
@@ -206,19 +185,16 @@ export interface Campaign {
   game_calendar: Partial<GameCalendar>
   party_treasury: TreasureItem[]
   locations: Location[]
-  session_prep: SessionPrep | null
   custom_monsters: CustomMonster[]
   factions: Faction[]
   random_tables: RandomTable[]
   campaign_map: CampaignMap | null
   battle_map: BattleMap | null
-  campaign_milestones: Milestone[]
   quests: Quest[]
   share_token: string | null
   time_of_day: string | null
   characters: Character[]
   combatants?: Combatant[]
-  sessions?: CampaignSession[]
   created_at: string
   updated_at: string
 }
@@ -244,7 +220,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; session_prep?: SessionPrep | null; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; battle_map?: BattleMap | null; campaign_milestones?: Milestone[]; quests?: Quest[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; battle_map?: BattleMap | null; quests?: Quest[] }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

@@ -19,7 +19,7 @@ import {
   type Combatant,
   type CombatantFaction,
 } from '../api/combatants'
-import { createSession } from '../api/sessions'
+import { createChapter } from '../api/chapters'
 import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
 import { useToast } from '../contexts/ToastContext'
@@ -253,10 +253,11 @@ function CombatSummaryModal({ roundNumber, combatants, monsterMap, characters, c
       })
     }
     try {
-      await createSession(campaignId, {
+      // Un compte rendu de combat n'est pas à préparer : il arrive déjà joué.
+      await createChapter(campaignId, {
         title: `Combat — ${today}`,
-        session_date: today,
         notes: lines.join('\n'),
+        done: true,
       })
       setExported(true)
     } finally {
@@ -592,10 +593,10 @@ export function CombatPage() {
     try {
       const today = new Date().toISOString().split('T')[0]
       const lines = [...combatLog].reverse().map(e => `[${e.time}] ${e.text}`)
-      await createSession(campaignId, {
+      await createChapter(campaignId, {
         title: `Journal de combat — ${today}`,
-        session_date: today,
         notes: lines.join('\n'),
+        done: true,
       })
       setLogSaved(true)
       setTimeout(() => setLogSaved(false), 3000)

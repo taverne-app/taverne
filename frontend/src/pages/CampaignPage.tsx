@@ -3,7 +3,7 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 // Chargé paresseusement : la section Monde (1 400 lignes) n'est téléchargée que si
 // on l'ouvre, au lieu de peser sur chaque visite de la campagne.
 const CampaignWorldSection = lazy(() => import('./campaign/CampaignWorldSection'))
-const CampaignSessionSection = lazy(() => import('./campaign/CampaignSessionSection'))
+const CampaignChapterSection = lazy(() => import('./campaign/CampaignChapterSection'))
 const CampaignAdventureSection = lazy(() => import('./campaign/CampaignAdventureSection'))
 const CampaignOverviewSection = lazy(() => import('./campaign/CampaignOverviewSection'))
 import { Link, useNavigate, useParams } from 'react-router-dom'
@@ -19,9 +19,9 @@ import {
 } from '../api/campaigns'
 import { type Character } from '../api/characters'
 import {
-  listSessions,
-  type CampaignSession,
-} from '../api/sessions'
+  listChapters,
+  type Chapter,
+} from '../api/chapters'
 import { useAuth } from '../contexts/AuthContext'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { useToast } from '../contexts/ToastContext'
@@ -62,8 +62,8 @@ export function CampaignPage() {
 
   // Calendrier
 
-  // Sessions
-  const [sessions, setSessions]               = useState<CampaignSession[]>([])
+  // Chapitres
+  const [chapters, setChapters]               = useState<Chapter[]>([])
 
   // Quêtes
 
@@ -90,7 +90,7 @@ export function CampaignPage() {
   // Carte de campagne
 
   // Navigation par onglets
-  const VALID_TABS = ['session', 'monde', 'aventure', 'campagne'] as const
+  const VALID_TABS = ['chapitres', 'monde', 'aventure', 'campagne'] as const
   type Tab = typeof VALID_TABS[number]
   /**
    * L'onglet vit dans l'URL, pas dans le localStorage : sans ça, aucun lien
@@ -98,13 +98,13 @@ export function CampaignPage() {
    * ramenait pas à l'onglet précédent.
    */
   const { tab: tabParam } = useParams<{ tab?: string }>()
-  const activeTab: Tab = VALID_TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'session'
+  const activeTab: Tab = VALID_TABS.includes(tabParam as Tab) ? (tabParam as Tab) : 'chapitres'
 
   // URL canonique : /campaigns/:id renvoie vers sa première section, sinon aucune
   // entrée de la barre latérale n'apparaîtrait active.
   useEffect(() => {
     if (id && !VALID_TABS.includes(tabParam as Tab)) {
-      navigate(`/campaigns/${id}/session`, { replace: true })
+      navigate(`/campaigns/${id}/chapitres`, { replace: true })
     }
   }, [id, tabParam, navigate])
 
@@ -144,7 +144,7 @@ export function CampaignPage() {
 
   useEffect(() => {
     if (!id) return
-    listSessions(Number(id)).then(setSessions).catch(() => {})
+    listChapters(Number(id)).then(setChapters).catch(() => {})
   }, [id])
 
   // Real-time WS subscription per character
@@ -335,7 +335,7 @@ export function CampaignPage() {
   // sur 214) appartient à une seule section et y descend.
   const sectionProps = {
     campaign, setCampaign, characters, setCharacters, saving, setSaving,
-    sessions, setSessions,
+    chapters, setChapters,
     setAllChars, setShowAddModal,
     copiedKey, copyToClipboard, exportSection, importSectionData,
   }
@@ -371,16 +371,16 @@ export function CampaignPage() {
           ) : []
           const locs = active ? (campaign.locations ?? []).filter(l => l.name.toLowerCase().includes(q) || l.notes.toLowerCase().includes(q)) : []
           const monsters = active ? (campaign.custom_monsters ?? []).filter(m => m.name.toLowerCase().includes(q)) : []
-          const sess = active ? sessions.filter(s => s.title.toLowerCase().includes(q) || (s.notes ?? '').toLowerCase().includes(q)) : []
+          const chaps = active ? chapters.filter(c => c.title.toLowerCase().includes(q) || (c.notes ?? '').toLowerCase().includes(q)) : []
           const quests = active ? (campaign.quests ?? []).filter(qt => qt.title.toLowerCase().includes(q) || qt.description.toLowerCase().includes(q) || qt.giver.toLowerCase().includes(q)) : []
           const factions = active ? (campaign.factions ?? []).filter(f => f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q)) : []
-          const total = npcs.length + locs.length + monsters.length + sess.length + quests.length + factions.length
+          const total = npcs.length + locs.length + monsters.length + chaps.length + quests.length + factions.length
           return (
             <>
               <div className="relative">
                 <input
                   type="text"
-                  placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, sessions, quêtes, factions…"
+                  placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, chapitres, quêtes, factions…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
@@ -460,14 +460,14 @@ export function CampaignPage() {
                           </div>
                         </div>
                       )}
-                      {sess.length > 0 && (
+                      {chaps.length > 0 && (
                         <div>
-                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Sessions ({sess.length})</p>
+                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Chapitres ({chaps.length})</p>
                           <div className="divide-y divide-stone-800">
-                            {sess.map(s => (
-                              <div key={s.id} className="flex items-center gap-3 py-1.5">
-                                <span className="text-white text-sm font-medium">{s.title}</span>
-                                {s.session_date && <span className="text-stone-500 text-xs">{new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR')}</span>}
+                            {chaps.map(c => (
+                              <div key={c.id} className="flex items-center gap-3 py-1.5">
+                                <span className="text-white text-sm font-medium">{c.title}</span>
+                                {c.done && <span className="text-stone-500 text-xs">terminé</span>}
                               </div>
                             ))}
                           </div>
@@ -508,9 +508,9 @@ export function CampaignPage() {
           )
         })()}
 
-        {/* Section Session : chunk séparé. */}
+        {/* Section Chapitres : chunk séparé. */}
         <Suspense fallback={<p className="text-stone-600 text-sm py-8 text-center">Chargement…</p>}>
-          {activeTab === 'session' && <CampaignSessionSection {...sectionProps} />}
+          {activeTab === 'chapitres' && <CampaignChapterSection {...sectionProps} />}
         </Suspense>
 
         {/* Section Campagne : chunk séparé. */}

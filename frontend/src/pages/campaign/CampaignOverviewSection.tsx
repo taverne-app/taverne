@@ -3,10 +3,9 @@ import { useNavigate } from 'react-router-dom'
 import {
   updateCampaign, createCampaign,
   type GameCalendar, type Npc, type Quest, type Faction, type TreasureItem, type Location,
-  type RandomTable, type CustomMonster, type SavedEncounter, type SessionPrep,
-  type Milestone, type CampaignMap,
+  type RandomTable, type CustomMonster, type SavedEncounter, type CampaignMap,
 } from '../../api/campaigns'
-import { createSession, type CampaignSession } from '../../api/sessions'
+import { createChapter, type Chapter } from '../../api/chapters'
 import { importCharacter } from '../../api/characters'
 import { generateShareToken, revokeShareToken } from '../../api/share'
 import { archiveFilename, buildCampaignZip, parseCampaignArchive, ArchiveError } from '../../lib/campaignArchive'
@@ -22,7 +21,7 @@ import type { SectionProps } from './shared'
  * coquille ; il s'initialise désormais ici, depuis la campagne.
  */
 export default function CampaignOverviewSection({
-  campaign, setCampaign, sessions, saving, setSaving,
+  campaign, setCampaign, chapters, saving, setSaving,
 }: SectionProps) {
   const navigate = useNavigate()
   const toast = useToast()
@@ -87,32 +86,32 @@ export default function CampaignOverviewSection({
       setCampaign(updated)
     } finally { setSavingCalendar(false) }
   }
-  function handleExportJournal() {
-    if (!campaign || sessions.length === 0) return
-    const sorted = [...sessions].sort((a, b) => (a.session_date ?? a.created_at).localeCompare(b.session_date ?? b.created_at))
-    const lines: string[] = [`# Journal — ${campaign.name}`, '']
-    for (const s of sorted) {
-      const date = s.session_date
-        ? new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })
-        : null
-      lines.push(`## ${s.title}${date ? ` — ${date}` : ''}`)
-      if (s.xp_awarded != null) lines.push(`> +${s.xp_awarded.toLocaleString('fr-FR')} XP`)
-      if (s.loot_notes) lines.push(`> 🎁 ${s.loot_notes}`)
-      if (s.xp_awarded != null || s.loot_notes) lines.push('')
-      if (s.notes) { lines.push(s.notes); lines.push('') }
+  /** Le scénario entier, dans l'ordre des chapitres — terminés compris. */
+  function handleExportScenario() {
+    if (!campaign || chapters.length === 0) return
+    const sorted = [...chapters].sort((a, b) =>
+      Number(a.done) - Number(b.done) || a.position - b.position || a.id - b.id,
+    )
+    const lines: string[] = [`# ${campaign.name}`, '']
+    for (const c of sorted) {
+      lines.push(`## ${c.title}${c.done ? ' ✓' : ''}`)
+      if (c.xp_awarded != null) lines.push(`> +${c.xp_awarded.toLocaleString('fr-FR')} XP`)
+      if (c.loot_notes) lines.push(`> 🎁 ${c.loot_notes}`)
+      if (c.xp_awarded != null || c.loot_notes) lines.push('')
+      if (c.notes) { lines.push(c.notes); lines.push('') }
       lines.push('---', '')
     }
     const blob = new Blob([lines.join('\n')], { type: 'text/markdown' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
-    a.download = `${campaign.name.replace(/[^a-z0-9]/gi, '_')}_journal.md`
+    a.download = `${campaign.name.replace(/[^a-z0-9]/gi, '_')}_scenario.md`
     a.click()
     URL.revokeObjectURL(url)
   }
   function handleExportCampaign() {
     if (!campaign) return
-    const blob = buildCampaignZip(campaign, campaign.characters ?? [], sessions)
+    const blob = buildCampaignZip(campaign, campaign.characters ?? [], chapters)
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
     a.href = url
@@ -138,14 +137,22 @@ export default function CampaignOverviewSection({
         factions: (data.factions as Faction[]) ?? [],
         random_tables: (data.random_tables as RandomTable[]) ?? [],
         game_calendar: (data.game_calendar as GameCalendar) ?? {},
-        session_prep: (data.session_prep as SessionPrep) ?? null,
-        campaign_milestones: (data.campaign_milestones as Milestone[]) ?? [],
         quests: (data.quests as Quest[]) ?? [],
         campaign_map: (data.campaign_map as CampaignMap) ?? null,
       })
-      if (Array.isArray(data.sessions)) {
-        for (const s of data.sessions as CampaignSession[]) {
-          await createSession(newCampaign.id, { title: s.title, session_date: s.session_date, notes: s.notes, xp_awarded: s.xp_awarded ?? null, loot_notes: s.loot_notes ?? null })
+      // Les archives d'avant les chapitres portent une clé « sessions » : on la relit,
+      // sa date en moins — un chapitre n'en a pas.
+      const archived = (data.chapters ?? data.sessions) as Chapter[] | undefined
+      if (Array.isArray(archived)) {
+        for (const c of archived) {
+          await createChapter(newCampaign.id, {
+            title: c.title,
+            notes: c.notes,
+            xp_awarded: c.xp_awarded ?? null,
+            loot_notes: c.loot_notes ?? null,
+            done: c.done ?? true,
+            prep: c.prep ?? null,
+          })
         }
       }
       for (const archived of characters) {
@@ -212,13 +219,13 @@ export default function CampaignOverviewSection({
                 >
                   ↓ Export
                 </button>
-                {sessions.length > 0 && (
+                {chapters.length > 0 && (
                   <button
-                    onClick={handleExportJournal}
-                    title="Exporter le journal de session en Markdown"
+                    onClick={handleExportScenario}
+                    title="Exporter le scénario (tous les chapitres) en Markdown"
                     className="text-stone-500 hover:text-stone-300 text-sm transition-colors"
                   >
-                    ↓ Journal
+                    ↓ Scénario
                   </button>
                 )}
                 <label

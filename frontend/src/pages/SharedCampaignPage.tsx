@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCampaign } from '../api/share'
-import type { Campaign, CampaignSession, TreasureItem } from '../api/campaigns'
+import type { Campaign, TreasureItem } from '../api/campaigns'
 import { formatGold } from '../lib/gold'
 import type { Character } from '../api/characters'
 import type { Combatant } from '../api/combatants'
@@ -302,19 +302,14 @@ export function SharedCampaignPage() {
   const [campaign, setCampaign] = useState<Campaign | null>(null)
   const [characters, setCharacters] = useState<Character[]>([])
   const [combatants, setCombatants] = useState<Combatant[]>([])
-  const [sessions, setSessions] = useState<CampaignSession[]>([])
   const [activeTurn, setActiveTurn] = useState<{ kind: 'character' | 'combatant'; id: number; round: number } | null>(null)
   const [error, setError] = useState(false)
   const [loading, setLoading] = useState(true)
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [expandedFactionIdx, setExpandedFactionIdx] = useState<number | null>(null)
-  const [showAllSessions, setShowAllSessions] = useState(false)
   const [factionSearch, setFactionSearch] = useState('')
   const [factionRepFilter, setFactionRepFilter] = useState<'all' | 'allied' | 'neutral' | 'enemy'>('all')
   const [activeQuestSearch, setActiveQuestSearch] = useState('')
-  const [milestoneSearch, setMilestoneSearch] = useState('')
-  const [sessionSearch, setSessionSearch] = useState('')
-  const [sessionSort, setSessionSort] = useState<'newest' | 'oldest'>('newest')
   const [npcSearch, setNpcSearch] = useState('')
   const [locationSearchShared, setLocationSearchShared] = useState('')
   const [treasurySearch, setTreasurySearch] = useState('')
@@ -327,7 +322,6 @@ export function SharedCampaignPage() {
         setCampaign(c)
         setCharacters(c.characters)
         setCombatants(c.combatants ?? [])
-        setSessions(c.sessions ?? [])
         setLastUpdate(new Date())
       })
       .catch(() => setError(true))
@@ -413,31 +407,16 @@ export function SharedCampaignPage() {
         )}
 
         {/* Statistiques rapides */}
-        {(sessions.length > 0 || characters.length > 0) && (
-          <div className="flex flex-wrap gap-3">
-            {sessions.length > 0 && (
+        {characters.length > 0 && (() => {
+          const avgLevel = Math.round(characters.reduce((s, c) => s + c.level, 0) / characters.length)
+          return (
+            <div className="flex flex-wrap gap-3">
               <span className="text-xs bg-stone-900 border border-stone-800 rounded-full px-3 py-1 text-stone-400">
-                📖 {sessions.length} session{sessions.length > 1 ? 's' : ''} jouée{sessions.length > 1 ? 's' : ''}
+                ⚔ {characters.length} personnage{characters.length > 1 ? 's' : ''} · Niv. moyen {avgLevel}
               </span>
-            )}
-            {characters.length > 0 && (() => {
-              const avgLevel = Math.round(characters.reduce((s, c) => s + c.level, 0) / characters.length)
-              return (
-                <span className="text-xs bg-stone-900 border border-stone-800 rounded-full px-3 py-1 text-stone-400">
-                  ⚔ {characters.length} personnage{characters.length > 1 ? 's' : ''} · Niv. moyen {avgLevel}
-                </span>
-              )
-            })()}
-            {sessions.length > 0 && (() => {
-              const totalXp = sessions.reduce((s, sess) => s + (sess.xp_awarded ?? 0), 0)
-              return totalXp > 0 ? (
-                <span className="text-xs bg-stone-900 border border-stone-800 rounded-full px-3 py-1 text-stone-400">
-                  ⬆ {totalXp.toLocaleString('fr-FR')} XP distribués
-                </span>
-              ) : null
-            })()}
-          </div>
-        )}
+            </div>
+          )
+        })()}
 
         {/* Calendrier de campagne */}
         {(campaign.game_calendar?.date || campaign.game_calendar?.weather || campaign.game_calendar?.notes) && (
@@ -503,113 +482,10 @@ export function SharedCampaignPage() {
           <QuestHistory quests={(campaign.quests ?? []).filter(q => q.status === 'completed' || q.status === 'failed')} />
         )}
 
-        {/* Journal de session */}
-        {sessions.length > 0 && (() => {
-          let filteredSessions = sessionSearch
-            ? sessions.filter(s => s.title.toLowerCase().includes(sessionSearch.toLowerCase()))
-            : [...sessions]
-          if (sessionSort === 'oldest') filteredSessions = filteredSessions.reverse()
-          return (
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Journal de session</h2>
-                {sessions.length > 3 && (
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={sessionSearch}
-                      onChange={e => setSessionSearch(e.target.value)}
-                      placeholder="Chercher…"
-                      className="w-28 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
-                    />
-                    <select
-                      value={sessionSort}
-                      onChange={e => setSessionSort(e.target.value as typeof sessionSort)}
-                      className="bg-stone-900 border border-stone-800 rounded-lg px-2 py-1 text-stone-300 text-xs focus:outline-none focus:border-stone-600 transition-colors"
-                    >
-                      <option value="newest">Plus récentes</option>
-                      <option value="oldest">Plus anciennes</option>
-                    </select>
-                  </div>
-                )}
-              </div>
-              <div className="space-y-3">
-                {(showAllSessions || sessionSearch ? filteredSessions : filteredSessions.slice(0, 5)).map(s => (
-                  <div key={s.id} className="bg-stone-900 border border-stone-800 rounded-xl p-4">
-                    <div className="flex items-start justify-between gap-3 mb-1">
-                      <h3 className="text-white font-semibold text-sm">{s.title}</h3>
-                      {s.session_date && (
-                        <span className="text-stone-500 text-xs shrink-0">
-                          {new Date(s.session_date + 'T00:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                        </span>
-                      )}
-                    </div>
-                    {(s.xp_awarded != null || s.loot_notes) && (
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {s.xp_awarded != null && (
-                          <span className="text-xs bg-amber-900/40 border border-amber-700/40 text-amber-300 rounded-full px-2 py-0.5">
-                            +{s.xp_awarded.toLocaleString('fr-FR')} XP
-                          </span>
-                        )}
-                        {s.loot_notes && (
-                          <span className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2 py-0.5">
-                            🎁 {s.loot_notes}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {s.notes && <MarkdownText className="text-stone-400">{s.notes}</MarkdownText>}
-                  </div>
-                ))}
-              </div>
-              {!sessionSearch && filteredSessions.length > 5 && (
-                <button
-                  onClick={() => setShowAllSessions(v => !v)}
-                  className="mt-2 text-stone-500 hover:text-stone-300 text-xs transition-colors w-full text-center"
-                >
-                  {showAllSessions ? '▲ Réduire' : `▼ Voir tout (${filteredSessions.length} sessions)`}
-                </button>
-              )}
-            </section>
-          )
-        })()}
 
-        {/* Jalons de campagne */}
-        {(campaign.campaign_milestones ?? []).length > 0 && (
-          <section>
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest">Chronologie</h2>
-              {(campaign.campaign_milestones ?? []).length > 4 && (
-                <input
-                  type="text"
-                  value={milestoneSearch}
-                  onChange={e => setMilestoneSearch(e.target.value)}
-                  placeholder="Chercher…"
-                  className="w-32 bg-stone-900 border border-stone-800 rounded-lg px-2.5 py-1 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-stone-600 transition-colors"
-                />
-              )}
-            </div>
-            <div className="bg-stone-900 border border-stone-800 rounded-xl divide-y divide-stone-800">
-              {(campaign.campaign_milestones ?? [])
-                .slice()
-                .sort((a, b) => (a.date ?? '').localeCompare(b.date ?? ''))
-                .filter(m => !milestoneSearch || m.title.toLowerCase().includes(milestoneSearch.toLowerCase()) || (m.notes ?? '').toLowerCase().includes(milestoneSearch.toLowerCase()))
-                .map((m, i) => {
-                  const icons: Record<string, string> = { discovery: '🔍', death: '💀', arc: '🏆', combat: '⚔', other: '⭐' }
-                  return (
-                    <div key={i} className="flex items-start gap-3 px-4 py-3">
-                      <span className="text-base shrink-0 mt-0.5">{icons[m.type] ?? '⭐'}</span>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-stone-200 text-sm font-medium">{m.title}</p>
-                        {m.date && <p className="text-stone-500 text-xs mt-0.5">{m.date}</p>}
-                        {m.notes && <MarkdownText className="text-stone-400 text-xs mt-1">{m.notes}</MarkdownText>}
-                      </div>
-                    </div>
-                  )
-                })}
-            </div>
-          </section>
-        )}
+        {/* Ce que les joueurs savent du passé de la campagne viendra de leur wiki,
+            écrit pour eux. Les chapitres du MJ ne sont pas publiables : ils portent
+            ses secrets. */}
 
         {/* Carte de campagne */}
         {campaign.campaign_map?.image_url && (

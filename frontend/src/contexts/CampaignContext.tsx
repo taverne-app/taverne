@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { listCampaigns, type Campaign } from '../api/campaigns'
-import { listSessions, type CampaignSession } from '../api/sessions'
+import { listChapters, type Chapter } from '../api/chapters'
 import { useAuth } from './AuthContext'
 
 const STORAGE_KEY = 'taverne-current-campaign'
@@ -13,10 +13,10 @@ interface CampaignContextValue {
   currentId: number | null
   select: (id: number) => void
   reload: () => Promise<void>
-  /** Les séances de la campagne courante : la navigation les liste. */
-  sessions: CampaignSession[]
-  /** À appeler après toute écriture sur les séances, pour que la navigation suive. */
-  reloadSessions: () => Promise<void>
+  /** Les chapitres de la campagne courante : la navigation les liste. */
+  chapters: Chapter[]
+  /** À appeler après toute écriture sur les chapitres, pour que la navigation suive. */
+  reloadChapters: () => Promise<void>
 }
 
 const CampaignContext = createContext<CampaignContextValue | null>(null)
@@ -75,17 +75,17 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     [campaigns, currentId],
   )
 
-  const [sessions, setSessions] = useState<CampaignSession[]>([])
-  const reloadSessions = useCallback(async () => {
-    if (!token || !currentId) { setSessions([]); return }
-    try { setSessions(await listSessions(currentId)) } catch { /* la navigation se passe de la liste */ }
+  const [chapters, setChapters] = useState<Chapter[]>([])
+  const reloadChapters = useCallback(async () => {
+    if (!token || !currentId) { setChapters([]); return }
+    try { setChapters(await listChapters(currentId)) } catch { /* la navigation se passe de la liste */ }
   }, [token, currentId])
 
-  useEffect(() => { reloadSessions() }, [reloadSessions])
+  useEffect(() => { reloadChapters() }, [reloadChapters])
 
   const value = useMemo(
-    () => ({ campaigns, loading, current, currentId: current?.id ?? null, select, reload, sessions, reloadSessions }),
-    [campaigns, loading, current, select, reload, sessions, reloadSessions],
+    () => ({ campaigns, loading, current, currentId: current?.id ?? null, select, reload, chapters, reloadChapters }),
+    [campaigns, loading, current, select, reload, chapters, reloadChapters],
   )
 
   return <CampaignContext.Provider value={value}>{children}</CampaignContext.Provider>

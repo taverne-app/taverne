@@ -23,6 +23,18 @@ import { uuid } from './shared'
 export default function CampaignWorldSection({
   campaign, setCampaign, copiedKey, copyToClipboard, exportSection, importSectionData, saving,
 }: SectionProps) {
+  // Notes privées du MJ. Elles vivaient sur la page Session ; leur place est ici, avec
+  // le monde qu'elles décrivent — et le futur wiki les remplacera.
+  const [dmNotesDraft, setDmNotesDraft] = useState(campaign.dm_notes ?? '')
+  const [savingNotes, setSavingNotes] = useState(false)
+  const [dmNotesPreview, setDmNotesPreview] = useState(false)
+
+  async function handleSaveDmNotes() {
+    setSavingNotes(true)
+    try {
+      setCampaign(await updateCampaign(campaign.id, { dm_notes: dmNotesDraft }))
+    } finally { setSavingNotes(false) }
+  }
 
   const [npcDraft, setNpcDraft] = useState<Npc>({ name: '', role: '', status: 'inconnu', location: '', faction: '', notes: '' })
   const [addingNpc, setAddingNpc] = useState(false)
@@ -251,6 +263,44 @@ export default function CampaignWorldSection({
 
   return (
     <>
+        {/* Notes privées MJ */}
+        <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+          <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
+            <div className="min-w-0">
+              <h2 className="text-stone-300 text-sm font-semibold">Notes privées MJ</h2>
+              <p className="text-stone-500 text-xs mt-0.5">Visibles uniquement par vous — non partagées</p>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              {!dmNotesPreview && (
+                <MicButton onTranscript={text => setDmNotesDraft(prev => prev ? prev + '\n' + text : text)} />
+              )}
+              {dmNotesDraft.trim() && (
+                <button
+                  onClick={() => setDmNotesPreview(v => !v)}
+                  className={`text-xs transition-colors ${dmNotesPreview ? 'text-amber-400' : 'text-stone-500 hover:text-stone-300'}`}
+                >
+                  {dmNotesPreview ? '✎ Éditer' : '👁 Aperçu'}
+                </button>
+              )}
+              {savingNotes && <div className="w-3 h-3 border-2 border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />}
+            </div>
+          </div>
+          {dmNotesPreview ? (
+            <div className="min-h-[6rem]">
+              <MarkdownText className="text-stone-200 text-sm">{dmNotesDraft}</MarkdownText>
+            </div>
+          ) : (
+            <textarea
+              value={dmNotesDraft}
+              onChange={e => setDmNotesDraft(e.target.value)}
+              onBlur={handleSaveDmNotes}
+              placeholder="Notes de préparation, secrets, PNJ, lieux, intrigues…"
+              rows={6}
+              className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
+            />
+          )}
+        </div>
+
         {/* Tracker de PNJs */}
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">

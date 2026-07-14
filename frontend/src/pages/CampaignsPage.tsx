@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { createCampaign, deleteCampaign, getCampaign } from '../api/campaigns'
-import { listSessions } from '../api/sessions'
+import { listChapters } from '../api/chapters'
 import { createCheckoutSession, createPortalSession } from '../api/billing'
 import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
@@ -70,14 +70,14 @@ export function CampaignsPage() {
 
   /**
    * Deleting a campaign takes its characters with it, so the archive is written
-   * first and the delete only runs once it exists. The list carries no sessions,
+   * first and the delete only runs once it exists. The list carries no chapters,
    * hence the fetch.
    */
   async function handleExportThenDelete(id: number) {
     setExporting(id)
     try {
-      const [full, sessions] = await Promise.all([getCampaign(id), listSessions(id)])
-      const blob = buildCampaignZip(full, full.characters ?? [], sessions)
+      const [full, chapters] = await Promise.all([getCampaign(id), listChapters(id)])
+      const blob = buildCampaignZip(full, full.characters ?? [], chapters)
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url

@@ -17,6 +17,7 @@ import { CharacterPage } from './pages/CharacterPage'
 import { CombatPage } from './pages/CombatPage'
 import { CampaignsPage } from './pages/CampaignsPage'
 import { CampaignPage } from './pages/CampaignPage'
+import ToolsPage from './pages/ToolsPage'
 import { SharedCampaignPage } from './pages/SharedCampaignPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { CharacterPrintPage } from './pages/CharacterPrintPage'
@@ -90,6 +91,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <CampaignPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/outils"
+            element={
+              <ProtectedRoute>
+                <ToolsPage />
               </ProtectedRoute>
             }
           />

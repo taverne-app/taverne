@@ -1,6 +1,6 @@
 import type { Campaign } from '../api/campaigns'
 import type { Character } from '../api/characters'
-import type { CampaignSession } from '../api/sessions'
+import type { Chapter } from '../api/chapters'
 import { createZip, readZip, type ZipEntry } from './zip'
 
 export const ARCHIVE_VERSION = 3
@@ -96,7 +96,7 @@ export function characterToArchive(c: Character): CharacterArchive {
   }
 }
 
-export function campaignToArchive(campaign: Campaign, sessions: CampaignSession[]): Record<string, unknown> {
+export function campaignToArchive(campaign: Campaign, chapters: Chapter[]): Record<string, unknown> {
   return {
     _version: ARCHIVE_VERSION,
     name: campaign.name,
@@ -110,17 +110,15 @@ export function campaignToArchive(campaign: Campaign, sessions: CampaignSession[
     factions: campaign.factions,
     random_tables: campaign.random_tables,
     game_calendar: campaign.game_calendar,
-    session_prep: campaign.session_prep,
-    campaign_milestones: campaign.campaign_milestones,
     quests: campaign.quests,
     campaign_map: campaign.campaign_map,
-    sessions,
+    chapters,
   }
 }
 
-export function buildCampaignZip(campaign: Campaign, characters: Character[], sessions: CampaignSession[]): Blob {
+export function buildCampaignZip(campaign: Campaign, characters: Character[], chapters: Chapter[]): Blob {
   const entries: ZipEntry[] = [
-    { name: CAMPAIGN_FILE, text: JSON.stringify(campaignToArchive(campaign, sessions), null, 2) },
+    { name: CAMPAIGN_FILE, text: JSON.stringify(campaignToArchive(campaign, chapters), null, 2) },
   ]
 
   const used = new Set<string>()

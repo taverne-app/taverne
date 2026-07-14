@@ -15,8 +15,8 @@ const FEATURES = [
   },
   {
     icon: '📖',
-    title: 'Préparation de sessions',
-    desc: 'Notes de session, scènes, ressources, tables aléatoires. Votre outil de prep tout-en-un.',
+    title: 'Préparation par chapitres',
+    desc: 'Chapitres, scènes, ressources, tables aléatoires. Votre outil de prep tout-en-un.',
   },
   {
     icon: '🔗',
