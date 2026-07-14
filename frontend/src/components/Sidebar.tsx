@@ -1,15 +1,19 @@
-import { useEffect, useRef, useState } from 'react'
-import { Link, NavLink, useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useCampaigns } from '../contexts/CampaignContext'
 import { logout } from '../api/auth'
 
-export function Sidebar() {
+export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin: () => void }) {
   const { user, clearAuth } = useAuth()
-  const { campaigns, current, select } = useCampaigns()
+  const { campaigns, current, select, sessions } = useCampaigns()
   const navigate = useNavigate()
+  const { pathname, search } = useLocation()
   const [switcherOpen, setSwitcherOpen] = useState(false)
   const switcherRef = useRef<HTMLDivElement>(null)
+
+  /** La section dont le panneau est ouvert, barre repliée. */
+  const [hovered, setHovered] = useState<string | null>(null)
 
   useEffect(() => {
     if (!switcherOpen) return
@@ -25,6 +29,10 @@ export function Sidebar() {
     }
   }, [switcherOpen])
 
+  // Naviguer ferme le panneau : sans ça, il reste ouvert sur la page d'arrivée,
+  // le curseur n'ayant jamais « quitté » l'entrée.
+  useEffect(() => { setHovered(null) }, [pathname, search])
+
   async function handleLogout() {
     try { await logout() } catch { /* ignore */ }
     clearAuth()
@@ -38,11 +46,6 @@ export function Sidebar() {
   }
 
   /**
-   * Les sections de la campagne vivent ici, plus dans une barre d'onglets : elles
-   * ont chacune leur URL, donc leur place est dans la navigation. `sep` insère un
-   * filet entre les sections de la campagne et les outils de jeu.
-   */
-  /**
    * Badges des sections — repris de l'ancienne barre d'onglets. Tout vient déjà de la
    * campagne courante, sans requête supplémentaire.
    */
@@ -54,32 +57,93 @@ export function Sidebar() {
       }
     : {}
 
-  const navLinks = current
+  /**
+   * Les éléments de chaque section : séances, personnages, rencontres. On saute de
+   * l'un à l'autre depuis n'importe quelle page, sans repasser par une liste.
+   */
+  const activeSessionId = Number(new URLSearchParams(search).get('session')) || null
+  const activeEncounter = new URLSearchParams(search).get('encounter')
+  const openCharacterId = Number(pathname.match(/^\/characters\/(\d+)/)?.[1]) || null
+
+  const children = useMemo(() => {
+    if (!current) return { session: [], characters: [], encounters: [] }
+    const upcoming = sessions
+      .filter(s => s.status === 'planned')
+      .sort((a, b) => a.position - b.position)
+    return {
+      session: upcoming.map(s => ({
+        key: `sess-${s.id}`,
+        to: `/campaigns/${current.id}/session?session=${s.id}`,
+        label: s.title || 'Séance sans titre',
+        active: activeSessionId === s.id,
+      })),
+      characters: (current.characters ?? []).map(c => ({
+        key: `char-${c.id}`,
+        to: `/characters/${c.id}`,
+        label: c.name,
+        active: openCharacterId === c.id,
+      })),
+      encounters: (current.saved_encounters ?? []).map((e, i) => ({
+        key: `enc-${i}`,
+        to: `/combat?campaign=${current.id}&encounter=${i}`,
+        label: e.name,
+        active: activeEncounter === String(i),
+      })),
+    }
+  }, [current, sessions, activeSessionId, activeEncounter, openCharacterId])
+
+  type NavChild = { key: string; to: string; label: string; active: boolean }
+  type NavEntry = {
+    to: string; icon: string; label: string; end: boolean; sep: boolean
+    badge?: number; children?: NavChild[]
+  }
+
+  const navLinks: NavEntry[] = current
     ? [
-        { to: `/campaigns/${current.id}/session`,  icon: '🎲', label: 'Session',     end: false, sep: false , badge: badges.session },
+        { to: `/campaigns/${current.id}/session`,  icon: '🎲', label: 'Session',     end: false, sep: false , badge: badges.session, children: children.session },
         { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false , badge: badges.monde },
         { to: `/campaigns/${current.id}/aventure`, icon: '📜', label: 'Aventure',    end: false, sep: false , badge: badges.aventure },
         { to: `/campaigns/${current.id}/campagne`, icon: '🏰', label: 'Campagne',    end: false, sep: false },
-        { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false, sep: true },
-        { to: `/combat?campaign=${current.id}`,     icon: '⚔', label: 'Combat',      end: false, sep: false },
+        { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false, sep: true, children: children.characters },
+        { to: `/combat?campaign=${current.id}`,     icon: '⚔', label: 'Combat',      end: false, sep: false, children: children.encounters },
       ]
     : [{ to: '/campaigns', icon: '🗺', label: 'Campagnes', end: true, sep: false }]
 
+  /**
+   * Deux états, sans entre-deux : repliée, la barre montre ses icônes et sort un
+   * panneau au survol de chacune — comme le switcher de campagnes, elle n'a donc
+   * pas besoin de s'élargir. Épinglée, elle est ouverte et déplie ses listes sur
+   * place. Le survol ne l'élargit plus : c'était la troisième largeur, celle qui
+   * poussait le contenu sans qu'on l'ait demandé.
+   */
+  const openLabels = pinned ? '' : 'hidden'
+
   return (
-    <aside className="fixed left-0 top-0 h-screen w-14 hover:w-48 transition-all duration-200 bg-stone-900 border-r border-stone-800 z-50 flex flex-col group">
+    <aside className={`fixed left-0 top-0 h-screen ${pinned ? 'w-48' : 'w-14'} transition-all duration-200 bg-stone-900 border-r border-stone-800 z-50 flex flex-col`}>
       {/* Switcher — le bloc de tête indique la campagne courante et permet d'en changer. */}
-      <div ref={switcherRef} className="h-14 border-b border-stone-800 shrink-0 relative">
+      <div ref={switcherRef} className="h-14 border-b border-stone-800 shrink-0 relative flex items-center">
         <button
           onClick={() => setSwitcherOpen(v => !v)}
-          className="w-full h-full flex items-center px-4 overflow-hidden hover:bg-stone-800/60 transition-colors"
+          className="flex-1 min-w-0 h-full flex items-center px-4 overflow-hidden hover:bg-stone-800/60 transition-colors"
           title={current ? `Campagne : ${current.name}` : 'La Taverne'}
         >
-          <span className="text-xl shrink-0">🍺</span>
-          <span className="ml-3 flex-1 min-w-0 text-left text-amber-400 font-display font-semibold text-sm tracking-wide truncate opacity-0 group-hover:opacity-100 transition-opacity duration-150">
+          <span className="text-xl shrink-0 w-6 text-center">🍺</span>
+          <span className={`ml-3 flex-1 min-w-0 text-left text-amber-400 font-display font-semibold text-sm tracking-wide truncate ${openLabels}`}>
             {current?.name ?? 'La Taverne'}
           </span>
-          <span className="ml-1 text-stone-600 text-[10px] shrink-0 opacity-0 group-hover:opacity-100 transition-opacity duration-150">▾</span>
+          <span className={`ml-1 text-stone-600 text-[10px] shrink-0 ${openLabels}`}>▾</span>
         </button>
+
+        {pinned && (
+          <button
+            onClick={onTogglePin}
+            title="Détacher la barre — elle se repliera"
+            aria-pressed
+            className="shrink-0 h-full px-2 text-sm text-amber-400 hover:text-amber-300 transition-colors"
+          >
+            📌
+          </button>
+        )}
 
         {switcherOpen && (
           <div className="absolute left-full top-2 ml-2 w-60 bg-stone-900 border border-stone-700 rounded-xl shadow-2xl shadow-black/50 py-1.5 z-[60]">
@@ -108,36 +172,105 @@ export function Sidebar() {
               >
                 Toutes les campagnes
               </Link>
+              {/* Barre repliée, l'épingle n'a nulle part où tenir : sa place est ici. */}
+              <button
+                onClick={() => { onTogglePin(); setSwitcherOpen(false) }}
+                aria-pressed={pinned}
+                className="w-full text-left px-3 py-2 text-stone-400 hover:text-stone-200 hover:bg-stone-800 text-sm transition-colors"
+              >
+                {pinned ? '📌 Détacher la barre' : '📍 Épingler la barre'}
+              </button>
             </div>
           </div>
         )}
       </div>
 
-      {/* Navigation */}
-      <nav className="flex-1 py-3 space-y-0.5 overflow-hidden">
-        {navLinks.map(({ to, icon, label, end, sep, badge }) => (
-          <NavLink
+      {/* Navigation. Repliée, les panneaux doivent pouvoir sortir de la barre : pas de
+          `overflow` qui les rognerait. Épinglée, la liste peut être longue et défile. */}
+      <nav className={`flex-1 py-3 space-y-0.5 ${pinned ? 'overflow-y-auto overflow-x-hidden' : 'overflow-visible'}`}>
+        {navLinks.map(({ to, icon, label, end, sep, badge, children: items }) => (
+          <div
             key={label}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              `flex items-center h-10 px-4 mx-1 rounded-lg transition-colors ${sep ? 'mt-2 border-t border-stone-800 pt-2 h-12' : ''} ${
-                isActive
-                  ? 'bg-amber-500/10 text-amber-400'
-                  : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800'
-              }`
-            }
+            className="relative"
+            onMouseEnter={() => setHovered(label)}
+            onMouseLeave={() => setHovered(null)}
           >
-            <span className="text-base shrink-0 w-6 text-center">{icon}</span>
-            <span className="ml-3 flex-1 text-sm font-medium opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150">
-              {label}
-            </span>
-            {badge !== undefined && (
-              <span className="ml-2 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-stone-800 text-stone-400 opacity-0 group-hover:opacity-100 transition-opacity duration-150">
-                {badge}
+            <NavLink
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                `flex items-center h-10 px-3 mx-1 rounded-lg transition-colors ${sep ? 'mt-2 border-t border-stone-800 pt-2 h-12' : ''} ${
+                  isActive
+                    ? 'bg-amber-500/10 text-amber-400'
+                    : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800'
+                }`
+              }
+            >
+              <span className="text-base shrink-0 w-6 text-center">{icon}</span>
+              <span className={`ml-3 flex-1 text-sm font-medium whitespace-nowrap ${openLabels}`}>
+                {label}
               </span>
+              {badge !== undefined && (
+                <span className={`ml-2 shrink-0 text-[10px] px-1.5 py-0.5 rounded-full bg-stone-800 text-stone-400 ${openLabels}`}>
+                  {badge}
+                </span>
+              )}
+            </NavLink>
+
+            {/* Barre épinglée : les éléments se déplient sur place, sous leur section.
+                La colonne de coche s'aligne sous l'icône. */}
+            {pinned && items && items.length > 0 && (
+              <div className="mx-1 space-y-px">
+                {items.map(item => (
+                  <Link
+                    key={item.key}
+                    to={item.to}
+                    className={`flex items-center gap-3 px-3 py-1.5 rounded-lg text-sm transition-colors ${
+                      item.active
+                        ? 'text-amber-400 bg-amber-500/10'
+                        : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+                    }`}
+                  >
+                    <span className="w-6 shrink-0 text-center text-xs">{item.active ? '✓' : ''}</span>
+                    <span className="truncate">{item.label}</span>
+                  </Link>
+                ))}
+              </div>
             )}
-          </NavLink>
+
+            {/* Barre repliée : le panneau de la section. Il est collé à la barre
+                (`left-full`, marge à l'intérieur) pour que le curseur puisse y entrer
+                sans traverser un vide qui le refermerait. */}
+            {!pinned && hovered === label && (
+              <div className="absolute left-full top-0 pl-2 z-[60]">
+                <div className="w-56 bg-stone-900 border border-stone-700 rounded-xl shadow-2xl shadow-black/50 py-1.5">
+                  <p className="px-3 py-1 text-stone-600 text-[10px] font-semibold uppercase tracking-widest">
+                    {label}
+                  </p>
+                  {items && items.length > 0 ? (
+                    <div className="max-h-72 overflow-y-auto">
+                      {items.map(item => (
+                        <Link
+                          key={item.key}
+                          to={item.to}
+                          className={`flex items-center gap-2 px-3 py-2 text-sm transition-colors ${
+                            item.active
+                              ? 'text-amber-400 bg-amber-500/10'
+                              : 'text-stone-300 hover:bg-stone-800'
+                          }`}
+                        >
+                          <span className="w-3 shrink-0 text-xs">{item.active ? '✓' : ''}</span>
+                          <span className="truncate">{item.label}</span>
+                        </Link>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="px-3 py-2 text-stone-600 text-xs">Ouvrir la section</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         ))}
       </nav>
 
@@ -145,8 +278,9 @@ export function Sidebar() {
       <div className="border-t border-stone-800 py-3 space-y-0.5 overflow-hidden">
         <NavLink
           to="/account"
+          title={user?.name ?? 'Compte'}
           className={({ isActive }) =>
-            `flex items-center h-10 px-4 mx-1 rounded-lg transition-colors ${
+            `flex items-center h-10 px-3 mx-1 rounded-lg transition-colors ${
               isActive
                 ? 'bg-amber-500/10 text-amber-400'
                 : 'text-stone-500 hover:text-stone-200 hover:bg-stone-800'
@@ -154,16 +288,17 @@ export function Sidebar() {
           }
         >
           <span className="text-base shrink-0 w-6 text-center">⚙</span>
-          <span className="ml-3 text-sm opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150 truncate max-w-[7rem]">
+          <span className={`ml-3 text-sm whitespace-nowrap truncate max-w-[7rem] ${openLabels}`}>
             {user?.name ?? 'Compte'}
           </span>
         </NavLink>
         <button
           onClick={handleLogout}
-          className="flex items-center h-10 px-4 mx-1 w-[calc(100%-0.5rem)] rounded-lg transition-colors text-stone-600 hover:text-red-400 hover:bg-stone-800"
+          title="Déconnexion"
+          className="flex items-center h-10 px-3 mx-1 w-[calc(100%-0.5rem)] rounded-lg transition-colors text-stone-600 hover:text-red-400 hover:bg-stone-800"
         >
           <span className="text-base shrink-0 w-6 text-center">↪</span>
-          <span className="ml-3 text-sm opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150">
+          <span className={`ml-3 text-sm whitespace-nowrap ${openLabels}`}>
             Déconnexion
           </span>
         </button>

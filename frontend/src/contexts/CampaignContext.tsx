@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { listCampaigns, type Campaign } from '../api/campaigns'
+import { listSessions, type CampaignSession } from '../api/sessions'
 import { useAuth } from './AuthContext'
 
 const STORAGE_KEY = 'taverne-current-campaign'
@@ -12,6 +13,10 @@ interface CampaignContextValue {
   currentId: number | null
   select: (id: number) => void
   reload: () => Promise<void>
+  /** Les séances de la campagne courante : la navigation les liste. */
+  sessions: CampaignSession[]
+  /** À appeler après toute écriture sur les séances, pour que la navigation suive. */
+  reloadSessions: () => Promise<void>
 }
 
 const CampaignContext = createContext<CampaignContextValue | null>(null)
@@ -70,9 +75,17 @@ export function CampaignProvider({ children }: { children: ReactNode }) {
     [campaigns, currentId],
   )
 
+  const [sessions, setSessions] = useState<CampaignSession[]>([])
+  const reloadSessions = useCallback(async () => {
+    if (!token || !currentId) { setSessions([]); return }
+    try { setSessions(await listSessions(currentId)) } catch { /* la navigation se passe de la liste */ }
+  }, [token, currentId])
+
+  useEffect(() => { reloadSessions() }, [reloadSessions])
+
   const value = useMemo(
-    () => ({ campaigns, loading, current, currentId: current?.id ?? null, select, reload }),
-    [campaigns, loading, current, select, reload],
+    () => ({ campaigns, loading, current, currentId: current?.id ?? null, select, reload, sessions, reloadSessions }),
+    [campaigns, loading, current, select, reload, sessions, reloadSessions],
   )
 
   return <CampaignContext.Provider value={value}>{children}</CampaignContext.Provider>

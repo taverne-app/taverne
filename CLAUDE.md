@@ -55,6 +55,9 @@ docker compose exec app php artisan test --filter=nom_du_test
 
 # Typecheck frontend
 cd frontend && npm run typecheck
+
+# Voir une modification du front dans l'application (cf. piège 6)
+docker compose up -d --build frontend
 ```
 
 ---
@@ -86,6 +89,16 @@ joueurs. Vérifier depuis une autre origine, au minimum la vue `/share/…`.
 **5. Éprouver un outil de vérification avant de s'y fier.**
 Y injecter une faute évidente, confirmer qu'il **échoue**, puis restaurer. Un « vert »
 d'un outil jamais éprouvé ne vaut rien (cf. piège 2).
+
+**6. Le conteneur `frontend` sert un bundle figé dans l'image.**
+Modifier un fichier de `frontend/` ne change **rien** à ce que sert le port 3000 : le
+build a eu lieu au `docker build`. Il n'y a pas de montage de volume, pas de HMR.
+**`docker compose up -d --build frontend`** — sinon on croit à un cache navigateur et
+on cherche des heures. (Cette commande redémarre aussi `app` par dépendance : si
+l'API tombe en 502, c'est le piège 1, `docker compose restart nginx`.)
+Pour vérifier une modification sans reconstruire, un `npm run dev -- --port 5174`
+sert le front en direct et relaie `/api` vers le nginx applicatif — mais c'est le
+conteneur, pas lui, que voient les joueurs.
 
 ---
 

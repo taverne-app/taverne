@@ -1257,6 +1257,19 @@ export function CombatPage() {
     setShowEncounterBuilder(true)
   }
 
+  /**
+   * La navigation de gauche pointe une rencontre par son rang : /combat?encounter=2.
+   * Elle garnit le constructeur, où elle se retouche avant d'être lancée. On attend
+   * que la campagne soit chargée — c'est elle qui porte les rencontres.
+   */
+  const encounterParam = searchParams.get('encounter')
+  useEffect(() => {
+    if (!campaign || encounterParam === null) return
+    const saved = (campaign.saved_encounters ?? [])[Number(encounterParam)]
+    if (saved) handleLoadSavedEncounter(saved)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign?.id, encounterParam])
+
   async function handleReset() {
     await Promise.all(characters.map(c => setInitiativeRoll(c.id, null)))
     setCharacters(prev => prev.map(c => ({

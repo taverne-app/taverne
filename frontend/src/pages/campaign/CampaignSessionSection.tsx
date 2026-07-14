@@ -15,7 +15,8 @@ import { useToast } from '../../contexts/ToastContext'
 import type { SectionProps } from './shared'
 import { uuid } from './shared'
 import { createCombatant } from '../../api/combatants'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useCampaigns } from '../../contexts/CampaignContext'
 import { computeEncounterDifficulty, difficultyColor } from '../../data/encounter_difficulty'
 import {
   createSession, updateSession, deleteSession, reorderSessions,
@@ -162,6 +163,18 @@ export default function CampaignSessionSection(props: SectionProps) {
   )
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null)
   const activeSession = upcoming.find(s => s.id === activeSessionId) ?? upcoming[0] ?? null
+
+  // La navigation de gauche ouvre une séance précise : /campaigns/12/session?session=34.
+  const [searchParams] = useSearchParams()
+  const sessionParam = Number(searchParams.get('session')) || null
+  useEffect(() => {
+    if (sessionParam) setActiveSessionId(sessionParam)
+  }, [sessionParam])
+
+  // Toute écriture sur les séances doit se voir dans la navigation, qui tient sa
+  // propre liste : elle la relit.
+  const { reloadSessions } = useCampaigns()
+  useEffect(() => { reloadSessions() }, [sessions, reloadSessions])
 
   /** La séance stockée, vue sous la forme SessionPrep attendue par l'éditeur de scènes. */
   const sessionToPrep = (s: CampaignSession): SessionPrep => ({
