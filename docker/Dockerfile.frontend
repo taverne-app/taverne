@@ -26,6 +26,10 @@ RUN printf 'server {\n\
     listen 3000;\n\
     root /usr/share/nginx/html;\n\
     index index.html;\n\
+    # Le relais /api est en tete de chaine (Funnel -> frontend -> app). Sans ce\n\
+    # reglage, nginx plafonne a 1 Mo par defaut et rejette tout upload en 413 AVANT\n\
+    # que la requete atteigne app nginx / PHP (tous deux a 20M). A garder aligne.\n\
+    client_max_body_size 20M;\n\
     location /api {\n\
         proxy_pass http://nginx;\n\
         proxy_http_version 1.1;\n\
