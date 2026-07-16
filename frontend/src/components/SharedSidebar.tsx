@@ -1,7 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useSharedSheets } from '../lib/sharedSheets'
 import { useSharedTheme, type ThemeChoice } from '../lib/sharedTheme'
+import { getSharedCampaign } from '../api/share'
+import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 
 const rowBase = 'flex items-center h-10 px-4 mx-1 rounded-lg transition-colors'
 const labelBase = 'ml-3 text-sm font-medium opacity-0 group-hover:opacity-100 whitespace-nowrap transition-opacity duration-150'
@@ -29,6 +31,27 @@ export function SharedSidebar({ campaignShareToken, currentToken }: Props) {
   const sheets = useSharedSheets()
   const { themeChoice, chooseTheme } = useSharedTheme()
   const [settingsOpen, setSettingsOpen] = useState(false)
+
+  // L'onglet Combat n'apparaît aux joueurs que lorsqu'un combat est lancé. On lit
+  // l'état une fois, puis on suit en direct son ouverture/fermeture par le MJ.
+  const [combatActive, setCombatActive] = useState(false)
+
+  useEffect(() => {
+    if (!campaignShareToken) { setCombatActive(false); return }
+    let cancelled = false
+    getSharedCampaign(campaignShareToken)
+      .then(c => { if (!cancelled) setCombatActive(!!c.combat_active) })
+      .catch(() => { /* lien révoqué ou hors-ligne : on laisse l'onglet masqué */ })
+    return () => { cancelled = true }
+  }, [campaignShareToken])
+
+  useEffect(() => {
+    if (!campaignShareToken || !REALTIME_CONFIGURED) return
+    const echo = createPublicEcho()
+    echo.channel(`campaign-share.${campaignShareToken}`)
+      .listen('.combat.active-changed', (e: { active: boolean }) => setCombatActive(e.active))
+    return () => { echo.leave(`campaign-share.${campaignShareToken}`); echo.disconnect() }
+  }, [campaignShareToken])
 
   const multipleSheets = sheets.length > 1
   const soleToken = sheets[0]?.token ?? currentToken
@@ -89,9 +112,9 @@ export function SharedSidebar({ campaignShareToken, currentToken }: Props) {
             )
           )}
 
-          {/* Combat */}
-          {campaignShareToken && (
-            <NavLink to={`/share/${campaignShareToken}/live`} className={({ isActive }) => rowClass(isActive)}>
+          {/* Combat — seulement quand un combat est en cours */}
+          {campaignShareToken && combatActive && (
+            <NavLink to={`/share/${campaignShareToken}/combat`} className={({ isActive }) => rowClass(isActive)}>
               <span className="text-base shrink-0 w-6 text-center">⚔</span>
               <span className={labelBase}>Combat</span>
             </NavLink>

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   updateCampaign, createCampaign,
-  type GameCalendar, type Npc, type Quest, type Faction, type TreasureItem, type Location,
+  type GameCalendar, type Npc, type Faction, type TreasureItem, type Location,
   type RandomTable, type CustomMonster, type SavedEncounter, type CampaignMap,
 } from '../../api/campaigns'
 import { createChapter, type Chapter } from '../../api/chapters'
@@ -137,7 +137,6 @@ export default function CampaignOverviewSection({
         factions: (data.factions as Faction[]) ?? [],
         random_tables: (data.random_tables as RandomTable[]) ?? [],
         game_calendar: (data.game_calendar as GameCalendar) ?? {},
-        quests: (data.quests as Quest[]) ?? [],
         campaign_map: (data.campaign_map as CampaignMap) ?? null,
       })
       // Les archives d'avant les chapitres portent une clé « sessions » : on la relit,
@@ -253,18 +252,12 @@ export default function CampaignOverviewSection({
 
         {/* Audit de campagne */}
         {(() => {
-          const npcNames = new Set((campaign.npcs ?? []).map(n => n.name.toLowerCase()))
           const locationNames = new Set((campaign.locations ?? []).map(l => l.name.toLowerCase()))
           const factionNames = new Set((campaign.factions ?? []).map(f => f.name.toLowerCase()))
           const monsterNames = new Set([...(campaign.custom_monsters ?? []).map(m => m.name)])
 
           const issues: { type: string; msg: string }[] = []
 
-          ;(campaign.quests ?? []).filter(q => q.giver && q.giver.trim()).forEach(q => {
-            if (!npcNames.has(q.giver.toLowerCase())) {
-              issues.push({ type: 'quête', msg: `Quête «${q.title}» — donneur «${q.giver}» introuvable dans les PNJs` })
-            }
-          })
           ;(campaign.npcs ?? []).filter(n => n.faction && n.faction.trim()).forEach(n => {
             if (!factionNames.has(n.faction!.toLowerCase())) {
               issues.push({ type: 'pnj', msg: `PNJ «${n.name}» — faction «${n.faction}» introuvable` })

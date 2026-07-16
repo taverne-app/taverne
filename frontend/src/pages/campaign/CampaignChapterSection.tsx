@@ -1,6 +1,4 @@
 import { useState, useMemo, useEffect } from 'react'
-import { setCampaignTimeOfDay } from '../../api/campaigns'
-import { TIME_OF_DAY, TIME_OF_DAY_CONFIG, type TimeOfDay } from '../../lib/timeOfDay'
 import { MarkdownText } from '../../components/MarkdownText'
 import { MicButton } from '../../components/MicButton'
 import type { PrepScene, SceneKind } from '../../api/campaigns'
@@ -28,13 +26,12 @@ import {
  */
 export default function CampaignChapterSection(props: SectionProps) {
   const {
-    campaign, setCampaign, characters, setCharacters, saving, setSaving,
+    campaign, characters, setCharacters, saving, setSaving,
     chapters, setChapters,
   } = props
   const toast = useToast()
   const navigate = useNavigate()
 
-  const [todSaving, setTodSaving] = useState(false)
   const [savingChapter, setSavingChapter] = useState(false)
   const [editing, setEditing] = useState(false)
 
@@ -209,19 +206,6 @@ export default function CampaignChapterSection(props: SectionProps) {
     } catch {
       toast.error("L'XP n'a pas pu être distribuée.")
     } finally { setSaving(false) }
-  }
-
-  async function handleSetTimeOfDay(value: TimeOfDay) {
-    if (!campaign || todSaving) return
-    setTodSaving(true)
-    const tod = value === 'none' ? null : value
-    setCampaign(c => c ? { ...c, time_of_day: tod } : null)
-    try { await setCampaignTimeOfDay(campaign.id, tod) }
-    catch {
-      setCampaign(c => c ? { ...c, time_of_day: campaign.time_of_day } : null)
-      toast.error("Le moment de la journée n'a pas pu être enregistré.")
-    }
-    finally { setTodSaving(false) }
   }
 
   // ── Scènes ────────────────────────────────────────────────────────────────
@@ -508,37 +492,6 @@ export default function CampaignChapterSection(props: SectionProps) {
                 disabled={!editing}
                 className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors disabled:opacity-60"
               />
-            </div>
-
-            {/* Ambiance : le MJ revient à ses notes pour avancer dans le récit, et
-                l'ambiance suit. Elle est diffusée en direct aux fiches des joueurs —
-                c'est une valeur de la campagne, pas du chapitre. */}
-            <div>
-              <label className="text-stone-500 text-xs block mb-2">Ambiance — moment de la journée</label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {TIME_OF_DAY.map(tod => {
-                  const cfg = TIME_OF_DAY_CONFIG[tod]
-                  const isOn = (campaign?.time_of_day ?? 'none') === tod
-                  return (
-                    <button
-                      key={tod}
-                      onClick={() => handleSetTimeOfDay(tod)}
-                      disabled={todSaving}
-                      className={`flex flex-col items-center gap-1 py-2 px-1 rounded-lg border text-xs transition-colors ${
-                        isOn
-                          ? 'bg-amber-900/60 border-amber-600 text-amber-300'
-                          : 'border-stone-700 text-stone-400 hover:border-stone-500 hover:text-stone-300'
-                      }`}
-                    >
-                      <span className="text-lg leading-none">{cfg.emoji}</span>
-                      <span>{cfg.label}</span>
-                    </button>
-                  )
-                })}
-              </div>
-              {campaign?.share_token && (
-                <p className="text-stone-600 text-xs mt-2">Visible en temps réel sur les fiches joueurs</p>
-              )}
             </div>
 
             {/* PNJ impliqués */}

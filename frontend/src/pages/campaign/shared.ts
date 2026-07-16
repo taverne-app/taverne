@@ -28,7 +28,7 @@ export interface SectionProps {
   copiedKey: string | null
   copyToClipboard: (key: string, text: string) => void
   exportSection: (sectionKey: string, data: unknown[]) => void
-  importSectionData: (file: File, section: 'npcs' | 'locations' | 'quests' | 'factions') => Promise<void>
+  importSectionData: (file: File, section: 'npcs' | 'locations' | 'factions') => Promise<void>
 }
 
 export function uuid(): string {

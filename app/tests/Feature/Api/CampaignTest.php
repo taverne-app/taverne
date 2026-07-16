@@ -3,6 +3,7 @@
 namespace Tests\Feature\Api;
 
 use App\Events\BattleMapUpdated;
+use App\Events\CombatActiveChanged;
 use App\Models\Campaign;
 use App\Models\Character;
 use App\Models\User;
@@ -115,5 +116,53 @@ class CampaignTest extends TestCase
             ->assertOk();
 
         Event::assertNotDispatched(BattleMapUpdated::class);
+    }
+
+    public function test_launching_combat_broadcasts_to_a_shared_campaign(): void
+    {
+        Event::fake([CombatActiveChanged::class]);
+        $campaign = Campaign::factory()->create([
+            'user_id'       => $this->user->id,
+            'share_token'   => 'tok-123',
+            'combat_active' => false,
+        ]);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}", ['combat_active' => true])
+            ->assertOk()
+            ->assertJsonPath('data.combat_active', true);
+
+        $this->assertTrue($campaign->fresh()->combat_active);
+        Event::assertDispatched(CombatActiveChanged::class);
+    }
+
+    public function test_combat_active_only_broadcasts_when_it_actually_changes(): void
+    {
+        Event::fake([CombatActiveChanged::class]);
+        $campaign = Campaign::factory()->create([
+            'user_id'       => $this->user->id,
+            'share_token'   => 'tok-123',
+            'combat_active' => true,
+        ]);
+
+        // Re-poser la même valeur ne doit rien diffuser : sinon l'onglet des joueurs
+        // clignoterait à chaque écriture sans que rien ne change.
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}", ['combat_active' => true])
+            ->assertOk();
+
+        Event::assertNotDispatched(CombatActiveChanged::class);
+    }
+
+    public function test_combat_active_does_not_broadcast_without_a_share_token(): void
+    {
+        Event::fake([CombatActiveChanged::class]);
+        $campaign = Campaign::factory()->create(['user_id' => $this->user->id, 'share_token' => null]);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}", ['combat_active' => true])
+            ->assertOk();
+
+        Event::assertNotDispatched(CombatActiveChanged::class);
     }
 }

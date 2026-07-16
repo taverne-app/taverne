@@ -53,7 +53,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
     ? {
         chapitres: (chapters ?? []).filter(c => !c.done).length || undefined,
         monde:    ((current.npcs?.length ?? 0) + (current.locations?.length ?? 0)) || undefined,
-        aventure: (current.quests ?? []).filter(q => q.status === 'active').length || undefined,
+        bestiaire: (current.custom_monsters ?? []).length || undefined,
       }
     : {}
 
@@ -66,7 +66,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
   const openCharacterId = Number(pathname.match(/^\/characters\/(\d+)/)?.[1]) || null
 
   const children = useMemo(() => {
-    if (!current) return { chapitres: [], characters: [], encounters: [] }
+    if (!current) return { chapitres: [], characters: [], encounters: [], bestiaire: [] }
     // Les chapitres terminés sont derrière nous : la navigation sert à préparer la suite.
     const todo = [...chapters]
       .filter(c => !c.done)
@@ -90,6 +90,14 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
         label: e.name,
         active: activeEncounter === String(i),
       })),
+      // Aperçu du bestiaire au survol. Un monstre n'a pas de lien propre : tous
+      // mènent à la page, qui porte la recherche et les filtres.
+      bestiaire: (current.custom_monsters ?? []).map((m, i) => ({
+        key: `mon-${i}`,
+        to: `/campaigns/${current.id}/bestiaire`,
+        label: m.name || 'Monstre sans nom',
+        active: false,
+      })),
     }
   }, [current, chapters, activeChapterId, activeEncounter, openCharacterId])
 
@@ -103,7 +111,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
     ? [
         { to: `/campaigns/${current.id}/chapitres`, icon: '📖', label: 'Chapitres',   end: false, sep: false , badge: badges.chapitres, children: children.chapitres },
         { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false , badge: badges.monde },
-        { to: `/campaigns/${current.id}/aventure`, icon: '📜', label: 'Aventure',    end: false, sep: false , badge: badges.aventure },
+        { to: `/campaigns/${current.id}/bestiaire`, icon: '🐉', label: 'Bestiaire',  end: false, sep: false , badge: badges.bestiaire, children: children.bestiaire },
         { to: `/campaigns/${current.id}/campagne`, icon: '🏰', label: 'Campagne',    end: false, sep: false },
         { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false, sep: true, children: children.characters },
         { to: `/combat?campaign=${current.id}`,     icon: '⚔', label: 'Combat',      end: false, sep: false, children: children.encounters },

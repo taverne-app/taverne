@@ -11,7 +11,7 @@ class Campaign extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'locations', 'session_prep', 'custom_monsters', 'factions', 'random_tables', 'campaign_map', 'battle_map', 'quests', 'share_token', 'time_of_day'];
+    protected $fillable = ['user_id', 'name', 'description', 'dm_notes', 'saved_encounters', 'npcs', 'game_calendar', 'party_treasury', 'locations', 'session_prep', 'custom_monsters', 'factions', 'random_tables', 'campaign_map', 'battle_map', 'share_token', 'time_of_day', 'combat_active'];
 
     protected $casts = [
         'saved_encounters' => 'array',
@@ -25,7 +25,7 @@ class Campaign extends Model
         'random_tables'    => 'array',
         'campaign_map'          => 'array',
         'battle_map'            => 'array',
-        'quests'                => 'array',
+        'combat_active'         => 'boolean',
     ];
 
     public function user(): BelongsTo

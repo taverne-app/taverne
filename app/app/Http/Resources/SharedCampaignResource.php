@@ -11,7 +11,8 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * Contrairement à CampaignResource (vue MJ authentifiée), elle n'expose que les
  * informations destinées aux joueurs : ni notes du MJ, ni rencontres/monstres/tables
  * réservés au MJ, et les pions cachés du plateau (embuscades, pièges) sont retirés
- * — pas seulement masqués côté client.
+ * — pas seulement masqués côté client. Les quêtes elles-mêmes ne sont plus publiées :
+ * ce que les joueurs savent de l'aventure viendra de leur wiki, pas de mes objectifs.
  *
  * Les chapitres n'y figurent PAS, même terminés. Un chapitre porte la préparation du
  * MJ — secrets, accroches, trésors à venir : le publier vendrait la mèche. Ce que les
@@ -27,7 +28,6 @@ class SharedCampaignResource extends JsonResource
             'name'                => $this->name,
             'description'         => $this->description,
             'npcs'                => $this->npcs ?? [],
-            'quests'              => $this->quests ?? [],
             'locations'           => $this->locations ?? [],
             'factions'            => $this->factions ?? [],
             'game_calendar'       => $this->game_calendar ?? [],
@@ -35,6 +35,7 @@ class SharedCampaignResource extends JsonResource
             'campaign_map'        => $this->campaign_map ?? null,
             'battle_map'          => $this->playerBattleMap(),
             'time_of_day'         => $this->time_of_day,
+            'combat_active'       => (bool) $this->combat_active,
             'characters'          => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'          => CombatantResource::collection($this->whenLoaded('combatants')),
             'created_at'          => $this->created_at,

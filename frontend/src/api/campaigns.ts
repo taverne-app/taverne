@@ -88,6 +88,10 @@ export interface CustomMonster {
   speed?: number
   notes?: string
   attacks?: MonsterAttack[]
+  /** Vignette du monstre. URL relative (/storage/…) — jamais absolue (piège #4). */
+  image_url?: string
+  /** Zone où on le rencontre — le nom d'un lieu de la campagne (section Monde). */
+  zone?: string
 }
 
 export interface Faction {
@@ -147,8 +151,13 @@ export interface BattleZone {
 
 export interface BattleMap {
   image_url: string
-  /** Null = no grid. When set, tokens snap to cells and distances are measured. */
-  grid: { cols: number; rows: number } | null
+  /**
+   * Null = no grid. When set, tokens snap to cells and distances are measured.
+   * `offset_x`/`offset_y` décalent la grille (en % du plateau) pour la faire coïncider
+   * avec celle dessinée sur l'image de fond ; absents sur les cartes d'avant l'outil
+   * de calage, d'où l'optionnel — 0 est le comportement historique.
+   */
+  grid: { cols: number; rows: number; offset_x?: number; offset_y?: number } | null
   tokens: BattleToken[]
   /**
    * Zones diffusées aux joueurs. L'aperçu que le MJ est en train de viser n'est PAS
@@ -162,15 +171,6 @@ export interface BattleMap {
 export interface ActiveRef {
   kind: 'combatant' | 'character'
   id: number
-}
-
-export interface Quest {
-  id: string
-  title: string
-  description: string
-  status: 'active' | 'completed' | 'failed' | 'dormant'
-  giver: string
-  notes: string
 }
 
 export interface Campaign {
@@ -190,9 +190,10 @@ export interface Campaign {
   random_tables: RandomTable[]
   campaign_map: CampaignMap | null
   battle_map: BattleMap | null
-  quests: Quest[]
   share_token: string | null
   time_of_day: string | null
+  /** Vrai quand un combat est lancé : c'est ce qui ouvre la vue Combat aux joueurs. */
+  combat_active: boolean
   characters: Character[]
   combatants?: Combatant[]
   created_at: string
@@ -220,7 +221,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; battle_map?: BattleMap | null; quests?: Quest[] }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; battle_map?: BattleMap | null; combat_active?: boolean }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

@@ -429,9 +429,6 @@ export function CombatPage() {
   // The docked active-combatant panel is the primary surface now; the full
   // initiative list stays as a collapsible fallback (repliée par défaut).
   const [showInitList, setShowInitList] = useState(false)
-  // Une fois le combat lancé avec un plateau, la liste d'initiative s'efface pour
-  // laisser la vedette au plateau ; ce drapeau la rappelle ponctuellement.
-  const [forceShowInit, setForceShowInit] = useState(false)
   // Overflow menu (⋯) regroupant les actions utilitaires de l'en-tête d'initiative.
   const [showInitMenu, setShowInitMenu] = useState(false)
   // Ribbon card whose quick-action popover is open (off-turn Dmg/Soin/état).
@@ -472,7 +469,6 @@ export function CombatPage() {
   const [macroResult, setMacroResult] = useState<{ label: string; detail: string; total: number; isAttack: boolean } | null>(null)
   const macroResultTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [roundNumber, setRoundNumber] = useState(1)
-  const [linkCopied, setLinkCopied] = useState(false)
   const [showXpPanel, setShowXpPanel] = useState(false)
   const [xpInputs, setXpInputs] = useState<Record<number, string>>({})
   const [xpResult, setXpResult] = useState<{ total: number; share: number; levelUps: string[] } | null>(null)
@@ -657,6 +653,9 @@ export function CombatPage() {
 
 
   // Add combatant form
+  // Modale « Combattants » de la vue plein écran (seul accès au bestiaire / constructeur là-bas).
+  const [showAddEnemy, setShowAddEnemy] = useState(false)
+  const [enemyTab, setEnemyTab] = useState<'bestiary' | 'manual' | 'encounter'>('bestiary')
   const [addingCombatant, setAddingCombatant] = useState(false)
   const [combatantDraft, setCombatantDraft] = useState({ name: '', faction: 'ennemi' as CombatantFaction, max_hp: '', ac: '', initiative: '', cr: '' })
   const [monsterSuggestions, setMonsterSuggestions] = useState<MonsterTemplate[]>([])
@@ -806,11 +805,8 @@ export function CombatPage() {
   }, [withRoll.length, hasBattleImage])
 
   // Le combat est « lancé » dès que tout le monde a une initiative (plus aucune
-  // manquante). Avec un plateau, on efface alors la liste d'initiative pour lui
-  // donner la vedette — la mise en place (jets manquants) la garde visible, et un
-  // lien discret permet de la rappeler à la demande.
+  // manquante) : c'est ce qui active « Lancer l'initiative » et l'accès des joueurs.
   const combatLaunched = withRoll.length > 0 && withoutRoll.length === 0
-  const hideInitiative = hasBattleImage && combatLaunched && !forceShowInit
   const mainWidthClass = hasBattleImage ? (combatLaunched ? 'max-w-7xl' : 'max-w-6xl') : 'max-w-5xl'
 
   const { setTitle, notify } = useTabNotify()
@@ -900,6 +896,8 @@ export function CombatPage() {
         }),
     ]), "Les initiatives n'ont pas toutes pu être enregistrées.")
     setManualOrder(null)
+    // Lancer l'initiative, c'est ouvrir le combat : les joueurs y accèdent.
+    void setCombatActive(true)
   }
 
   async function handleCombatantHp(combatantId: number, type: 'damage' | 'heal') {
@@ -1230,6 +1228,22 @@ export function CombatPage() {
     }
   }
 
+  /**
+   * Ouvre ou ferme l'accès des joueurs à la vue Combat. Persisté en base : c'est ce
+   * drapeau que lit la barre latérale partagée pour afficher (ou non) l'onglet Combat,
+   * et le serveur le diffuse en direct. Optimiste et silencieux — un échec ne doit pas
+   * bloquer le lancement des dés ni la clôture du combat.
+   */
+  async function setCombatActive(active: boolean) {
+    if (!campaignId || campaign?.combat_active === active) return
+    setCampaign(prev => prev ? { ...prev, combat_active: active } : prev)
+    try {
+      await updateCampaign(campaignId, { combat_active: active })
+    } catch {
+      setCampaign(prev => prev ? { ...prev, combat_active: !active } : prev)
+    }
+  }
+
   async function handleDeleteSavedEncounter(index: number) {
     if (!campaign || !campaignId) return
     const next = (campaign.saved_encounters ?? []).filter((_, i) => i !== index)
@@ -1299,6 +1313,8 @@ export function CombatPage() {
       purgeTrashedCombatants(campaignId).catch(() => { /* purge différée au prochain combat */ })
     }
     restoredRef.current = false
+    // Le combat est clos : on referme l'accès des joueurs à la vue Combat.
+    void setCombatActive(false)
   }
 
   function handleClearCombatants() {
@@ -1644,31 +1660,70 @@ export function CombatPage() {
 
   return (
     <div className="min-h-screen bg-stone-950">
-      {/* Header */}
-      <main className={`${mainWidthClass} mx-auto px-4 py-8 pb-44 space-y-4`}>
-        <div className="flex items-center justify-between">
-          <h1 className="text-white text-xl font-display font-semibold tracking-wide">Combat</h1>
-          {campaign?.share_token && (
-            <button
-              onClick={() => {
-                const url = `${window.location.origin}/share/${campaign.share_token}/live`
-                if (navigator.clipboard) {
-                  navigator.clipboard.writeText(url).catch(() => {})
-                }
-                setLinkCopied(true)
-                setTimeout(() => setLinkCopied(false), 2000)
-              }}
-              className={`text-xs px-3 py-1 rounded-lg border transition-colors ${
-                linkCopied
-                  ? 'bg-emerald-700/30 border-emerald-600 text-emerald-400'
-                  : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-stone-500'
-              }`}
-              title="Copier le lien combat live (lecture seule pour les joueurs)"
-            >
-              {linkCopied ? '✓ Copié' : '⟳ Vue joueurs'}
-            </button>
-          )}
+      {/* ─────────── Plateau plein écran : la carte EST la page ───────────
+          Barre du haut = gestion de la map (image, grille, pion, zones) fournie
+          par le plateau lui-même ; ruban du bas = personnages ; le reste des
+          outils vit dans un tiroir. Sans image de plateau, on garde le flux
+          classique qui défile. */}
+      {hasBattleImage && (
+        // `h-[100dvh]` sans `fixed` : la vue reste dans le flux décalé par la barre
+        // latérale (ml-14/ml-48 de AppLayout), donc la barre du haut n'est plus cachée
+        // sous la sidebar.
+        <div className="h-[100dvh] flex flex-col bg-stone-950">
+          {/* Une seule barre en haut : les menus Map/Combattants/Pion/Zone (fournis par
+              le plateau) à gauche, les actions de page à droite. Le ruban des
+              personnages (barre fixe du bas) recouvre la base : on lui réserve la place. */}
+          <div className="flex-1 min-h-0 px-3 sm:px-4 pt-3 pb-40">
+            <BattleMapBoard
+              map={campaign?.battle_map ?? null}
+              combatants={combatants}
+              characters={characters}
+              editable
+              fullscreen
+              onChange={handleBattleMapChange}
+              onCastZone={handleCastZone}
+              activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
+              toolbarLead={
+                <button
+                  onClick={() => setShowAddEnemy(true)}
+                  className="text-sm font-medium rounded-lg px-3 py-1.5 border bg-stone-800 border-stone-700 text-stone-300 hover:text-white hover:border-stone-500 transition-colors"
+                  title="Ajouter des combattants : bestiaire, saisie manuelle ou constructeur de rencontre"
+                >
+                  👥 Combattants
+                </button>
+              }
+              toolbarExtra={
+                <>
+                  {/* Actions clés du combat, toujours à portée (plus besoin d'ouvrir le tiroir). */}
+                  {(characters.length > 0 || combatants.length > 0) && (
+                    <button
+                      onClick={() => handleRollAllInitiative(false)}
+                      className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-amber-600/20 border-amber-600/40 text-amber-400 hover:bg-amber-600/40 transition-colors"
+                      title="Lance 1d20 + modificateur pour tous les participants — ouvre l'accès aux joueurs"
+                    >
+                      ⚅ Lancer l'initiative
+                    </button>
+                  )}
+                  <button
+                    onClick={() => { setShowCombatSummary(true); void setCombatActive(false) }}
+                    className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-amber-600/15 border-amber-700/40 text-amber-400 hover:bg-amber-600/30 transition-colors"
+                    title="Résumé du combat et fermeture de l'accès joueurs"
+                  >
+                    ⚔ Fin du combat
+                  </button>
+                </>
+              }
+            />
+          </div>
         </div>
+      )}
+
+      {/* Vue classique (sans plateau) : toute la gestion de combat défile ici. Avec un
+          plateau, c'est le plein écran ci-dessus qui prend le relais — carte, actions
+          clés dans la barre du haut, personnages dans le ruban du bas. */}
+      {!hasBattleImage && (
+      <main className={`${mainWidthClass} mx-auto px-4 py-8 pb-44 space-y-4`}>
+        <h1 className="text-white text-xl font-display font-semibold tracking-wide">Combat</h1>
 
 
         {/* Combat timers — n'apparaît que s'il y a des effets ou une saisie en cours
@@ -1776,63 +1831,13 @@ export function CombatPage() {
           </div>
         )}
 
-        {/* Macro roll result */}
-        {macroResult && (
-          <div className={`border rounded-xl px-5 py-3 flex items-center justify-between gap-4 ${
-            macroResult.isAttack ? 'bg-rose-950/40 border-rose-700/50' : 'bg-orange-950/40 border-orange-700/50'
-          }`}>
-            <div>
-              <p className="text-stone-400 text-xs">{macroResult.label}</p>
-              <p className="text-stone-400 text-xs font-mono">{macroResult.detail}</p>
-            </div>
-            <div className="flex items-center gap-3">
-              <span className={`text-4xl font-black ${macroResult.isAttack ? 'text-rose-300' : 'text-orange-300'}`}>
-                {macroResult.total}
-              </span>
-              <button onClick={() => setMacroResult(null)} className="text-stone-600 hover:text-stone-400 text-lg">×</button>
-            </div>
-          </div>
-        )}
+        {/* Le résultat de jet (macro/sort) flotte désormais au-dessus de tout (voir
+            plus bas) : en plein écran il doit rester visible même tiroir fermé. */}
 
-        {/* Battle map */}
-        {hasBattleImage ? (
-          // Phase 3 — plateau-central : le plateau est l'élément principal, toujours déployé.
-          <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden ring-1 ring-amber-500/20">
-            <div className="flex items-center justify-between px-5 py-2.5 border-b border-stone-800">
-              <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest flex items-center gap-2">
-                🗺 Battle map
-                {(campaign?.battle_map?.tokens.length ?? 0) > 0 && (
-                  <span className="text-[10px] bg-stone-700 text-stone-300 rounded-full px-1.5 py-0.5 font-normal">{campaign?.battle_map?.tokens.length}</span>
-                )}
-                {!campaign?.share_token && (
-                  <span className="text-[10px] text-stone-600 font-normal normal-case tracking-normal">— partagez la campagne pour la diffuser aux joueurs</span>
-                )}
-              </h2>
-              {/* Rappel de la liste d'initiative, effacée une fois le combat lancé pour laisser la vedette au plateau */}
-              {combatLaunched && (
-                <button
-                  onClick={() => { setForceShowInit(v => !v); if (!forceShowInit) setShowInitList(true) }}
-                  className="flex items-center gap-1.5 text-stone-500 hover:text-stone-300 text-xs transition-colors shrink-0"
-                  title="La liste détaillée s'efface pendant le combat ; les tours se gèrent depuis la barre du bas"
-                >
-                  <span>{forceShowInit ? '▾' : '▸'}</span>
-                  {forceShowInit ? 'Masquer la liste' : `Liste d’initiative (${withRollDisplay.length})`}
-                </button>
-              )}
-            </div>
-            <div className="p-3 sm:p-4">
-              <BattleMapBoard
-                map={campaign?.battle_map ?? null}
-                combatants={combatants}
-                characters={characters}
-                editable
-                onChange={handleBattleMapChange}
-                onCastZone={handleCastZone}
-                activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
-              />
-            </div>
-          </div>
-        ) : (
+        {/* Battle map — avec image, le plateau vit en plein écran (base) ; ici on ne
+            garde que le panneau repliable servant à DÉFINIR une image quand il n'y en
+            a pas encore. */}
+        {!hasBattleImage && (
           <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
             <button
               onClick={() => setShowBattleMap(v => !v)}
@@ -1866,7 +1871,7 @@ export function CombatPage() {
         )}
 
         {/* Initiative table */}
-        <div className={`bg-stone-900 border border-stone-800 rounded-xl overflow-hidden ${hideInitiative ? 'hidden' : ''}`}>
+        <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
           {/* La carte est en `overflow-hidden` : sans repli, les boutons de droite
               (« Fin du combat », « … ») sortaient de l'écran et devenaient inatteignables. */}
           <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-3 border-b border-stone-800">
@@ -1891,13 +1896,16 @@ export function CombatPage() {
               )}
               {(characters.length > 0 || combatants.length > 0) && (
                 <div className="flex gap-1.5">
-                  <button
-                    onClick={() => handleRollAllInitiative(false)}
-                    className="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/40 text-amber-400 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
-                    title="Lance 1d20 + modificateur pour tous les participants"
-                  >
-                    ⚅ Lancer l'initiative
-                  </button>
+                  {/* En plein écran, « Lancer l'initiative » vit dans la barre du haut. */}
+                  {!hasBattleImage && (
+                    <button
+                      onClick={() => handleRollAllInitiative(false)}
+                      className="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/40 text-amber-400 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
+                      title="Lance 1d20 + modificateur pour tous les participants"
+                    >
+                      ⚅ Lancer l'initiative
+                    </button>
+                  )}
                   {(characters.some(c => c.combat.initiative_roll == null) || combatants.some(cb => cb.initiative_roll == null)) && (
                     <button
                       onClick={() => handleRollAllInitiative(true)}
@@ -1947,12 +1955,15 @@ export function CombatPage() {
                   Vider ennemis
                 </button>
               )}
-              <button
-                onClick={() => setShowCombatSummary(true)}
-                className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-amber-600/15 border-amber-700/40 text-amber-400 hover:bg-amber-600/30 transition-colors"
-              >
-                ⚔ Fin du combat
-              </button>
+              {/* En plein écran, « Fin du combat » vit dans la barre du haut. */}
+              {!hasBattleImage && (
+                <button
+                  onClick={() => { setShowCombatSummary(true); void setCombatActive(false) }}
+                  className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-amber-600/15 border-amber-700/40 text-amber-400 hover:bg-amber-600/30 transition-colors"
+                >
+                  ⚔ Fin du combat
+                </button>
+              )}
 
               {/* Utilitaires regroupés sous un menu ⋯ pour désencombrer l'en-tête */}
               <div className="relative">
@@ -2229,30 +2240,41 @@ export function CombatPage() {
                             </div>
                           )}
 
-                          {/* Sorts avec dés de dégâts */}
-                          {character.spellcasting.ability && (() => {
-                            const damageSpells = character.spellcasting.spells.filter(s => s.damage_dice && (s.prepared || s.level === 0))
-                            if (damageSpells.length === 0) return null
+                          {/* Sorts préparés (et tours de magie) */}
+                          {(() => {
+                            const castable = character.spellcasting.spells.filter(s => s.prepared || s.level === 0)
+                            if (castable.length === 0) return null
                             return (
                               <div className="flex flex-wrap gap-1 mt-1">
-                                {damageSpells.map((spell, si) => (
-                                  <span key={si} className="inline-flex items-center gap-0.5">
-                                    <button
-                                      onClick={() => handleRollSpell(character, spell, 'attack')}
-                                      title={`Attaque: 1d20${character.spellcasting.attack_bonus >= 0 ? '+' : ''}${character.spellcasting.attack_bonus} · DD ${character.spellcasting.save_dc}`}
-                                      className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors"
-                                    >
-                                      ✦ {spell.name}
-                                    </button>
-                                    <button
-                                      onClick={() => handleRollSpell(character, spell, 'damage')}
-                                      title={`Dégâts: ${spellDice(character, spell)}`}
-                                      className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors"
-                                    >
-                                      {spellDice(character, spell)}
-                                    </button>
-                                  </span>
-                                ))}
+                                {castable.map((spell, si) => {
+                                  const dice = spellDice(character, spell)
+                                  if (!dice || !character.spellcasting.ability) {
+                                    return (
+                                      <span key={si} title={spell.level === 0 ? 'Tour de magie' : `Niveau ${spell.level}`} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
+                                        ✦ {spell.name}
+                                        <span className="text-violet-500/70 ml-1">{spell.level === 0 ? 'TdM' : `N${spell.level}`}</span>
+                                      </span>
+                                    )
+                                  }
+                                  return (
+                                    <span key={si} className="inline-flex items-center gap-0.5">
+                                      <button
+                                        onClick={() => handleRollSpell(character, spell, 'attack')}
+                                        title={`Attaque: 1d20${character.spellcasting.attack_bonus >= 0 ? '+' : ''}${character.spellcasting.attack_bonus} · DD ${character.spellcasting.save_dc}`}
+                                        className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors"
+                                      >
+                                        ✦ {spell.name}
+                                      </button>
+                                      <button
+                                        onClick={() => handleRollSpell(character, spell, 'damage')}
+                                        title={`Dégâts: ${dice}`}
+                                        className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors"
+                                      >
+                                        {dice}
+                                      </button>
+                                    </span>
+                                  )
+                                })}
                               </div>
                             )
                           })()}
@@ -3673,6 +3695,341 @@ export function CombatPage() {
           </div>
         )}
       </main>
+      )}
+
+      {/* Résultat de jet (macro/sort/monstre) — flotte au-dessus de tout pour rester
+          visible aussi bien dans le flux classique qu'en plein écran. */}
+      {macroResult && (
+        <div className={`fixed top-4 left-1/2 -translate-x-1/2 z-[45] w-[min(92vw,26rem)] border rounded-xl px-5 py-3 flex items-center justify-between gap-4 shadow-2xl ${
+          macroResult.isAttack ? 'bg-rose-950/90 border-rose-700/60' : 'bg-orange-950/90 border-orange-700/60'
+        } backdrop-blur`}>
+          <div className="min-w-0">
+            <p className="text-stone-300 text-xs truncate">{macroResult.label}</p>
+            <p className="text-stone-400 text-xs font-mono">{macroResult.detail}</p>
+          </div>
+          <div className="flex items-center gap-3 shrink-0">
+            <span className={`text-4xl font-black ${macroResult.isAttack ? 'text-rose-300' : 'text-orange-300'}`}>
+              {macroResult.total}
+            </span>
+            <button onClick={() => setMacroResult(null)} className="text-stone-500 hover:text-stone-300 text-lg">×</button>
+          </div>
+        </div>
+      )}
+
+      {/* ─────────── Ajouter un ennemi (accès plein écran au bestiaire) ─────────── */}
+      {showAddEnemy && campaignId && (
+        <div
+          className="fixed inset-0 z-50 flex items-start sm:items-center justify-center bg-black/70 p-4 overflow-y-auto"
+          onClick={e => { if (e.target === e.currentTarget) setShowAddEnemy(false) }}
+        >
+          <div className="bg-stone-900 border border-stone-700 rounded-xl w-full max-w-lg shadow-2xl my-8">
+            <div className="flex items-center justify-between px-5 py-4 border-b border-stone-800">
+              <h2 className="text-stone-200 font-semibold text-base">👥 Combattants</h2>
+              <button onClick={() => setShowAddEnemy(false)} className="text-stone-500 hover:text-stone-300 text-lg leading-none">✕</button>
+            </div>
+            <div className="flex gap-1 px-5 pt-3">
+              {([['bestiary', '📚 Bestiaire'], ['manual', '✏ Manuel'], ['encounter', '⚔ Rencontre']] as [typeof enemyTab, string][]).map(([t, label]) => (
+                <button
+                  key={t}
+                  onClick={() => setEnemyTab(t)}
+                  className={`text-xs font-medium rounded-lg px-3 py-1.5 border transition-colors ${enemyTab === t ? 'bg-stone-700 border-stone-500 text-white' : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-stone-200'}`}
+                >{label}</button>
+              ))}
+            </div>
+            <div className="px-5 py-4 space-y-4">
+              {combatantError && <p className="text-red-400 text-xs">⚠ {combatantError}</p>}
+
+              {/* Saisie manuelle rapide */}
+              {enemyTab === 'manual' && (
+              <div className="space-y-2">
+                <div className="flex gap-1.5">
+                  {(['ennemi', 'allié', 'neutre'] as CombatantFaction[]).map(f => (
+                    <button
+                      key={f}
+                      onClick={() => setCombatantDraft(prev => ({ ...prev, faction: f }))}
+                      className={`flex-1 text-xs font-semibold rounded-lg py-1.5 border transition-colors ${
+                        combatantDraft.faction === f
+                          ? f === 'ennemi' ? 'bg-red-700/40 border-red-600 text-red-300'
+                            : f === 'allié' ? 'bg-emerald-700/40 border-emerald-600 text-emerald-300'
+                            : 'bg-stone-700 border-stone-500 text-stone-300'
+                          : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                      }`}
+                    >{f === 'ennemi' ? 'Ennemi' : f === 'allié' ? 'Allié' : 'Neutre'}</button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="col-span-2 sm:col-span-1 relative">
+                    <input
+                      type="text"
+                      value={combatantDraft.name}
+                      onChange={e => {
+                        const val = e.target.value
+                        setCombatantDraft(prev => ({ ...prev, name: val }))
+                        setMonsterSuggestions(val.length >= 2 ? allMonsters.filter(m => m.name.toLowerCase().includes(val.toLowerCase())).slice(0, 6) : [])
+                      }}
+                      onBlur={() => setTimeout(() => setMonsterSuggestions([]), 150)}
+                      placeholder="Nom *"
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors"
+                    />
+                    {monsterSuggestions.length > 0 && (
+                      <div className="absolute z-20 top-full left-0 right-0 mt-1 bg-stone-800 border border-stone-700 rounded-lg shadow-xl overflow-hidden">
+                        {monsterSuggestions.map(m => (
+                          <button
+                            key={m.name}
+                            type="button"
+                            onMouseDown={() => { setCombatantDraft(prev => ({ ...prev, name: m.name, cr: m.cr, max_hp: String(m.hp_avg), ac: String(m.ac) })); setMonsterSuggestions([]) }}
+                            className="w-full flex items-center justify-between px-3 py-2 hover:bg-stone-700 text-left transition-colors"
+                          >
+                            <span className="text-white text-sm">{m.name}</span>
+                            <span className="text-stone-500 text-xs">CA {m.ac} · {m.hp_avg} PV · FP {m.cr}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                  <input type="number" value={combatantDraft.max_hp} onChange={e => setCombatantDraft(prev => ({ ...prev, max_hp: e.target.value }))} placeholder="PV max *" min={1}
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                  <input type="number" value={combatantDraft.ac} onChange={e => setCombatantDraft(prev => ({ ...prev, ac: e.target.value }))} placeholder="CA"
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
+                  <select value={combatantDraft.cr} onChange={e => setCombatantDraft(prev => ({ ...prev, cr: e.target.value }))} title="Facteur de puissance — XP en fin de combat"
+                    className="bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500 transition-colors">
+                    <option value="">FP (XP)…</option>
+                    {CR_VALUES.map(cr => <option key={cr} value={cr}>FP {cr} · {crToXp(cr)} XP</option>)}
+                  </select>
+                </div>
+                <button
+                  onClick={handleAddCombatant}
+                  disabled={!combatantDraft.name.trim() || !combatantDraft.max_hp}
+                  className="bg-red-700 hover:bg-red-600 disabled:opacity-40 text-white text-sm font-semibold rounded-lg px-4 py-2 transition-colors"
+                >Ajouter au combat</button>
+              </div>
+              )}
+
+              {/* Bestiaire SRD — ajout en un clic (PV et initiative tirés automatiquement) */}
+              {enemyTab === 'bestiary' && (
+              <div className="space-y-2">
+                {addedMonster && <p className="text-emerald-400 text-xs font-medium">✓ {addedMonster} ajouté au combat</p>}
+                <input
+                  type="text"
+                  placeholder="Rechercher un monstre…"
+                  value={bestiarySearch}
+                  onChange={e => setBestiarySearch(e.target.value)}
+                  className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-red-500 transition-colors"
+                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-stone-500 text-xs shrink-0">CR</span>
+                  <select value={bestiaryMinCr} onChange={e => setBestiaryMinCr(e.target.value)} className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-red-500 transition-colors">
+                    {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  <span className="text-stone-600 text-xs">—</span>
+                  <select value={bestiaryMaxCr} onChange={e => setBestiaryMaxCr(e.target.value)} className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-red-500 transition-colors">
+                    {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                  {(bestiaryMinCr !== '0' || bestiaryMaxCr !== '30') && (
+                    <button onClick={() => { setBestiaryMinCr('0'); setBestiaryMaxCr('30') }} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Réinit.</button>
+                  )}
+                </div>
+                {(() => {
+                  const filtered = allMonsters.filter(m =>
+                    m.name.toLowerCase().includes(bestiarySearch.toLowerCase()) &&
+                    (CR_NUM[m.cr] ?? 0) >= (CR_NUM[bestiaryMinCr] ?? 0) &&
+                    (CR_NUM[m.cr] ?? 0) <= (CR_NUM[bestiaryMaxCr] ?? 30)
+                  )
+                  return (
+                    <div className="max-h-64 overflow-y-auto space-y-1 pr-1">
+                      {filtered.map(m => (
+                        <button
+                          key={m.name}
+                          onClick={() => handleAddMonster(m)}
+                          className="w-full flex items-center justify-between px-3 py-2 rounded-lg hover:bg-stone-800 transition-colors text-left group"
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <span className="text-stone-500 text-xs w-8 shrink-0 font-mono">CR{m.cr}</span>
+                            <span className="text-stone-200 text-sm truncate group-hover:text-white transition-colors">{m.name}</span>
+                          </div>
+                          <div className="flex items-center gap-3 shrink-0 text-stone-500 text-xs">
+                            <span>CA {m.ac}</span>
+                            <span className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity">+ Ajouter</span>
+                          </div>
+                        </button>
+                      ))}
+                      {filtered.length === 0 && <p className="text-stone-600 text-sm text-center py-4">Aucun monstre trouvé.</p>}
+                    </div>
+                  )
+                })()}
+              </div>
+              )}
+
+              {/* Constructeur de rencontre — composer plusieurs monstres, jauger la
+                  difficulté, sauvegarder, puis tout lancer dans le combat d'un coup. */}
+              {enemyTab === 'encounter' && (() => {
+                const totalRawXp = encounterEntries.reduce((s, e) => s + e.monster.xp * e.count, 0)
+                const totalCount = encounterEntries.reduce((s, e) => s + e.count, 0)
+                const multiplier = encounterMultiplier(totalCount)
+                const adjustedXp = Math.floor(totalRawXp * multiplier)
+                const partyThresholds = characters.reduce(
+                  (acc, c) => {
+                    const t = XP_THRESHOLDS[Math.max(1, Math.min(20, c.level))] ?? XP_THRESHOLDS[1]
+                    return [acc[0] + t[0], acc[1] + t[1], acc[2] + t[2], acc[3] + t[3]] as [number, number, number, number]
+                  },
+                  [0, 0, 0, 0] as [number, number, number, number],
+                )
+                const difficulty = encounterEntries.length > 0 ? encounterDifficultyLabel(adjustedXp, partyThresholds) : null
+                const filteredMonsters = allMonsters
+                  .filter(m =>
+                    m.name.toLowerCase().includes(encounterSearch.toLowerCase()) &&
+                    (CR_NUM[m.cr] ?? 0) >= (CR_NUM[encounterMinCr] ?? 0) &&
+                    (CR_NUM[m.cr] ?? 0) <= (CR_NUM[encounterMaxCr] ?? 30)
+                  )
+                  .sort((a, b) => {
+                    if (encounterMonsterSort === 'name') return a.name.localeCompare(b.name, 'fr')
+                    if (encounterMonsterSort === 'cr_desc') return (CR_NUM[b.cr] ?? 0) - (CR_NUM[a.cr] ?? 0)
+                    if (encounterMonsterSort === 'xp') return b.xp - a.xp
+                    return (CR_NUM[a.cr] ?? 0) - (CR_NUM[b.cr] ?? 0)
+                  })
+                return (
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-end gap-3">
+                      {characters.length > 0 && (
+                        <button onClick={() => setShowGeneratePanel(v => !v)} className={`text-xs transition-colors ${showGeneratePanel ? 'text-amber-400' : 'text-stone-500 hover:text-amber-400'}`}>⚡ Générer</button>
+                      )}
+                      {campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (
+                        <button onClick={() => setShowSavedEncounters(v => !v)} className={`text-xs transition-colors ${showSavedEncounters ? 'text-violet-400' : 'text-stone-500 hover:text-violet-400'}`}>Sauvegardées ({campaign!.saved_encounters!.length})</button>
+                      )}
+                    </div>
+
+                    {showGeneratePanel && (
+                      <div className="bg-amber-950/30 border border-amber-800/30 rounded-lg p-3">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {(['facile', 'moyen', 'difficile', 'mortelle'] as const).map(d => (
+                            <button key={d} onClick={() => setGenerateDifficulty(d)}
+                              className={`text-xs rounded-lg px-3 py-1.5 border transition-colors capitalize ${generateDifficulty === d ? 'bg-amber-800/40 border-amber-600/50 text-amber-200' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-amber-700/50'}`}>
+                              {d.charAt(0).toUpperCase() + d.slice(1)}
+                            </button>
+                          ))}
+                          <button onClick={handleGenerateEncounter} className="bg-amber-600 hover:bg-amber-500 text-black text-xs font-semibold rounded-lg px-3 py-1.5 transition-colors ml-auto">Générer</button>
+                        </div>
+                      </div>
+                    )}
+
+                    {showSavedEncounters && campaignId && (campaign?.saved_encounters?.length ?? 0) > 0 && (
+                      <div className="bg-stone-800/60 rounded-lg p-2 space-y-1 max-h-40 overflow-y-auto">
+                        {campaign!.saved_encounters!.map((saved, i) => {
+                          const diff = computeEncounterDifficulty(saved.entries, characters.map(c => c.level))
+                          return (
+                            <div key={i} className="flex items-center justify-between gap-2 px-2 py-1.5 rounded hover:bg-stone-700/50 transition-colors">
+                              <div className="min-w-0">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-stone-200 text-xs font-medium truncate">{saved.name}</p>
+                                  {diff && <span className={`text-xs font-semibold shrink-0 ${difficultyColor(diff)}`}>{diff}</span>}
+                                </div>
+                                <p className="text-stone-500 text-xs truncate">{saved.entries.map(e => `${e.count}× ${e.monster_name}`).join(', ')}</p>
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0">
+                                <button onClick={() => handleLoadSavedEncounter(saved)} className="text-violet-400 hover:text-violet-300 text-xs transition-colors">Charger</button>
+                                <button onClick={() => handleDuplicateSavedEncounter(i)} className="text-stone-600 hover:text-sky-400 text-xs transition-colors" title="Dupliquer">⎘</button>
+                                <button onClick={() => handleDeleteSavedEncounter(i)} className="text-stone-600 hover:text-red-400 text-xs transition-colors">×</button>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+
+                    <input
+                      type="text"
+                      placeholder="Ajouter un monstre…"
+                      value={encounterSearch}
+                      onChange={e => setEncounterSearch(e.target.value)}
+                      className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors"
+                    />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-stone-500 text-xs shrink-0">CR</span>
+                      <select value={encounterMinCr} onChange={e => setEncounterMinCr(e.target.value)} className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-violet-500 transition-colors">
+                        {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <span className="text-stone-600 text-xs">—</span>
+                      <select value={encounterMaxCr} onChange={e => setEncounterMaxCr(e.target.value)} className="bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-xs focus:outline-none focus:border-violet-500 transition-colors">
+                        {CR_VALUES.map(v => <option key={v} value={v}>{v}</option>)}
+                      </select>
+                      <select value={encounterMonsterSort} onChange={e => setEncounterMonsterSort(e.target.value as typeof encounterMonsterSort)} className="ml-auto bg-stone-800 border border-stone-700 rounded px-2 py-1 text-stone-300 text-xs focus:outline-none focus:border-violet-500 transition-colors">
+                        <option value="cr_asc">CR ↑</option>
+                        <option value="cr_desc">CR ↓</option>
+                        <option value="xp">XP ↓</option>
+                        <option value="name">Nom A→Z</option>
+                      </select>
+                    </div>
+
+                    {encounterSearch && (
+                      <div className="max-h-40 overflow-y-auto space-y-0.5 pr-1">
+                        {filteredMonsters.slice(0, 12).map(m => (
+                          <button
+                            key={m.name}
+                            onClick={() => {
+                              setEncounterEntries(prev => {
+                                const idx = prev.findIndex(e => e.monster.name === m.name)
+                                if (idx >= 0) { const next = [...prev]; next[idx] = { ...next[idx], count: next[idx].count + 1 }; return next }
+                                return [...prev, { monster: m, count: 1 }]
+                              })
+                              setEncounterSearch('')
+                            }}
+                            className="w-full flex items-center justify-between px-3 py-1.5 rounded hover:bg-stone-800 transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <span className="text-stone-500 text-xs w-8 shrink-0 font-mono">CR{m.cr}</span>
+                              <span className="text-stone-200 text-sm truncate">{m.name}</span>
+                            </div>
+                            <span className="text-stone-500 text-xs shrink-0">{m.xp} XP</span>
+                          </button>
+                        ))}
+                        {filteredMonsters.length === 0 && <p className="text-stone-600 text-sm text-center py-2">Aucun monstre trouvé.</p>}
+                      </div>
+                    )}
+
+                    {encounterEntries.length > 0 && (
+                      <div className="space-y-1.5">
+                        {encounterEntries.map((entry, i) => (
+                          <div key={entry.monster.name} className="flex items-center gap-3 bg-stone-800/60 rounded-lg px-3 py-2">
+                            <span className="text-stone-500 text-xs font-mono w-8 shrink-0">CR{entry.monster.cr}</span>
+                            <span className="flex-1 text-stone-200 text-sm min-w-0 truncate">{entry.monster.name}</span>
+                            <span className="text-stone-500 text-xs shrink-0">{entry.monster.xp * entry.count} XP</span>
+                            <div className="flex items-center gap-1 shrink-0">
+                              <button onClick={() => setEncounterEntries(prev => { const next = [...prev]; if (next[i].count <= 1) return next.filter((_, j) => j !== i); next[i] = { ...next[i], count: next[i].count - 1 }; return next })} className="w-5 h-5 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs flex items-center justify-center transition-colors">−</button>
+                              <span className="text-white text-sm w-5 text-center">{entry.count}</span>
+                              <button onClick={() => setEncounterEntries(prev => { const next = [...prev]; next[i] = { ...next[i], count: next[i].count + 1 }; return next })} className="w-5 h-5 rounded bg-stone-700 hover:bg-stone-600 text-stone-300 text-xs flex items-center justify-center transition-colors">+</button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {difficulty && (
+                      <div className="flex items-center justify-between border-t border-stone-800 pt-3">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <span className={`text-sm font-bold ${difficultyColor(difficulty)}`}>{difficulty}</span>
+                            <span className="text-stone-500 text-xs">{adjustedXp} XP ajustés{multiplier !== 1 && <span className="text-stone-600"> (×{multiplier})</span>}</span>
+                          </div>
+                        </div>
+                        <button onClick={async () => { await handleLaunchEncounter(); setShowAddEnemy(false) }} disabled={encounterEntries.length === 0} className="bg-violet-700 hover:bg-violet-600 disabled:opacity-40 text-white font-semibold text-sm rounded-lg px-4 py-2 transition-colors shrink-0">Lancer →</button>
+                      </div>
+                    )}
+
+                    {campaignId && (
+                      <div className="flex items-center gap-2 border-t border-stone-800 pt-3">
+                        <input type="text" placeholder="Nom de la rencontre…" value={saveEncounterName} onChange={e => setSaveEncounterName(e.target.value)} className="flex-1 min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-white text-xs placeholder-stone-600 focus:outline-none focus:border-violet-500 transition-colors" />
+                        <button onClick={handleSaveEncounter} disabled={!saveEncounterName.trim() || encounterEntries.length === 0} className="bg-stone-700 hover:bg-stone-600 disabled:opacity-40 text-stone-200 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors shrink-0">Sauvegarder</button>
+                      </div>
+                    )}
+
+                    {encounterEntries.length === 0 && <p className="text-stone-600 text-xs text-center py-2">Recherchez des monstres pour composer la rencontre.</p>}
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─────────── Ruban de tour + dock du combattant actif ─────────── */}
       {withRollDisplay.length > 0 && (
@@ -3858,7 +4215,10 @@ export function CombatPage() {
                         </div>
                         <div className="mt-1 flex items-center gap-1">
                           <div className="flex-1 h-1 bg-stone-700 rounded-full overflow-hidden"><div className={`h-full ${hpColor(hp, maxHp)}`} style={{ width: `${pct}%` }} /></div>
-                          <span className={`text-[9px] tabular-nums ${dying ? 'text-red-400' : 'text-stone-500'}`}>{enemy ? '?' : hp}</span>
+                          {/* Cette page est celle du MJ (route protégée) : il voit les PV
+                              de tout le monde. C'est la vue joueurs, /share/:token/combat,
+                              qui masque les PV ennemis. */}
+                          <span className={`text-[9px] tabular-nums ${dying ? 'text-red-400' : 'text-stone-500'}`}>{hp}</span>
                         </div>
                       </button>
                     </div>
@@ -3904,7 +4264,11 @@ export function CombatPage() {
               if (activeCombatant.kind === 'character') {
                 const ch = activeCombatant.data
                 const dying = ch.combat.current_hp <= 0
-                const damageSpells = ch.spellcasting.ability ? ch.spellcasting.spells.filter(s => s.damage_dice && (s.prepared || s.level === 0)) : []
+                // Tous les sorts utilisables ce tour-ci, pas seulement ceux qui font des
+                // dégâts : un sort d'utilité préparé (Bouclier, Armure de mage…) doit
+                // rester visible. La caractéristique d'incantation ne conditionne que les
+                // jets, jamais l'affichage — une fiche sans elle a quand même ses sorts.
+                const castable = ch.spellcasting.spells.filter(s => s.prepared || s.level === 0)
                 const addable = Object.entries(CONDITIONS_FR).filter(([k]) => !ch.state.conditions.includes(k))
                 return (
                   <div className="py-2.5 space-y-2">
@@ -3958,7 +4322,7 @@ export function CombatPage() {
                         </div>
                       )}
                     </div>
-                    {(ch.attack_macros.length > 0 || damageSpells.length > 0) && (
+                    {(ch.attack_macros.length > 0 || castable.length > 0) && (
                       <div className="flex items-center gap-1 flex-wrap">
                         {ch.attack_macros.map((macro, mi) => (
                           <span key={`m${mi}`} className="inline-flex items-center gap-0.5">
@@ -3966,12 +4330,26 @@ export function CombatPage() {
                             <button onClick={() => handleRollMacro(ch, macro, 'damage')} title={`Dégâts: ${macro.damage_dice}`} className="text-xs bg-orange-900/50 border border-orange-700/40 text-orange-300 rounded-r px-1.5 py-0.5 hover:bg-orange-800/60 transition-colors">{macro.damage_dice}</button>
                           </span>
                         ))}
-                        {damageSpells.map((spell, si) => (
-                          <span key={`s${si}`} className="inline-flex items-center gap-0.5">
-                            <button onClick={() => handleRollSpell(ch, spell, 'attack')} className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors">✦ {spell.name}</button>
-                            <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${spellDice(ch, spell)}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{spellDice(ch, spell)}</button>
-                          </span>
-                        ))}
+                        {castable.map((spell, si) => {
+                          const dice = spellDice(ch, spell)
+                          // Sans dés ni caractéristique d'incantation, il n'y a rien à
+                          // lancer : le sort reste une pastille de rappel, pas un bouton
+                          // qui promet un jet inexistant.
+                          if (!dice || !ch.spellcasting.ability) {
+                            return (
+                              <span key={`s${si}`} title={spell.level === 0 ? 'Tour de magie' : `Niveau ${spell.level}`} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
+                                ✦ {spell.name}
+                                <span className="text-violet-500/70 ml-1">{spell.level === 0 ? 'TdM' : `N${spell.level}`}</span>
+                              </span>
+                            )
+                          }
+                          return (
+                            <span key={`s${si}`} className="inline-flex items-center gap-0.5">
+                              <button onClick={() => handleRollSpell(ch, spell, 'attack')} className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors">✦ {spell.name}</button>
+                              <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${dice}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{dice}</button>
+                            </span>
+                          )
+                        })}
                       </div>
                     )}
                   </div>

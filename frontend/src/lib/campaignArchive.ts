@@ -110,7 +110,6 @@ export function campaignToArchive(campaign: Campaign, chapters: Chapter[]): Reco
     factions: campaign.factions,
     random_tables: campaign.random_tables,
     game_calendar: campaign.game_calendar,
-    quests: campaign.quests,
     campaign_map: campaign.campaign_map,
     chapters,
   }

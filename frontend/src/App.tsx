@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom'
 import { AuthProvider } from './contexts/AuthContext'
 import { ToastProvider } from './contexts/ToastContext'
 import { CampaignProvider } from './contexts/CampaignContext'
@@ -23,6 +23,12 @@ import { DashboardPage } from './pages/DashboardPage'
 import { CharacterPrintPage } from './pages/CharacterPrintPage'
 import { SharedCharacterPage } from './pages/SharedCharacterPage'
 import { LiveCombatPage } from './pages/LiveCombatPage'
+
+/** Ancien nom du combat en direct (/share/:token/live). Redirige vers son jeton. */
+function LiveCombatRedirect() {
+  const { token } = useParams<{ token: string }>()
+  return <Navigate to={`/share/${token}/combat`} replace />
+}
 
 export default function App() {
   return (
@@ -118,7 +124,9 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route path="/share/:token/live" element={<LiveCombatPage />} />
+          <Route path="/share/:token/combat" element={<LiveCombatPage />} />
+          {/* Ancien nom du combat en direct : des liens ont pu être distribués aux joueurs. */}
+          <Route path="/share/:token/live" element={<LiveCombatRedirect />} />
           <Route path="/share/:token" element={<SharedCampaignPage />} />
           <Route path="/share/character/:token" element={<SharedCharacterPage />} />
           <Route path="/legal"   element={<LegalPage />} />

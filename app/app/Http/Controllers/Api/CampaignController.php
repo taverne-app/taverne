@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Events\BattleMapUpdated;
 use App\Events\CampaignTimeUpdated;
+use App\Events\CombatActiveChanged;
 use App\Events\CombatTurnUpdated;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CampaignResource;
@@ -76,14 +77,24 @@ class CampaignController extends Controller
             'random_tables'    => ['sometimes', 'nullable', 'array'],
             'campaign_map'          => ['sometimes', 'nullable', 'array'],
             'battle_map'            => ['sometimes', 'nullable', 'array'],
-            'quests'                => ['sometimes', 'nullable', 'array'],
+            'combat_active'         => ['sometimes', 'boolean'],
         ]);
+
+        $wasActive = $campaign->combat_active;
 
         $campaign->update($validated);
 
         // Déplacer un pion doit se voir en direct sur l'écran des joueurs.
         if (array_key_exists('battle_map', $validated) && $campaign->share_token) {
             BattleMapUpdated::dispatch($campaign->share_token, $campaign->battle_map);
+        }
+
+        // Ouvrir/fermer le combat fait apparaître ou disparaître la vue Combat dans
+        // la barre latérale des joueurs, en direct.
+        if (array_key_exists('combat_active', $validated)
+            && $campaign->combat_active !== $wasActive
+            && $campaign->share_token) {
+            CombatActiveChanged::dispatch($campaign->share_token, $campaign->combat_active);
         }
 
         return new CampaignResource($campaign->fresh()->load(['characters', 'combatants']));

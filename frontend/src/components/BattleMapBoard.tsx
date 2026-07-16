@@ -16,12 +16,20 @@ const DOT: Record<TokenColor, string> = {
   sky: 'bg-sky-500 border-sky-300',
 }
 
-// Off-grid: fixed pixels. On-grid: a fraction of a cell (Moyen ≈ 1 case, Grand ≈ 2).
-const SIZE_PX: Record<BattleToken['size'], number> = { sm: 30, md: 42, lg: 58 }
-const SIZE_CELLS: Record<BattleToken['size'], number> = { sm: 0.7, md: 0.95, lg: 1.9 }
+// Diamètre des pions (px) au repos, quand il n'y a pas de grille pour donner l'échelle.
+const SIZE_PX: Record<BattleToken['size'], number> = { sm: 24, md: 30, lg: 44 }
+// Avec une grille, le pion se mesure en cases : Moyen occupe exactement une case (D&D 5e
+// loge P et M dans une case, G dans quatre). Le 0.92 laisse voir le trait de la grille
+// sous le pion, sinon un M posé sur sa case a l'air de déborder.
+const SIZE_CELLS: Record<BattleToken['size'], number> = { sm: 0.57, md: 0.85, lg: 1.7 }
 const SIZE_LABEL: Record<BattleToken['size'], string> = { sm: 'P', md: 'M', lg: 'G' }
 
 const BOARD_ASPECT = 16 / 10
+// Plafond de colonnes = plancher de la taille de case. 60 ne suffisait pas à épouser
+// les grilles fines de certaines cartes ; à 160, une case tombe sous les 8 px sur un
+// plateau de 1200 px — en dessous, la trame devient un aplat gris et les pions se
+// touchent, ce qui rend le plateau inutilisable bien avant d'être une limite technique.
+const MAX_COLS = 160
 const METERS_PER_CELL = 1.5   // une case de 1,5 m, comme la vitesse en mètres du jeu
 
 export const EMPTY_BATTLE_MAP: BattleMap = { image_url: '', grid: null, tokens: [] }
@@ -55,6 +63,18 @@ interface Props {
   activeRef?: ActiveRef | null
   /** Appelé au « Lancer » avec les cibles couvertes par le gabarit (ids de lignes). */
   onCastZone?: (rowIds: string[]) => void
+  /** Contenu libre posé EN SURIMPRESSION sur l'image du plateau (ex. le titre de la page). */
+  overlay?: React.ReactNode
+  /**
+   * Mode « plateau plein écran » : la surface s'ajuste à la hauteur disponible (au
+   * lieu d'occuper toute la largeur en 16/10), la barre d'outils reste en tête. On
+   * conserve l'aspect 16/10 pour que les cases de la grille restent carrées.
+   */
+  fullscreen?: boolean
+  /** Contrôles propres à la page, posés à droite de la barre de menus (plein écran). */
+  toolbarExtra?: React.ReactNode
+  /** Contrôle propre à la page, posé à gauche de « ＋ Pion » (plein écran). */
+  toolbarLead?: React.ReactNode
 }
 
 
@@ -114,8 +134,11 @@ function ZoneShapeSvg({ zone, grid, draft, highlight }: { zone: BattleZone; grid
   return <polygon points={pts.map(p => `${p[0]},${p[1]}`).join(' ')} {...common} />
 }
 
-export function BattleMapBoard({ map, combatants, characters, editable = false, onChange, activeRef = null, onCastZone }: Props) {
+export function BattleMapBoard({ map, combatants, characters, editable = false, onChange, activeRef = null, onCastZone, overlay, fullscreen = false, toolbarExtra, toolbarLead }: Props) {
   const boardRef = useRef<HTMLDivElement>(null)
+  const fitRef = useRef<HTMLDivElement>(null)
+  const [fit, setFit] = useState<{ w: number; h: number } | null>(null)
+  const [boardW, setBoardW] = useState(0)
   const [work, setWork] = useState<BattleMap>(map ?? EMPTY_BATTLE_MAP)
   const [dragId, setDragId] = useState<string | null>(null)
   const movedRef = useRef(false)
@@ -123,8 +146,11 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
   const [selected, setSelected] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
   const [imgError, setImgError] = useState(false)
-  const [boardW, setBoardW] = useState(0)
   const [measure, setMeasure] = useState<{ x: number; y: number; cells: number } | null>(null)
+  // Zoom plein écran (× la taille qui tient dans l'écran) ; au-delà de 1, le plateau
+  // déborde et la zone défile (comme un +/− de carte). Les pions se dimensionnent sur
+  // la largeur RÉELLE du plateau, donc le glisser-déposer reste juste à tout zoom.
+  const [zoom, setZoom] = useState(1)
 
   /**
    * Gabarit en cours de visée. Il reste LOCAL : tant que le MJ n'a pas cliqué
@@ -134,6 +160,11 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
   const [zoneDraft, setZoneDraft] = useState<BattleZone | null>(null)
   /** Zone survolée dans la liste — mise en évidence sur le plateau. */
   const [hoveredZone, setHoveredZone] = useState<string | null>(null)
+  /** Menu ouvert dans la barre d'outils épurée du mode plein écran. */
+  const [menu, setMenu] = useState<null | 'map' | 'pion' | 'zone'>(null)
+  /** Outil ✋ : caler la grille sur celle de l'image de fond. */
+  const [gridPan, setGridPan] = useState(false)
+  const panRef = useRef<{ px: number; py: number; ox: number; oy: number } | null>(null)
 
   useEffect(() => {
     if (dragId) return
@@ -141,7 +172,27 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
     setImgError(false)
   }, [map, dragId])
 
-  // Board pixel width — needed to size tokens proportionally to grid cells.
+  // Plein écran : on mesure la zone disponible pour y inscrire un plateau 16/10 qui
+  // remplit la hauteur SANS déborder en largeur — sinon la surface, en `w-full`,
+  // dépasserait l'écran en hauteur et le ruban des personnages la masquerait.
+  useEffect(() => {
+    if (!fullscreen) return
+    const el = fitRef.current
+    if (!el) return
+    const ro = new ResizeObserver(entries => {
+      const r = entries[0].contentRect
+      setFit({ w: r.width, h: r.height })
+    })
+    ro.observe(el)
+    const r = el.getBoundingClientRect()
+    setFit({ w: r.width, h: r.height })
+    return () => ro.disconnect()
+  }, [fullscreen])
+
+  // Largeur rendue du plateau, seule façon de traduire une case de grille en pixels
+  // (la grille est définie en nombre de colonnes, pas en px). Mesurée sur l'élément
+  // plutôt que calculée : elle vaut `fittedW * zoom` en plein écran, mais 100 % du
+  // conteneur hors plein écran, et le responsive la fait bouger sans changer d'état.
   useEffect(() => {
     const el = boardRef.current
     if (!el) return
@@ -150,6 +201,26 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
     setBoardW(el.getBoundingClientRect().width)
     return () => ro.disconnect()
   }, [])
+
+  // Shift + molette = défilement HORIZONTAL (convention des outils graphiques). Listener
+  // natif non-passif : c'est la seule façon d'appeler preventDefault sur la molette et
+  // d'empêcher le défilement vertical de doubler le geste. Si le navigateur a déjà
+  // converti le geste (deltaY=0, deltaX≠0), on le laisse faire.
+  useEffect(() => {
+    if (!fullscreen) return
+    const el = fitRef.current
+    if (!el) return
+    const onWheel = (e: WheelEvent) => {
+      if (!e.shiftKey || e.deltaY === 0) return
+      el.scrollLeft += e.deltaY
+      e.preventDefault()
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [fullscreen])
+
+  // Largeur d'un plateau 16/10 qui tient dans la zone : bornée par la hauteur.
+  const fittedW = fullscreen && fit ? Math.max(0, Math.min(fit.w, fit.h * BOARD_ASPECT)) : 0
 
   const grid = work.grid
   const commit = (next: BattleMap) => { setWork(next); onChange?.(next) }
@@ -160,12 +231,24 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
     commit({ ...work, image_url: url })
   }
 
+  // Décalage de la grille (% du plateau). Absent sur les cartes d'avant l'outil de
+  // calage : 0 y restitue exactement l'ancien comportement.
+  const gridOff = { x: grid?.offset_x ?? 0, y: grid?.offset_y ?? 0 }
+
   function snap(x: number, y: number) {
     if (!grid) return { x, y }
     const cellW = 100 / grid.cols, cellH = 100 / grid.rows
-    const col = Math.max(0, Math.min(grid.cols - 1, Math.floor(x / cellW)))
-    const row = Math.max(0, Math.min(grid.rows - 1, Math.floor(y / cellH)))
-    return { x: (col + 0.5) * cellW, y: (row + 0.5) * cellH, col, row }
+    // On raisonne dans le repère de la grille (image décalée), puis on revient dans
+    // celui du plateau. Le calage peut pousser des cases hors du plateau, d'où des
+    // index qui débordent [0, cols[ : on les borne sur le plateau, pas sur la grille.
+    const col = Math.floor((x - gridOff.x) / cellW)
+    const row = Math.floor((y - gridOff.y) / cellH)
+    return {
+      x: Math.max(0, Math.min(100, (col + 0.5) * cellW + gridOff.x)),
+      y: Math.max(0, Math.min(100, (row + 0.5) * cellH + gridOff.y)),
+      col,
+      row,
+    }
   }
 
   function pointFromEvent(e: React.PointerEvent) {
@@ -238,10 +321,72 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
     else commit({ ...work, grid: { cols: 24, rows: Math.round(24 / BOARD_ASPECT) } })
   }
 
+  /**
+   * Taille de case, exprimée en nombre de colonnes. Volontairement CONTINUE (au
+   * centième) : la grille dessinée sur une image ne tombe presque jamais sur un
+   * compte entier de colonnes, et un pas entier condamnait le calage à dériver au
+   * bout de la carte. `rows` n'est plus arrondi non plus, sinon les cases cessent
+   * d'être carrées et le pion « une case » ne colle plus.
+   */
   function setCols(cols: number) {
-    const c = Math.max(4, Math.min(60, cols))
-    commit({ ...work, grid: { cols: c, rows: Math.max(1, Math.round(c / BOARD_ASPECT)) } })
+    const c = Math.max(4, Math.min(MAX_COLS, Math.round(cols * 100) / 100))
+    commit({ ...work, grid: { ...grid, cols: c, rows: c / BOARD_ASPECT } })
   }
+
+  /**
+   * Glisser de l'outil ✋. Le décalage est accumulé sur la position d'origine du
+   * geste (et non delta par delta) : sinon les arrondis du `wrap` s'additionneraient
+   * et la grille filerait sous le curseur.
+   */
+  function onPanDown(e: React.PointerEvent) {
+    if (!gridPan || !grid) return
+    e.preventDefault()
+    e.stopPropagation()
+    ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+    panRef.current = { px: e.clientX, py: e.clientY, ox: gridOff.x, oy: gridOff.y }
+  }
+
+  function onPanMove(e: React.PointerEvent) {
+    const p = panRef.current
+    const rect = boardRef.current?.getBoundingClientRect()
+    if (!p || !rect || !grid) return
+    setGridOffset(
+      p.ox + ((e.clientX - p.px) / rect.width) * 100,
+      p.oy + ((e.clientY - p.py) / rect.height) * 100,
+    )
+  }
+
+  function onPanUp() { panRef.current = null }
+
+  /** Décale la grille pour la faire coïncider avec celle de l'image (outil ✋). */
+  function setGridOffset(x: number, y: number) {
+    if (!grid) return
+    // Un décalage d'une case entière redonne la même grille : on le ramène dans
+    // [0, taille de case[ pour que « recentrer » reste atteignable et que la valeur
+    // stockée ne parte pas à la dérive à force de glisser.
+    const cellW = 100 / grid.cols, cellH = 100 / grid.rows
+    const wrap = (v: number, c: number) => ((v % c) + c) % c
+    commit({ ...work, grid: { ...grid, offset_x: wrap(x, cellW), offset_y: wrap(y, cellH) } })
+  }
+
+  // Outil ✋ : la molette règle la taille des cases. Listener natif non-passif, seule
+  // façon d'empêcher la page de défiler sous le geste. Monté seulement pendant le
+  // calage, pour ne pas voler la molette au reste du temps.
+  useEffect(() => {
+    if (!gridPan || !grid) return
+    const el = boardRef.current
+    if (!el) return
+    // Pas PROPORTIONNEL (4 %) et non fixe : le même cran doit valoir un petit
+    // ajustement à 20 colonnes et un vrai déplacement à 150, sinon atteindre les
+    // grilles fines demanderait des centaines de crans. Les boutons ±, eux, gardent
+    // un pas fixe pour le réglage au poil près.
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault()
+      setCols(grid.cols * (e.deltaY > 0 ? 1.04 : 1 / 1.04))
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [gridPan, grid?.cols])
 
   const placedRefs = new Set(work.tokens.filter(t => t.ref_id != null).map(t => `${t.ref_type}-${t.ref_id}`))
   const availableCombatants = combatants.filter(c => !placedRefs.has(`combatant-${c.id}`))
@@ -286,27 +431,61 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
     setZoneDraft(null)
   }
 
-  const cellPx = grid && boardW ? boardW / grid.cols : 0
+
+  // Contrôles réutilisés à la fois par la barre classique (in-flow) et par les menus
+  // épurés du plein écran, pour ne pas dupliquer la logique de grille et de pions.
+  const gridToggleBtn = (
+    <button
+      onClick={toggleGrid}
+      className={`text-sm font-medium rounded-lg px-3 py-2 border transition-colors ${grid ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-stone-200'}`}
+    >▦ Grille {grid ? 'activée' : 'désactivée'}</button>
+  )
+  const gridSizeCtl = grid ? (
+    <div className="flex items-center gap-1 text-xs text-stone-400">
+      <button
+        onClick={() => setGridPan(v => !v)}
+        title="Caler la grille sur celle de l’image : glissez la carte pour la déplacer, molette pour la taille des cases"
+        className={`h-8 px-2 rounded border transition-colors ${gridPan ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : 'bg-stone-800 border-stone-700 hover:text-white'}`}
+      >✋ Caler</button>
+      <button onClick={() => setCols(grid.cols - 0.25)} title="Cases plus grandes (réglage fin)" className="w-6 h-8 bg-stone-800 border border-stone-700 rounded hover:text-white">−</button>
+      <span className="w-12 text-center tabular-nums" title={`${grid.cols} colonnes — molette sur la carte pour dégrossir`}>{grid.cols.toFixed(2)}</span>
+      <button onClick={() => setCols(grid.cols + 0.25)} title="Cases plus petites (réglage fin)" className="w-6 h-8 bg-stone-800 border border-stone-700 rounded hover:text-white">+</button>
+      {gridPan && (gridOff.x !== 0 || gridOff.y !== 0) && (
+        <button
+          onClick={() => commit({ ...work, grid: { ...grid, offset_x: 0, offset_y: 0 } })}
+          title="Remettre la grille au coin de la carte"
+          className="h-8 px-2 bg-stone-800 border border-stone-700 rounded hover:text-white"
+        >⟲</button>
+      )}
+    </div>
+  ) : null
+  const tokenListItems = (
+    <>
+      <button onClick={() => addToken({ label: 'Pion', color: 'amber' })} className="w-full text-left text-sm text-stone-300 hover:bg-stone-800 rounded px-2 py-1.5">🎯 Pion libre</button>
+      {availableCombatants.length > 0 && <p className="text-stone-600 text-[10px] uppercase tracking-widest px-2 pt-2 pb-1">Combattants</p>}
+      {availableCombatants.map(c => (
+        <button key={`cb-${c.id}`} onClick={() => addToken({ label: c.name, ref_type: 'combatant', ref_id: c.id, color: c.faction === 'ennemi' ? 'red' : c.faction === 'allié' ? 'green' : 'amber' })} className="w-full text-left text-sm text-stone-300 hover:bg-stone-800 rounded px-2 py-1.5 truncate">{c.faction === 'ennemi' ? '🔴' : c.faction === 'allié' ? '🟢' : '🟡'} {c.name}</button>
+      ))}
+      {availableCharacters.length > 0 && <p className="text-stone-600 text-[10px] uppercase tracking-widest px-2 pt-2 pb-1">Personnages</p>}
+      {availableCharacters.map(c => (
+        <button key={`ch-${c.id}`} onClick={() => addToken({ label: c.name, ref_type: 'character', ref_id: c.id, color: 'blue' })} className="w-full text-left text-sm text-stone-300 hover:bg-stone-800 rounded px-2 py-1.5 truncate">🔵 {c.name}</button>
+      ))}
+    </>
+  )
+  const menuBtnCls = (active: boolean) =>
+    `text-sm font-medium rounded-lg px-3 py-1.5 border transition-colors ${active ? 'bg-stone-700 border-stone-500 text-white' : 'bg-stone-800 border-stone-700 text-stone-300 hover:text-white hover:border-stone-500'}`
 
   return (
-    <div className="space-y-3">
-      {editable && (
+    <div className={fullscreen ? 'flex flex-col h-full min-h-0 gap-2' : 'space-y-3'}>
+      {/* Barre classique (in-flow) : URL + upload + grille + pion, tout visible. */}
+      {editable && !fullscreen && (
         <ImagePicker
           value={work.image_url ?? ''}
           onChange={useImage}
           placeholder="URL de l'image de fond (donjon, carte…)"
         >
-          <button
-            onClick={toggleGrid}
-            className={`text-sm font-medium rounded-lg px-3 py-2 border transition-colors ${grid ? 'bg-amber-500/20 border-amber-500/50 text-amber-300' : 'bg-stone-800 border-stone-700 text-stone-400 hover:text-stone-200'}`}
-          >▦ Grille</button>
-          {grid && (
-            <div className="flex items-center gap-1 text-xs text-stone-400">
-              <button onClick={() => setCols(grid.cols - 2)} className="w-6 h-8 bg-stone-800 border border-stone-700 rounded hover:text-white">−</button>
-              <span className="w-14 text-center tabular-nums">{grid.cols}×{grid.rows}</span>
-              <button onClick={() => setCols(grid.cols + 2)} className="w-6 h-8 bg-stone-800 border border-stone-700 rounded hover:text-white">+</button>
-            </div>
-          )}
+          {gridToggleBtn}
+          {gridSizeCtl}
           <div className="relative">
             <button
               onClick={() => setAdding(v => !v)}
@@ -314,21 +493,80 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
             >+ Pion</button>
             {adding && (
               <div className="absolute right-0 mt-1 z-20 w-56 max-h-72 overflow-y-auto bg-stone-900 border border-stone-700 rounded-lg shadow-xl p-1">
-                <button onClick={() => addToken({ label: 'Pion', color: 'amber' })} className="w-full text-left text-sm text-stone-300 hover:bg-stone-800 rounded px-2 py-1.5">🎯 Pion libre</button>
-                {availableCombatants.length > 0 && <p className="text-stone-600 text-[10px] uppercase tracking-widest px-2 pt-2 pb-1">Combattants</p>}
-                {availableCombatants.map(c => (
-                  <button key={`cb-${c.id}`} onClick={() => addToken({ label: c.name, ref_type: 'combatant', ref_id: c.id, color: c.faction === 'ennemi' ? 'red' : c.faction === 'allié' ? 'green' : 'amber' })} className="w-full text-left text-sm text-stone-300 hover:bg-stone-800 rounded px-2 py-1.5 truncate">{c.faction === 'ennemi' ? '🔴' : c.faction === 'allié' ? '🟢' : '🟡'} {c.name}</button>
-                ))}
-                {availableCharacters.length > 0 && <p className="text-stone-600 text-[10px] uppercase tracking-widest px-2 pt-2 pb-1">Personnages</p>}
-                {availableCharacters.map(c => (
-                  <button key={`ch-${c.id}`} onClick={() => addToken({ label: c.name, ref_type: 'character', ref_id: c.id, color: 'blue' })} className="w-full text-left text-sm text-stone-300 hover:bg-stone-800 rounded px-2 py-1.5 truncate">🔵 {c.name}</button>
-                ))}
+                {tokenListItems}
               </div>
             )}
           </div>
         </ImagePicker>
       )}
 
+      {/* Barre épurée (plein écran) : des MENUS, comme les outils de rédaction. */}
+      {editable && fullscreen && (
+        <div className="order-1 relative shrink-0 flex flex-wrap items-center gap-1 gap-y-1.5">
+          <button onClick={() => setMenu(m => m === 'map' ? null : 'map')} className={menuBtnCls(menu === 'map')}>🗺 Map</button>
+          {toolbarLead}
+          <button onClick={() => setMenu(m => m === 'pion' ? null : 'pion')} className={menuBtnCls(menu === 'pion')}>＋ Pion</button>
+          <button onClick={() => setMenu(m => m === 'zone' ? null : 'zone')} className={menuBtnCls(menu === 'zone')}>🔥 Zone</button>
+
+          {toolbarExtra && <div className="ml-auto flex items-center gap-2">{toolbarExtra}</div>}
+
+          {menu && <div className="fixed inset-0 z-20" onClick={() => setMenu(null)} />}
+
+          {menu === 'map' && (
+            <div className="absolute left-0 top-full mt-1 z-30 w-[min(92vw,34rem)] max-h-[70vh] overflow-y-auto bg-stone-900 border border-stone-700 rounded-lg shadow-xl p-3">
+              <ImagePicker value={work.image_url ?? ''} onChange={useImage} placeholder="URL de l'image de fond (donjon, carte…)">
+                {gridToggleBtn}
+                {gridSizeCtl}
+              </ImagePicker>
+            </div>
+          )}
+
+          {menu === 'pion' && (
+            <div className="absolute left-0 top-full mt-1 z-30 w-64 max-h-[70vh] overflow-y-auto bg-stone-900 border border-stone-700 rounded-lg shadow-xl p-1">
+              {tokenListItems}
+            </div>
+          )}
+
+          {menu === 'zone' && (
+            <div className="absolute left-0 top-full mt-1 z-30 w-72 bg-stone-900 border border-stone-700 rounded-lg shadow-xl p-2">
+              {!grid ? (
+                <p className="text-stone-500 text-xs px-1 py-1">Activez la grille (menu Map) : sans elle, aucune échelle en mètres.</p>
+              ) : (
+                <div className="flex flex-wrap gap-1.5">
+                  {([
+                    ['sphere', '⭕ Sphère'],
+                    ['cone', '🔺 Cône'],
+                    ['line', '📏 Ligne'],
+                    ['cube', '⬛ Cube'],
+                  ] as [ZoneShape, string][]).map(([shape, label]) => (
+                    <button
+                      key={shape}
+                      onClick={() => { startZone(shape); setMenu(null) }}
+                      className={`text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${
+                        zoneDraft?.shape === shape
+                          ? 'bg-red-700/40 border-red-500 text-red-300'
+                          : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-red-600/50 hover:text-red-400'
+                      }`}
+                    >{label}</button>
+                  ))}
+                  {zones.length > 1 && (
+                    <button onClick={() => commit({ ...work, zones: [] })} className="text-xs text-stone-500 hover:text-stone-300 transition-colors w-full text-left pt-1">Tout effacer</button>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Zone de la carte : parent de positionnement (pour les boutons de zoom) →
+          conteneur de défilement → boîte de centrage → plateau. `min-w/h-full` sur la
+          boîte de centrage garde le plateau atteignable au défilement une fois zoomé. */}
+      <div className={fullscreen ? 'order-3 flex-1 min-h-0 relative' : 'contents'}>
+      <div ref={fitRef} className={fullscreen ? 'absolute inset-0 overflow-auto' : 'contents'}>
+      {/* Centré au repos ; aligné en haut-à-gauche dès qu'on zoome, car le centrage
+          flex rendrait le débordement gauche/haut inatteignable au défilement. */}
+      <div className={fullscreen ? `min-w-full min-h-full flex ${zoom > 1 ? 'items-start justify-start' : 'items-center justify-center'}` : 'contents'}>
       <div
         ref={boardRef}
         onPointerMove={onBoardMove}
@@ -343,8 +581,8 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
             y: Math.max(0, Math.min(100, ((e.clientY - r.top) / r.height) * 100)),
           })
         }}
-        className={`relative w-full overflow-hidden rounded-xl border border-stone-800 bg-stone-900 select-none ${dragId ? 'cursor-grabbing' : ''}`}
-        style={{ aspectRatio: '16 / 10' }}
+        className={`relative overflow-hidden select-none shrink-0 ${fullscreen ? '' : 'w-full rounded-xl border border-stone-800 bg-stone-900'} ${dragId ? 'cursor-grabbing' : ''}`}
+        style={fullscreen ? { aspectRatio: '16 / 10', width: fittedW ? `${fittedW * zoom}px` : '100%' } : { aspectRatio: '16 / 10' }}
       >
         {work.image_url && !imgError && (
           <img
@@ -355,6 +593,7 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
             draggable={false}
           />
         )}
+        {overlay}
         {imgError ? (
           <div className="absolute inset-0 flex items-center justify-center px-4">
             <p className="text-stone-700 text-sm text-center">Image introuvable — vérifiez l’URL.</p>
@@ -367,16 +606,30 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
           </div>
         )}
 
-        {grid && (
-          <div
-            className="absolute inset-0 pointer-events-none"
-            style={{
-              backgroundImage:
-                `repeating-linear-gradient(to right, rgba(255,255,255,.14) 0 1px, transparent 1px ${100 / grid.cols}%),` +
-                `repeating-linear-gradient(to bottom, rgba(255,255,255,.14) 0 1px, transparent 1px ${100 / grid.rows}%)`,
-            }}
-          />
-        )}
+        {/* Grille en PIXELS et non en % : un `background-position` en pourcentage se
+            mesure sur (conteneur − motif) et non sur le conteneur, donc il ne sait pas
+            décaler une trame répétée. En px, la case est carrée par construction et le
+            calage est exact. */}
+        {grid && boardW > 0 && (() => {
+          const cellPx = boardW / grid.cols
+          const boardH = boardW / BOARD_ASPECT
+          return (
+            <div
+              className={`absolute inset-0 ${gridPan ? 'cursor-grab active:cursor-grabbing z-[4]' : 'pointer-events-none'}`}
+              onPointerDown={onPanDown}
+              onPointerMove={onPanMove}
+              onPointerUp={onPanUp}
+              onPointerCancel={onPanUp}
+              style={{
+                backgroundImage:
+                  'linear-gradient(to right, rgba(255,255,255,.14) 0 1px, transparent 1px),' +
+                  'linear-gradient(to bottom, rgba(255,255,255,.14) 0 1px, transparent 1px)',
+                backgroundSize: `${cellPx}px ${cellPx}px`,
+                backgroundPosition: `${(gridOff.x / 100) * boardW}px ${(gridOff.y / 100) * boardH}px`,
+              }}
+            />
+          )
+        })()}
 
         {/* Zones de sort — dessinées dans le repère des CASES : le viewBox suit la
             grille (qui épouse l'aspect du plateau), donc un cercle reste un cercle. */}
@@ -398,7 +651,13 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
           if (live && 'missing' in live && !editable) return null
           const stale = !!(live && 'missing' in live)
           const name = live && !('missing' in live) ? live.name : t.label
-          const px = cellPx ? Math.round(SIZE_CELLS[t.size] * cellPx) : SIZE_PX[t.size]
+          // Avec une grille, le pion se cale sur la case : c'est elle qui porte
+          // l'échelle (1,5 m), donc un M vaut une case quel que soit le zoom ou le
+          // nombre de colonnes. Sans grille, plus rien ne donne l'échelle : on
+          // retombe sur un diamètre fixe, seulement mis à l'échelle du zoom.
+          const px = grid && boardW
+            ? Math.max(8, Math.round((boardW / grid.cols) * SIZE_CELLS[t.size]))
+            : Math.round(SIZE_PX[t.size] * zoom)
           const isSel = editable && selected === t.id
           const isActive = !!(activeRef && t.ref_type === activeRef.kind && t.ref_id === activeRef.id)
           const bar = live && !('missing' in live) ? hpBar(live.hp, live.maxHp) : null
@@ -438,10 +697,44 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
           </div>
         )}
       </div>
+      </div>
+      </div>
+        {/* Boutons de zoom (comme une carte en ligne). Hors du conteneur qui défile,
+            donc toujours visibles. */}
+        {fullscreen && (
+          <div className="absolute top-3 right-3 z-[5] flex flex-col rounded-lg overflow-hidden border border-stone-700 shadow-lg bg-stone-900/90 backdrop-blur">
+            <button
+              onClick={() => setZoom(z => Math.min(4, Math.round((z + 0.25) * 100) / 100))}
+              title="Zoom avant"
+              className="w-9 h-9 flex items-center justify-center text-stone-200 hover:bg-stone-700 text-xl leading-none transition-colors"
+            >+</button>
+            <div className="h-px bg-stone-700" />
+            <button
+              onClick={() => setZoom(z => Math.max(1, Math.round((z - 0.25) * 100) / 100))}
+              title="Zoom arrière"
+              className="w-9 h-9 flex items-center justify-center text-stone-200 hover:bg-stone-700 text-xl leading-none transition-colors disabled:opacity-40"
+              disabled={zoom <= 1}
+            >−</button>
+            {zoom > 1 && (
+              <>
+                <div className="h-px bg-stone-700" />
+                <button
+                  onClick={() => setZoom(1)}
+                  title="Réinitialiser le zoom"
+                  className="w-9 h-8 flex items-center justify-center text-stone-400 hover:bg-stone-700 text-[10px] font-semibold transition-colors"
+                >{Math.round(zoom * 100)}%</button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Gabarits de sorts — nécessitent la grille : c'est elle qui donne l'échelle en mètres. */}
       {editable && (
-        <div className="space-y-2">
+        <div className="order-4 space-y-2">
+          {/* En plein écran, les formes vivent dans le menu « Zone » ; ici on ne garde
+              que les pastilles et le panneau de visée (retour visuel de l'action). */}
+          {!fullscreen && (
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-stone-600 text-[10px] uppercase tracking-widest pr-1">Zone de sort</span>
             {!grid ? (
@@ -473,6 +766,7 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
               </>
             )}
           </div>
+          )}
 
           {/* Une pastille par zone posée : cliquer sur le plateau serait ambigu dès que
               deux zones se chevauchent. Le survol met la zone en évidence. */}
@@ -549,7 +843,7 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
       )}
 
       {editable && selectedToken && (
-        <div className="flex flex-wrap items-center gap-3 bg-stone-800/60 border border-stone-700 rounded-lg px-3 py-2">
+        <div className="order-2 shrink-0 flex flex-wrap items-center gap-3 bg-stone-800/60 border border-stone-700 rounded-lg px-3 py-2">
           <span className="text-stone-300 text-sm font-medium truncate max-w-[140px]">{selectedToken.label}</span>
           <div className="flex items-center gap-1">
             {TOKEN_COLORS.map(col => (

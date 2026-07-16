@@ -112,20 +112,19 @@ class ShareControllerTest extends TestCase
         $response->assertJsonMissingPath('data.saved_encounters');
         $response->assertJsonMissingPath('data.custom_monsters');
         $response->assertJsonMissingPath('data.random_tables');
+        $response->assertJsonMissingPath('data.quests');
         $response->assertJsonMissingPath('data.share_token');
     }
 
     public function test_show_still_exposes_player_facing_fields(): void
     {
         $campaign = $this->sharedCampaign([
-            'npcs'   => [['name' => 'Aubergiste', 'role' => 'ami']],
-            'quests' => [['title' => 'Sauver le village']],
+            'npcs' => [['name' => 'Aubergiste', 'role' => 'ami']],
         ]);
 
         $this->getJson("/api/share/{$campaign->share_token}")
             ->assertOk()
-            ->assertJsonPath('data.npcs.0.name', 'Aubergiste')
-            ->assertJsonPath('data.quests.0.title', 'Sauver le village');
+            ->assertJsonPath('data.npcs.0.name', 'Aubergiste');
     }
 
     public function test_show_strips_hidden_battle_map_tokens(): void

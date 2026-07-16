@@ -4,19 +4,20 @@ import { useEffect, useState, lazy, Suspense } from 'react'
 // on l'ouvre, au lieu de peser sur chaque visite de la campagne.
 const CampaignWorldSection = lazy(() => import('./campaign/CampaignWorldSection'))
 const CampaignChapterSection = lazy(() => import('./campaign/CampaignChapterSection'))
-const CampaignAdventureSection = lazy(() => import('./campaign/CampaignAdventureSection'))
+const CampaignBestiary = lazy(() => import('./campaign/CampaignBestiary'))
 const CampaignOverviewSection = lazy(() => import('./campaign/CampaignOverviewSection'))
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   getCampaign,
   updateCampaign,
   addCharacterToCampaign,
+  setCampaignTimeOfDay,
   type Campaign,
   type Npc,
   type Location,
   type Faction,
-  type Quest,
 } from '../api/campaigns'
+import { TIME_OF_DAY, TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
 import { type Character } from '../api/characters'
 import {
   listChapters,
@@ -90,7 +91,7 @@ export function CampaignPage() {
   // Carte de campagne
 
   // Navigation par onglets
-  const VALID_TABS = ['chapitres', 'monde', 'aventure', 'campagne'] as const
+  const VALID_TABS = ['chapitres', 'monde', 'bestiaire', 'campagne'] as const
   type Tab = typeof VALID_TABS[number]
   /**
    * L'onglet vit dans l'URL, pas dans le localStorage : sans ça, aucun lien
@@ -124,6 +125,10 @@ export function CampaignPage() {
 
   // Copy feedback
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+
+  // Ambiance (moment de la journée) — valeur de la campagne, diffusée en direct aux
+  // fiches des joueurs. Réglée ici, à côté de la recherche : présente sur les 4 onglets.
+  const [todSaving, setTodSaving] = useState(false)
 
   // Audit
 
@@ -262,6 +267,20 @@ export function CampaignPage() {
 
 
 
+  async function handleSetTimeOfDay(value: TimeOfDay) {
+    if (!campaign || todSaving) return
+    setTodSaving(true)
+    const previous = campaign.time_of_day
+    const tod = value === 'none' ? null : value
+    setCampaign(c => c ? { ...c, time_of_day: tod } : null)
+    try { await setCampaignTimeOfDay(campaign.id, tod) }
+    catch {
+      setCampaign(c => c ? { ...c, time_of_day: previous } : null)
+      toast.error("Le moment de la journée n'a pas pu être enregistré.")
+    }
+    finally { setTodSaving(false) }
+  }
+
   function copyToClipboard(key: string, text: string) {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedKey(key)
@@ -305,7 +324,7 @@ export function CampaignPage() {
     URL.revokeObjectURL(url)
   }
 
-  async function importSectionData(file: File, section: 'npcs' | 'locations' | 'quests' | 'factions') {
+  async function importSectionData(file: File, section: 'npcs' | 'locations' | 'factions') {
     if (!campaign) return
     try {
       const text = await file.text()
@@ -315,7 +334,6 @@ export function CampaignPage() {
       let updated: Campaign
       if (section === 'npcs') updated = await updateCampaign(Number(id), { npcs: [...(campaign.npcs ?? []), ...(arr as Npc[])] })
       else if (section === 'locations') updated = await updateCampaign(Number(id), { locations: [...(campaign.locations ?? []), ...(arr as Location[])] })
-      else if (section === 'quests') updated = await updateCampaign(Number(id), { quests: [...(campaign.quests ?? []), ...(arr as Quest[])] })
       else updated = await updateCampaign(Number(id), { factions: [...(campaign.factions ?? []), ...(arr as Faction[])] })
       setCampaign(updated)
     } catch { toast.error('Fichier invalide ou format non reconnu.') }
@@ -366,21 +384,33 @@ export function CampaignPage() {
         {(() => {
           const q = searchQuery.trim().toLowerCase()
           const active = q.length >= 2
-          const npcs = active ? (campaign.npcs ?? []).filter(n =>
-            n.name.toLowerCase().includes(q) || n.role.toLowerCase().includes(q) || n.notes.toLowerCase().includes(q)
-          ) : []
-          const locs = active ? (campaign.locations ?? []).filter(l => l.name.toLowerCase().includes(q) || l.notes.toLowerCase().includes(q)) : []
-          const monsters = active ? (campaign.custom_monsters ?? []).filter(m => m.name.toLowerCase().includes(q)) : []
-          const chaps = active ? chapters.filter(c => c.title.toLowerCase().includes(q) || (c.notes ?? '').toLowerCase().includes(q)) : []
-          const quests = active ? (campaign.quests ?? []).filter(qt => qt.title.toLowerCase().includes(q) || qt.description.toLowerCase().includes(q) || qt.giver.toLowerCase().includes(q)) : []
-          const factions = active ? (campaign.factions ?? []).filter(f => f.name.toLowerCase().includes(q) || f.description.toLowerCase().includes(q)) : []
-          const total = npcs.length + locs.length + monsters.length + chaps.length + quests.length + factions.length
+          // Champs libres parfois null en base (role/notes/description) : on protège
+          // chaque .toLowerCase(), sinon la recherche plante sur une seule fiche vide.
+          const has = (v: string | null | undefined) => (v ?? '').toLowerCase().includes(q)
+          const npcs = active ? (campaign.npcs ?? []).filter(n => has(n.name) || has(n.role) || has(n.notes)) : []
+          const locs = active ? (campaign.locations ?? []).filter(l => has(l.name) || has(l.notes)) : []
+          const monsters = active ? (campaign.custom_monsters ?? []).filter(m => has(m.name)) : []
+          const chaps = active ? chapters.filter(c => has(c.title) || has(c.notes)) : []
+          const factions = active ? (campaign.factions ?? []).filter(f => has(f.name) || has(f.description)) : []
+          const total = npcs.length + locs.length + monsters.length + chaps.length + factions.length
           return (
             <>
-              <div className="relative">
+              <div className="flex gap-2 items-stretch">
+                <select
+                  value={campaign.time_of_day ?? 'none'}
+                  onChange={e => handleSetTimeOfDay(e.target.value as TimeOfDay)}
+                  disabled={todSaving}
+                  title="Ambiance — moment de la journée, diffusé en direct aux fiches des joueurs"
+                  className="shrink-0 bg-stone-900 border border-stone-800 rounded-xl px-3 py-3 text-white text-sm focus:outline-none focus:border-stone-600 transition-colors disabled:opacity-60"
+                >
+                  {TIME_OF_DAY.map(tod => (
+                    <option key={tod} value={tod}>{TIME_OF_DAY_CONFIG[tod].emoji} {TIME_OF_DAY_CONFIG[tod].label}</option>
+                  ))}
+                </select>
+                <div className="relative flex-1">
                 <input
                   type="text"
-                  placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, chapitres, quêtes, factions…"
+                  placeholder="Rechercher dans la campagne — PNJ, lieux, monstres, chapitres, factions…"
                   value={searchQuery}
                   onChange={e => setSearchQuery(e.target.value)}
                   onFocus={() => setSearchFocused(true)}
@@ -411,6 +441,7 @@ export function CampaignPage() {
                     ))}
                   </div>
                 )}
+                </div>
               </div>
               {active && (
                 <div className="bg-stone-900 border border-stone-800 rounded-xl p-4 space-y-4 -mt-3">
@@ -473,20 +504,6 @@ export function CampaignPage() {
                           </div>
                         </div>
                       )}
-                      {quests.length > 0 && (
-                        <div>
-                          <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Quêtes ({quests.length})</p>
-                          <div className="divide-y divide-stone-800">
-                            {quests.map(qt => (
-                              <div key={qt.id} className="flex items-center gap-3 py-1.5">
-                                <span className="text-base shrink-0">{qt.status === 'active' ? '🟡' : qt.status === 'completed' ? '🟢' : qt.status === 'failed' ? '🔴' : '⚪'}</span>
-                                <span className="text-white text-sm font-medium">{qt.title}</span>
-                                {qt.giver && <span className="text-stone-500 text-xs">— {qt.giver}</span>}
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
                       {factions.length > 0 && (
                         <div>
                           <p className="text-stone-500 text-xs uppercase tracking-widest mb-2">Factions ({factions.length})</p>
@@ -523,16 +540,10 @@ export function CampaignPage() {
           {activeTab === 'monde' && <CampaignWorldSection {...sectionProps} />}
         </Suspense>
 
-
-
-
-        {/* Section Aventure : chunk séparé. */}
+        {/* Section Bestiaire : chunk séparé. */}
         <Suspense fallback={<p className="text-stone-600 text-sm py-8 text-center">Chargement…</p>}>
-          {activeTab === 'aventure' && <CampaignAdventureSection {...sectionProps} />}
+          {activeTab === 'bestiaire' && <CampaignBestiary {...sectionProps} />}
         </Suspense>
-
-
-
 
 
 
