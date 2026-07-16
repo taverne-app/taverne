@@ -7,6 +7,7 @@ import type { Character } from '../api/characters'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { SharedSidebar } from '../components/SharedSidebar'
 import { BattleMapBoard } from '../components/BattleMapBoard'
+import { PlayerCombatDock } from '../components/PlayerCombatDock'
 
 const CONDITIONS_FR: Record<string, string> = {
   blinded: 'Aveuglé', charmed: 'Charmé', deafened: 'Assourdi',
@@ -165,12 +166,13 @@ export function LiveCombatPage() {
                 {connected ? 'En direct' : 'Attente…'}
               </div>
             )}
-            <span className="text-stone-600 text-xs hidden sm:block">Vue joueurs · lecture seule</span>
+            <span className="text-stone-600 text-xs hidden sm:block">Vue joueurs</span>
           </div>
         </div>
       </header>
 
-      <main className="max-w-lg mx-auto px-4 py-6 space-y-6">
+      {/* pb-52 : le dock est `fixed` et recouvrirait la fin du ruban d'initiative. */}
+      <main className="max-w-lg mx-auto px-4 py-6 pb-52 space-y-6">
         {battleMap && (battleMap.image_url || battleMap.tokens.length > 0) && (
           <BattleMapBoard
             map={battleMap}
@@ -278,6 +280,17 @@ export function LiveCombatPage() {
           </div>
         )}
       </main>
+
+      {token && (
+        <PlayerCombatDock
+          campaignToken={token}
+          activeKind={liveState.active_kind}
+          activeId={liveState.active_id}
+          // Les PV encaissés ici doivent se voir dans le ruban sans attendre l'écho,
+          // qui peut ne pas être configuré (auto-hébergement sans Reverb).
+          onCharacterChange={updated => setCharacters(prev => prev.map(c => c.id === updated.id ? updated : c))}
+        />
+      )}
     </div>
     </>
   )
