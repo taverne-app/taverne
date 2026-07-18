@@ -7,6 +7,7 @@ import { MarkdownText } from '../components/MarkdownText'
 import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
 import { RulesCompendium } from '../components/RulesCompendium'
 import { SharedSidebar } from '../components/SharedSidebar'
+import { PlayerNotes } from '../components/PlayerNotes'
 
 
 export function SharedCampaignPage() {
@@ -222,6 +223,11 @@ export function SharedCampaignPage() {
                       </span>
                     </div>
                     {loc.notes && <MarkdownText className="text-stone-400 text-xs mt-2 line-clamp-3">{loc.notes}</MarkdownText>}
+                    {loc.map_url && (
+                      <a href={loc.map_url} target="_blank" rel="noopener noreferrer" title="Ouvrir la carte en grand" className="block mt-2">
+                        <img src={loc.map_url} alt={`Carte de ${loc.name}`} className="w-full rounded-lg border border-stone-800" />
+                      </a>
+                    )}
                   </div>
                 ))}
             </div>
@@ -262,6 +268,7 @@ export function SharedCampaignPage() {
           </section>
         )}
 
+        {token && <PlayerNotes campaignToken={token} />}
 
       </main>
       <FloatingDiceRoller />

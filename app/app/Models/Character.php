@@ -64,6 +64,7 @@ class Character extends Model
         'skill_expertise',
         'initiative_roll',
         'notes',
+        'adventure_notes',
         'spell_slots',
         'spells_known',
         'spellcasting_ability',
@@ -94,6 +95,7 @@ class Character extends Model
 
     protected $casts = [
         'inspiration'        => 'boolean',
+        'adventure_notes'    => 'array',
         'conditions'          => 'array',
         'condition_durations' => 'array',
         'save_proficiencies' => 'array',

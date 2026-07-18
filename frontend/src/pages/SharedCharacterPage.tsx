@@ -4,6 +4,7 @@ import { getSharedCharacter, type Character, type AbilityName, type DiceRoll } f
 import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
 import { MarkdownText } from '../components/MarkdownText'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
+import { parseDamageDice } from '../lib/dice'
 import { TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
 import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
 import { RulesCompendium } from '../components/RulesCompendium'
@@ -526,15 +527,22 @@ export function SharedCharacterPage() {
                             {sign(macro.attack_bonus)} att.
                           </button>
                         )}
-                        {macro.damage_dice && (
-                          <button onClick={() => {
-                            const m = macro.damage_dice.match(/^(\d+)d(\d+)([+-]\d+)?$/)
-                            if (m) roll({ count: parseInt(m[1]), sides: parseInt(m[2]), modifier: m[3] ? parseInt(m[3]) : 0, label: `Dégâts — ${macro.name}` })
-                          }} disabled={rolling}
-                            className="text-xs px-2 py-1 rounded bg-orange-100 hover:bg-orange-200/80 border border-orange-400 text-orange-700 transition-colors disabled:opacity-50">
-                            {macro.damage_dice}
-                          </button>
-                        )}
+                        {macro.damage_dice && (() => {
+                          const dmg = parseDamageDice(macro.damage_dice)
+                          // Sans bouton quand les dés sont illisibles : avant, le bouton
+                          // existait et ne faisait rien au clic — le joueur cliquait dans
+                          // le vide sans savoir pourquoi.
+                          return dmg ? (
+                            <button onClick={() => roll({ count: dmg.count, sides: dmg.sides, modifier: dmg.modifier, label: `Dégâts — ${macro.name}` })} disabled={rolling}
+                              className="text-xs px-2 py-1 rounded bg-orange-100 hover:bg-orange-200/80 border border-orange-400 text-orange-700 transition-colors disabled:opacity-50">
+                              {macro.damage_dice}
+                            </button>
+                          ) : (
+                            <span title="Dés non reconnus — à lancer à la main" className="text-xs px-2 py-1 rounded bg-orange-50 border border-orange-200 text-orange-700/70">
+                              {macro.damage_dice}
+                            </span>
+                          )
+                        })()}
                       </div>
                     </div>
                   ))}
@@ -577,13 +585,25 @@ export function SharedCharacterPage() {
                       <div key={lvl}>
                         <p className={`text-xs font-semibold mb-1.5 ${th.textMuted}`}>{SPELL_LEVEL_LABELS[Number(lvl)] ?? `Niv. ${lvl}`}</p>
                         <div className="flex flex-wrap gap-1.5">
-                          {spells.map((spell, i) => (
-                            <div key={i} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${spell.prepared ? th.spellPrepared : th.spellUnprepared}`}>
-                              {spell.concentration && <span className={th.spellConcentration}>◈</span>}
-                              <span className="font-medium">{spell.name}</span>
-                              {spell.damage_dice && <span className={th.spellDmg}>{spell.damage_dice}</span>}
-                            </div>
-                          ))}
+                          {spells.map((spell, i) => {
+                            const dmg = parseDamageDice(spell.damage_dice)
+                            return (
+                              <div key={i} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${spell.prepared ? th.spellPrepared : th.spellUnprepared}`}>
+                                {spell.concentration && <span className={th.spellConcentration}>◈</span>}
+                                <span className="font-medium">{spell.name}</span>
+                                {spell.damage_dice && (dmg ? (
+                                  <button
+                                    onClick={() => roll({ count: dmg.count, sides: dmg.sides, modifier: dmg.modifier, label: `Dégâts — ${spell.name}` })}
+                                    disabled={rolling}
+                                    title={`Lancer les dégâts (${spell.damage_dice})`}
+                                    className={`${th.spellDmg} underline decoration-dotted underline-offset-2 hover:opacity-80 disabled:opacity-50 transition-opacity`}
+                                  >{spell.damage_dice}</button>
+                                ) : (
+                                  <span className={th.spellDmg}>{spell.damage_dice}</span>
+                                ))}
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     ))}

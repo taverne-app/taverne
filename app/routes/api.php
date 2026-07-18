@@ -31,6 +31,9 @@ Route::post('/billing/webhook', [BillingController::class, 'handleWebhook']);
 Route::get('/share/character/{token}',          [ShareController::class, 'showCharacter']);
 Route::patch('/share/character/{token}/hp',     [ShareController::class, 'updateHp']);
 Route::post('/share/character/{token}/roll',    [ShareController::class, 'rollDice']);
+Route::patch('/share/character/{token}/cast',    [ShareController::class, 'castSpell']);
+Route::get('/share/character/{token}/notes',    [ShareController::class, 'notes']);
+Route::put('/share/character/{token}/notes',    [ShareController::class, 'updateNotes']);
 Route::get('/share/{token}',                    [ShareController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {

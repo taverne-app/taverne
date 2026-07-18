@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTabNotify } from '../hooks/useTabNotify'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { scaleCantripDamage } from '../data/spells'
@@ -56,6 +56,30 @@ function parseDice(str: string): { count: number; sides: number; bonus: number }
 function spellDice(character: Character, spell: { level: number; damage_dice?: string }): string {
   const base = spell.damage_dice ?? ''
   return spell.level === 0 ? scaleCantripDamage(base, character.level) : base
+}
+
+/**
+ * Pastille de niveau d'un sort, comme sur la fiche : « TdM » pour un tour de magie,
+ * « N1/N2… » sinon. Pour un sort à emplacement, on colle le nombre restant (·2) — en
+ * rouge à sec, pour que le MJ voie d'un coup d'œil qui n'a plus de munition.
+ */
+function SpellLevelBadge({ character, level }: { character: Character; level: number }) {
+  if (level === 0) {
+    return <span title="Tour de magie (à volonté)" className="text-violet-500/70 ml-1">TdM</span>
+  }
+  const slot = character.spellcasting.slots[String(level)]
+  const left = slot ? Math.max(0, slot.max - (slot.used ?? 0)) : null
+  return (
+    <span
+      title={left === null
+        ? `Niveau ${level}`
+        : `Niveau ${level} · ${left}/${slot!.max} emplacement${slot!.max > 1 ? 's' : ''} restant${left > 1 ? 's' : ''}`}
+      className="text-violet-500/70 ml-1"
+    >
+      N{level}
+      {left !== null && <span className={left === 0 ? 'text-red-400/90' : 'text-violet-400/60'}>·{left}</span>}
+    </span>
+  )
 }
 
 function rollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage'): { label: string; total: number; detail: string } {
@@ -565,7 +589,7 @@ export function CombatPage() {
   const [savingThrowResults, setSavingThrowResults] = useState<{ name: string; roll: number; mod: number; total: number; success: boolean }[] | null>(null)
 
   // Combat log
-  interface CombatLogEntry { id: number; time: string; type: 'turn' | 'roll' | 'hp' | 'xp' | 'join' | 'condition'; text: string }
+  interface CombatLogEntry { id: number; time: string; type: 'turn' | 'roll' | 'hp' | 'xp' | 'join' | 'condition' | 'spell'; text: string }
   const [combatLog, setCombatLog] = useState<CombatLogEntry[]>([])
   const [showCombatLog, setShowCombatLog] = useState(false)
   const [savingLog, setSavingLog] = useState(false)
@@ -747,6 +771,13 @@ export function CombatPage() {
             return next
           })
         })
+        // Un sort d'utilité ne produit aucun dé : sans cette annonce, le MJ ne verrait
+        // jamais passer un Bouclier ou une Armure de mage.
+        .listen('.spell.cast', (e: { character_name: string; spell_name: string; level: number }) => {
+          logEvent('spell', e.level > 0
+            ? `${e.character_name} lance ${e.spell_name} (niv.${e.level})`
+            : `${e.character_name} lance ${e.spell_name}`)
+        })
     })
 
     return () => {
@@ -790,6 +821,15 @@ export function CombatPage() {
 
   // Phase 3 — quand une image de fond est fournie, le plateau devient l'élément central de la page.
   const hasBattleImage = !!campaign?.battle_map?.image_url
+
+  // Lieux ayant une carte (section Monde) : proposés comme fond de plateau pour
+  // « reprendre la carte du lieu du combat » sans re-téléverser l'image.
+  const locationMaps = useMemo(
+    () => (campaign?.locations ?? [])
+      .filter((l): l is typeof l & { map_url: string } => !!l.map_url)
+      .map(l => ({ name: l.name, map_url: l.map_url })),
+    [campaign?.locations],
+  )
 
   // Sans plateau visuel, la liste d'initiative est le seul contenu à afficher :
   // on la déplie automatiquement une fois dès qu'un combat est lancé pour ne pas
@@ -1219,12 +1259,39 @@ export function CombatPage() {
     // optimiste ferait croire au MJ qu'elle est enregistrée et diffusée alors que
     // les joueurs voient toujours l'ancienne.
     const previous = campaign?.battle_map ?? null
-    setCampaign(prev => prev ? { ...prev, battle_map: next } : prev)
+    const prevLoc = campaign?.combat_location ?? null
+    // Si l'image de fond change pour une image qui n'est la carte d'aucun lieu, le lieu
+    // de combat mémorisé n'a plus de sens : on l'efface. Un déplacement de pion garde la
+    // même image et ne touche donc pas au lieu.
+    const imageChanged = next.image_url !== (previous?.image_url ?? '')
+    const clearsLocation = imageChanged && prevLoc !== null && !locationMaps.some(l => l.map_url === next.image_url)
+    const patch = clearsLocation ? { battle_map: next, combat_location: null } : { battle_map: next }
+    setCampaign(prev => prev ? { ...prev, ...patch } : prev)
     try {
-      await updateCampaign(campaignId, { battle_map: next })
+      await updateCampaign(campaignId, patch)
     } catch {
-      setCampaign(prev => prev ? { ...prev, battle_map: previous } : prev)
+      setCampaign(prev => prev ? { ...prev, battle_map: previous, ...(clearsLocation ? { combat_location: prevLoc } : {}) } : prev)
       toast.error("Le plateau n'a pas pu être enregistré : le pion est revenu à sa position précédente.")
+    }
+  }
+
+  /**
+   * Reprend la carte d'un lieu comme fond de plateau ET mémorise ce lieu comme théâtre
+   * du combat, en une seule écriture (diffusée aux joueurs). Le lieu reste jusqu'à ce
+   * que le MJ change l'image pour autre chose (cf. handleBattleMapChange).
+   */
+  async function handlePickLocationMap(loc: { name: string; map_url: string }) {
+    if (!campaignId) return
+    const base = campaign?.battle_map ?? { image_url: '', grid: null, tokens: [] }
+    const next: BattleMap = { ...base, image_url: loc.map_url }
+    const prevMap = campaign?.battle_map ?? null
+    const prevLoc = campaign?.combat_location ?? null
+    setCampaign(prev => prev ? { ...prev, battle_map: next, combat_location: loc.name } : prev)
+    try {
+      await updateCampaign(campaignId, { battle_map: next, combat_location: loc.name })
+    } catch {
+      setCampaign(prev => prev ? { ...prev, battle_map: prevMap, combat_location: prevLoc } : prev)
+      toast.error("La carte du lieu n'a pas pu être enregistrée.")
     }
   }
 
@@ -1313,6 +1380,14 @@ export function CombatPage() {
       purgeTrashedCombatants(campaignId).catch(() => { /* purge différée au prochain combat */ })
     }
     restoredRef.current = false
+    // Le combat est clos : le lieu mémorisé n'a plus de sens. On réémet la carte
+    // inchangée avec le lieu à null pour que le label des joueurs s'efface en direct
+    // (seule une écriture de battle_map déclenche la diffusion) — sans toucher l'image.
+    if (campaignId && campaign?.combat_location) {
+      const keepMap = campaign?.battle_map ?? null
+      setCampaign(prev => prev ? { ...prev, combat_location: null } : prev)
+      updateCampaign(campaignId, { battle_map: keepMap, combat_location: null }).catch(() => { /* best-effort */ })
+    }
     // Le combat est clos : on referme l'accès des joueurs à la vue Combat.
     void setCombatActive(false)
   }
@@ -1327,6 +1402,29 @@ export function CombatPage() {
     const ids = combatants.filter(c => c.current_hp <= 0).map(c => c.id)
     if (ids.length === 0) return
     void deleteCombatantsWithUndo(ids, `${ids.length} combattant${ids.length > 1 ? 's à terre retirés' : ' à terre retiré'}.`)
+  }
+
+  /**
+   * Supprime le combat : réinitialise (initiatives, tour, accès joueurs) PUIS retire
+   * tous les combattants ajoutés. Distinct de « Fin du combat » (qui garde les
+   * combattants pour le résumé) et de « Réinitialiser » (qui les garde aussi).
+   *
+   * On réinitialise d'abord, tant que les combattants existent encore, avant de les
+   * supprimer : la suppression douce laisse l'annulation possible (la purge de la
+   * corbeille a déjà eu lieu dans handleReset).
+   */
+  async function handleDeleteCombat() {
+    const count = combatants.length
+    const message = count > 0
+      ? `Supprimer ce combat ? Les ${count} combattant${count > 1 ? 's' : ''} ajouté${count > 1 ? 's' : ''} seront retirés et les initiatives effacées.`
+      : 'Supprimer ce combat ? Les initiatives seront effacées.'
+    if (!confirm(message)) return
+
+    const ids = combatants.map(c => c.id)
+    await handleReset()
+    if (ids.length > 0) {
+      void deleteCombatantsWithUndo(ids, `Combat supprimé — ${ids.length} combattant${ids.length > 1 ? 's retirés' : ' retiré'}.`)
+    }
   }
 
   function handleGroupSavingThrow() {
@@ -1682,6 +1780,9 @@ export function CombatPage() {
               fullscreen
               onChange={handleBattleMapChange}
               onCastZone={handleCastZone}
+              locationMaps={locationMaps}
+              onPickLocationMap={handlePickLocationMap}
+              cameraKey={campaignId ?? undefined}
               activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
               toolbarLead={
                 <button
@@ -1694,6 +1795,11 @@ export function CombatPage() {
               }
               toolbarExtra={
                 <>
+                  {campaign?.combat_location && (
+                    <span className="text-xs bg-stone-800 border border-stone-700 text-amber-300/90 rounded-lg px-2.5 py-1.5" title="Lieu du combat, montré aux joueurs">
+                      📍 {campaign.combat_location}
+                    </span>
+                  )}
                   {/* Actions clés du combat, toujours à portée (plus besoin d'ouvrir le tiroir). */}
                   {(characters.length > 0 || combatants.length > 0) && (
                     <button
@@ -1702,6 +1808,15 @@ export function CombatPage() {
                       title="Lance 1d20 + modificateur pour tous les participants — ouvre l'accès aux joueurs"
                     >
                       ⚅ Lancer l'initiative
+                    </button>
+                  )}
+                  {(characters.length > 0 || combatants.length > 0) && (
+                    <button
+                      onClick={handleDeleteCombat}
+                      className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-red-900/20 border-red-800/50 text-red-400 hover:bg-red-900/40 transition-colors"
+                      title="Retire tous les combattants et efface les initiatives"
+                    >
+                      🗑 Supprimer le combat
                     </button>
                   )}
                   <button
@@ -1863,6 +1978,9 @@ export function CombatPage() {
                   editable
                   onChange={handleBattleMapChange}
                   onCastZone={handleCastZone}
+                  locationMaps={locationMaps}
+                  onPickLocationMap={handlePickLocationMap}
+                  cameraKey={campaignId ?? undefined}
                   activeRef={activeCombatant ? { kind: activeCombatant.kind, id: activeCombatant.data.id } : null}
                 />
               </div>
@@ -1956,6 +2074,15 @@ export function CombatPage() {
                 </button>
               )}
               {/* En plein écran, « Fin du combat » vit dans la barre du haut. */}
+              {!hasBattleImage && (characters.length > 0 || combatants.length > 0) && (
+                <button
+                  onClick={handleDeleteCombat}
+                  className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-red-900/20 border-red-800/50 text-red-400 hover:bg-red-900/40 transition-colors"
+                  title="Retire tous les combattants et efface les initiatives"
+                >
+                  🗑 Supprimer le combat
+                </button>
+              )}
               {!hasBattleImage && (
                 <button
                   onClick={() => { setShowCombatSummary(true); void setCombatActive(false) }}
@@ -2250,9 +2377,9 @@ export function CombatPage() {
                                   const dice = spellDice(character, spell)
                                   if (!dice || !character.spellcasting.ability) {
                                     return (
-                                      <span key={si} title={spell.level === 0 ? 'Tour de magie' : `Niveau ${spell.level}`} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
+                                      <span key={si} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
                                         ✦ {spell.name}
-                                        <span className="text-violet-500/70 ml-1">{spell.level === 0 ? 'TdM' : `N${spell.level}`}</span>
+                                        <SpellLevelBadge character={character} level={spell.level} />
                                       </span>
                                     )
                                   }
@@ -2272,6 +2399,7 @@ export function CombatPage() {
                                       >
                                         {dice}
                                       </button>
+                                      <SpellLevelBadge character={character} level={spell.level} />
                                     </span>
                                   )
                                 })}
@@ -3608,7 +3736,7 @@ export function CombatPage() {
               <>
                 {(() => {
                   const presentTypes = [...new Set(combatLog.map(e => e.type))]
-                  const typeLabels: Record<string, string> = { turn: '⟳ Tours', roll: '🎲 Lancers', hp: '❤ PV', xp: '⬆ XP', join: '➕ Arrivées' }
+                  const typeLabels: Record<string, string> = { turn: '⟳ Tours', roll: '🎲 Lancers', hp: '❤ PV', xp: '⬆ XP', join: '➕ Arrivées', condition: '✦ États', spell: '✦ Sorts' }
                   return presentTypes.length > 1 ? (
                     <div className="flex flex-wrap gap-1.5 px-4 pt-3 pb-2">
                       {(['all', ...presentTypes] as const).map(t => (
@@ -3631,12 +3759,14 @@ export function CombatPage() {
                       entry.type === 'roll' ? 'text-rose-400' :
                       entry.type === 'hp'   ? 'text-sky-400' :
                       entry.type === 'xp'   ? 'text-emerald-400' :
+                      entry.type === 'spell' ? 'text-violet-300' :
                                               'text-violet-400'
                     }`}>
                       {entry.type === 'turn' ? '⟳' :
                        entry.type === 'roll' ? '🎲' :
                        entry.type === 'hp'   ? '❤' :
-                       entry.type === 'xp'   ? '⬆' : '➕'}
+                       entry.type === 'xp'   ? '⬆' :
+                       entry.type === 'spell' ? '✦' : '➕'}
                     </span>
                     <span className="flex-1 text-stone-300 text-xs">{entry.text}</span>
                     <span className="shrink-0 text-stone-600 text-xs">{entry.time}</span>
@@ -4052,7 +4182,19 @@ export function CombatPage() {
                   <div className="absolute -bottom-1.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-stone-900 border-r border-b border-stone-700 rotate-45" />
                   <div className="flex items-center justify-between">
                     <span className="text-stone-200 text-xs font-semibold truncate">{row.data.name}</span>
-                    <button onClick={() => setRibbonMenu(null)} className="text-stone-500 hover:text-stone-300 text-xs">✕</button>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Retirer le combattant : réservé aux combattants (PNJ/monstres).
+                          Un personnage joueur appartient à la campagne, il ne se supprime
+                          pas depuis le combat. */}
+                      {!isChar && (
+                        <button
+                          onClick={() => { void handleDeleteCombatant(row.data.id); setRibbonMenu(null) }}
+                          title="Retirer ce combattant"
+                          className="text-stone-500 hover:text-red-400 text-xs transition-colors"
+                        >🗑</button>
+                      )}
+                      <button onClick={() => setRibbonMenu(null)} className="text-stone-500 hover:text-stone-300 text-xs">✕</button>
+                    </div>
                   </div>
                   <div className="flex items-center gap-1">
                     <input type="number" min={1} value={isChar ? (charHpInputs[row.data.id] ?? '') : (combatantHpInputs[row.data.id] ?? '')} onChange={e => isChar ? setCharHpInputs(p => ({ ...p, [row.data.id]: e.target.value })) : setCombatantHpInputs(p => ({ ...p, [row.data.id]: e.target.value }))} placeholder="PV" className="w-12 bg-stone-800 border border-stone-700 rounded px-1 py-1 text-white text-xs text-center focus:outline-none focus:border-red-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none" />
@@ -4221,6 +4363,18 @@ export function CombatPage() {
                           <span className={`text-[9px] tabular-nums ${dying ? 'text-red-400' : 'text-stone-500'}`}>{hp}</span>
                         </div>
                       </button>
+                      {/* Réordonner dans le ruban : le plein écran n'a pas la table
+                          d'initiative avec ses poignées, donc l'ordre se change ici.
+                          Ruban horizontal → ◄ ► au lieu de ▲ ▼. Hors du <button> de la
+                          carte (un bouton ne peut pas en contenir un autre). */}
+                      {manualOrder && (
+                        <div className="mt-0.5 flex items-center justify-center gap-1">
+                          <button onClick={() => moveRow(id, 'up')} disabled={i === 0} title="Déplacer vers la gauche"
+                            className="flex-1 text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none py-0.5 rounded bg-stone-800 border border-stone-700 transition-colors">◄</button>
+                          <button onClick={() => moveRow(id, 'down')} disabled={i === withRollDisplay.length - 1} title="Déplacer vers la droite"
+                            className="flex-1 text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none py-0.5 rounded bg-stone-800 border border-stone-700 transition-colors">►</button>
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -4337,9 +4491,9 @@ export function CombatPage() {
                           // qui promet un jet inexistant.
                           if (!dice || !ch.spellcasting.ability) {
                             return (
-                              <span key={`s${si}`} title={spell.level === 0 ? 'Tour de magie' : `Niveau ${spell.level}`} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
+                              <span key={`s${si}`} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
                                 ✦ {spell.name}
-                                <span className="text-violet-500/70 ml-1">{spell.level === 0 ? 'TdM' : `N${spell.level}`}</span>
+                                <SpellLevelBadge character={ch} level={spell.level} />
                               </span>
                             )
                           }
@@ -4347,6 +4501,7 @@ export function CombatPage() {
                             <span key={`s${si}`} className="inline-flex items-center gap-0.5">
                               <button onClick={() => handleRollSpell(ch, spell, 'attack')} className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors">✦ {spell.name}</button>
                               <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${dice}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{dice}</button>
+                              <SpellLevelBadge character={ch} level={spell.level} />
                             </span>
                           )
                         })}

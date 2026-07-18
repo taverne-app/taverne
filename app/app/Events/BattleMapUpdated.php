@@ -13,7 +13,8 @@ class BattleMapUpdated implements ShouldBroadcastNow
 
     public function __construct(
         private string $shareToken,
-        private ?array $battleMap
+        private ?array $battleMap,
+        private ?string $combatLocation = null
     ) {}
 
     public function broadcastOn(): Channel
@@ -28,6 +29,6 @@ class BattleMapUpdated implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
-        return ['battle_map' => $this->battleMap];
+        return ['battle_map' => $this->battleMap, 'combat_location' => $this->combatLocation];
     }
 }

@@ -29,6 +29,7 @@ class CampaignResource extends JsonResource
             'share_token'      => $this->share_token,
             'time_of_day'      => $this->time_of_day,
             'combat_active'    => (bool) $this->combat_active,
+            'combat_location'  => $this->combat_location,
             'characters'  => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'  => CombatantResource::collection($this->whenLoaded('combatants')),
             'chapters'    => ChapterResource::collection($this->whenLoaded('chapters')),

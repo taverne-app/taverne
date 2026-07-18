@@ -805,6 +805,14 @@ export default function CampaignWorldSection({
                   className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 transition-colors resize-y"
                 />
               </div>
+              <div>
+                <span className="text-stone-600 text-xs">Carte du lieu (plan de ville, de donjon…)</span>
+                <ImagePicker
+                  value={locationDraft.map_url ?? ''}
+                  onChange={url => setLocationDraft(d => ({ ...d, map_url: url }))}
+                  placeholder="URL du plan…"
+                />
+              </div>
               <div className="flex justify-end">
                 <button
                   onClick={handleAddLocation}
@@ -955,6 +963,14 @@ export default function CampaignWorldSection({
                           rows={2}
                           className="w-full bg-stone-800 border border-stone-700 rounded-lg px-2.5 py-1.5 text-white text-sm placeholder-stone-600 focus:outline-none focus:border-amber-500 resize-none"
                         />
+                        <div>
+                          <span className="text-stone-600 text-xs">Carte du lieu</span>
+                          <ImagePicker
+                            value={editLocationDraft.map_url ?? ''}
+                            onChange={url => setEditLocationDraft(d => ({ ...d, map_url: url }))}
+                            placeholder="URL du plan…"
+                          />
+                        </div>
                         <div className="flex gap-2 justify-end">
                           <button onClick={() => setEditingLocationIdx(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
                           <button
@@ -1000,12 +1016,12 @@ export default function CampaignWorldSection({
                               {locNpcs.length > 0 && locNpcs.map((n, ni) => (
                                 <span key={ni} className="text-xs text-violet-400/70 bg-violet-900/20 border border-violet-800/30 rounded px-1.5 py-0.5">{n.name}</span>
                               ))}
-                              {loc.notes && (
+                              {(loc.notes || loc.map_url) && (
                                 <button
                                   onClick={() => setExpandedLocation(expandedLocation === i ? null : i)}
                                   className="text-stone-500 hover:text-stone-300 text-xs transition-colors"
                                 >
-                                  {expandedLocation === i ? '▲ Masquer' : '▼ Notes'}
+                                  {expandedLocation === i ? '▲ Masquer' : loc.map_url && !loc.notes ? '▼ Carte' : '▼ Détails'}
                                 </button>
                               )}
                             </div>
@@ -1028,14 +1044,23 @@ export default function CampaignWorldSection({
                             >✕</button>
                           </div>
                         </div>
-                        {expandedLocation === i && loc.notes && (
-                          <div className="px-4 pb-4 border-t border-stone-800 pt-3 ml-8">
-                            <div className="flex justify-end mb-1">
-                              <button onClick={() => copyToClipboard(`loc-${i}`, loc.notes)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Copier">
-                                {copiedKey === `loc-${i}` ? '✓ Copié' : '📋'}
-                              </button>
-                            </div>
-                            <MarkdownText className="text-stone-400 text-xs">{loc.notes}</MarkdownText>
+                        {expandedLocation === i && (loc.notes || loc.map_url) && (
+                          <div className="px-4 pb-4 border-t border-stone-800 pt-3 ml-8 space-y-3">
+                            {loc.notes && (
+                              <div>
+                                <div className="flex justify-end mb-1">
+                                  <button onClick={() => copyToClipboard(`loc-${i}`, loc.notes)} className="text-stone-600 hover:text-stone-400 text-xs transition-colors" title="Copier">
+                                    {copiedKey === `loc-${i}` ? '✓ Copié' : '📋'}
+                                  </button>
+                                </div>
+                                <MarkdownText className="text-stone-400 text-xs">{loc.notes}</MarkdownText>
+                              </div>
+                            )}
+                            {loc.map_url && (
+                              <a href={loc.map_url} target="_blank" rel="noopener noreferrer" title="Ouvrir la carte en grand">
+                                <img src={loc.map_url} alt={`Carte de ${loc.name}`} className="w-full rounded-lg border border-stone-700" />
+                              </a>
+                            )}
                           </div>
                         )}
                       </>

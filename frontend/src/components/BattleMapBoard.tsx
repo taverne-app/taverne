@@ -75,6 +75,25 @@ interface Props {
   toolbarExtra?: React.ReactNode
   /** Contrôle propre à la page, posé à gauche de « ＋ Pion » (plein écran). */
   toolbarLead?: React.ReactNode
+  /**
+   * Lieux de la campagne qui ont une carte (map_url) : proposés comme fond de plateau
+   * pour « reprendre la carte du lieu du combat » sans re-téléverser l'image. Vide si
+   * aucun lieu n'a de carte — le sélecteur disparaît alors.
+   */
+  locationMaps?: { name: string; map_url: string }[]
+  /**
+   * Appelé quand le MJ choisit un lieu dans le sélecteur de fond. La page persiste
+   * ALORS le lieu ET son image en une seule écriture ; sans ce rappel, seule l'image
+   * change (useImage). Distinct de onChange pour que le nom du lieu soit mémorisé.
+   */
+  onPickLocationMap?: (loc: { name: string; map_url: string }) => void
+  /**
+   * Clé de persistance de la « caméra » (zoom + cadrage) de ce plateau, PAR APPAREIL :
+   * fournie, le zoom et la position de défilement sont mémorisés en localStorage et
+   * restaurés au remontage (navigation, rechargement). C'est un confort de visualisation
+   * local — jamais diffusé aux autres. Absente → caméra non mémorisée.
+   */
+  cameraKey?: string | number
 }
 
 
@@ -134,7 +153,7 @@ function ZoneShapeSvg({ zone, grid, draft, highlight }: { zone: BattleZone; grid
   return <polygon points={pts.map(p => `${p[0]},${p[1]}`).join(' ')} {...common} />
 }
 
-export function BattleMapBoard({ map, combatants, characters, editable = false, onChange, activeRef = null, onCastZone, overlay, fullscreen = false, toolbarExtra, toolbarLead }: Props) {
+export function BattleMapBoard({ map, combatants, characters, editable = false, onChange, activeRef = null, onCastZone, overlay, fullscreen = false, toolbarExtra, toolbarLead, locationMaps = [], onPickLocationMap, cameraKey }: Props) {
   const boardRef = useRef<HTMLDivElement>(null)
   const fitRef = useRef<HTMLDivElement>(null)
   const [fit, setFit] = useState<{ w: number; h: number } | null>(null)
@@ -147,10 +166,20 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
   const [adding, setAdding] = useState(false)
   const [imgError, setImgError] = useState(false)
   const [measure, setMeasure] = useState<{ x: number; y: number; cells: number } | null>(null)
+  // Préfixe des clés localStorage de la caméra (zoom + cadrage), par appareil.
+  const camKey = cameraKey != null ? `taverne:battlecam:${cameraKey}` : null
+
   // Zoom plein écran (× la taille qui tient dans l'écran) ; au-delà de 1, le plateau
   // déborde et la zone défile (comme un +/− de carte). Les pions se dimensionnent sur
   // la largeur RÉELLE du plateau, donc le glisser-déposer reste juste à tout zoom.
-  const [zoom, setZoom] = useState(1)
+  // Initialisé depuis le zoom mémorisé pour cet appareil, s'il existe.
+  const [zoom, setZoom] = useState(() => {
+    if (!camKey) return 1
+    try {
+      const v = parseFloat(localStorage.getItem(`${camKey}:zoom`) ?? '')
+      return isFinite(v) && v >= 1 && v <= 4 ? v : 1
+    } catch { return 1 }
+  })
 
   /**
    * Gabarit en cours de visée. Il reste LOCAL : tant que le MJ n'a pas cliqué
@@ -219,8 +248,54 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
     return () => el.removeEventListener('wheel', onWheel)
   }, [fullscreen])
 
+  // Mémorise le zoom courant pour cet appareil, à chaque changement.
+  useEffect(() => {
+    if (!camKey) return
+    try { localStorage.setItem(`${camKey}:zoom`, String(zoom)) } catch { /* quota/refus : tant pis */ }
+  }, [camKey, zoom])
+
+  // Sauvegarde le cadrage en FRACTIONS du défilement possible (0→1), pas en pixels : une
+  // fraction survit à un changement de taille d'écran ou de zoom, contrairement à un
+  // scrollLeft absolu. Throttlé à une image pour ne pas marteler localStorage.
+  const scrollSaveRef = useRef(false)
+  const saveScroll = () => {
+    if (!camKey || scrollSaveRef.current) return
+    scrollSaveRef.current = true
+    requestAnimationFrame(() => {
+      scrollSaveRef.current = false
+      const el = fitRef.current
+      if (!el) return
+      const mx = el.scrollWidth - el.clientWidth
+      const my = el.scrollHeight - el.clientHeight
+      try {
+        localStorage.setItem(`${camKey}:sx`, mx > 0 ? String(el.scrollLeft / mx) : '0')
+        localStorage.setItem(`${camKey}:sy`, my > 0 ? String(el.scrollTop / my) : '0')
+      } catch { /* quota/refus : tant pis */ }
+    })
+  }
+
   // Largeur d'un plateau 16/10 qui tient dans la zone : bornée par la hauteur.
   const fittedW = fullscreen && fit ? Math.max(0, Math.min(fit.w, fit.h * BOARD_ASPECT)) : 0
+
+  // Restaure le cadrage mémorisé une fois la surface dimensionnée (fittedW connu) et à
+  // chaque changement de zoom, pour garder le même centre relatif. En rAF : le DOM doit
+  // avoir la nouvelle largeur (fittedW * zoom) avant qu'on puisse fixer le défilement.
+  useEffect(() => {
+    if (!camKey || !fullscreen || !fittedW) return
+    const el = fitRef.current
+    if (!el) return
+    const raf = requestAnimationFrame(() => {
+      const mx = el.scrollWidth - el.clientWidth
+      const my = el.scrollHeight - el.clientHeight
+      try {
+        const fx = parseFloat(localStorage.getItem(`${camKey}:sx`) ?? '')
+        const fy = parseFloat(localStorage.getItem(`${camKey}:sy`) ?? '')
+        if (isFinite(fx) && mx > 0) el.scrollLeft = fx * mx
+        if (isFinite(fy) && my > 0) el.scrollTop = fy * my
+      } catch { /* rien à restaurer */ }
+    })
+    return () => cancelAnimationFrame(raf)
+  }, [camKey, fullscreen, fittedW, zoom])
 
   const grid = work.grid
   const commit = (next: BattleMap) => { setWork(next); onChange?.(next) }
@@ -459,6 +534,28 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
       )}
     </div>
   ) : null
+
+  // Reprendre la carte d'un lieu de la campagne comme fond de plateau : plus rapide que
+  // de re-téléverser l'image du donjon qu'on a déjà renseignée dans la section Monde.
+  // La valeur reste toujours vide (c'est une action, pas un état) pour rester utilisable
+  // même si l'image actuelle vient déjà d'un lieu.
+  const locationMapPicker = locationMaps.length > 0 ? (
+    <select
+      value=""
+      onChange={e => {
+        const loc = locationMaps.find(l => l.name === e.target.value)
+        if (!loc) return
+        // La page mémorise le lieu + son image ; sinon on se contente de l'image.
+        if (onPickLocationMap) onPickLocationMap(loc)
+        else useImage(loc.map_url)
+      }}
+      title="Reprendre la carte d’un lieu (section Monde) comme fond de plateau"
+      className="text-sm bg-stone-800 border border-stone-700 text-stone-300 rounded-lg px-2 py-2 hover:text-white transition-colors"
+    >
+      <option value="">📍 Lieu…</option>
+      {locationMaps.map(l => <option key={l.name} value={l.name}>{l.name}</option>)}
+    </select>
+  ) : null
   const tokenListItems = (
     <>
       <button onClick={() => addToken({ label: 'Pion', color: 'amber' })} className="w-full text-left text-sm text-stone-300 hover:bg-stone-800 rounded px-2 py-1.5">🎯 Pion libre</button>
@@ -484,6 +581,7 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
           onChange={useImage}
           placeholder="URL de l'image de fond (donjon, carte…)"
         >
+          {locationMapPicker}
           {gridToggleBtn}
           {gridSizeCtl}
           <div className="relative">
@@ -515,6 +613,7 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
           {menu === 'map' && (
             <div className="absolute left-0 top-full mt-1 z-30 w-[min(92vw,34rem)] max-h-[70vh] overflow-y-auto bg-stone-900 border border-stone-700 rounded-lg shadow-xl p-3">
               <ImagePicker value={work.image_url ?? ''} onChange={useImage} placeholder="URL de l'image de fond (donjon, carte…)">
+                {locationMapPicker}
                 {gridToggleBtn}
                 {gridSizeCtl}
               </ImagePicker>
@@ -563,7 +662,7 @@ export function BattleMapBoard({ map, combatants, characters, editable = false, 
           conteneur de défilement → boîte de centrage → plateau. `min-w/h-full` sur la
           boîte de centrage garde le plateau atteignable au défilement une fois zoomé. */}
       <div className={fullscreen ? 'order-3 flex-1 min-h-0 relative' : 'contents'}>
-      <div ref={fitRef} className={fullscreen ? 'absolute inset-0 overflow-auto' : 'contents'}>
+      <div ref={fitRef} onScroll={fullscreen ? saveScroll : undefined} className={fullscreen ? 'absolute inset-0 overflow-auto' : 'contents'}>
       {/* Centré au repos ; aligné en haut-à-gauche dès qu'on zoome, car le centrage
           flex rendrait le débordement gauche/haut inatteignable au défilement. */}
       <div className={fullscreen ? `min-w-full min-h-full flex ${zoom > 1 ? 'items-start justify-start' : 'items-center justify-center'}` : 'contents'}>

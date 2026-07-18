@@ -4,6 +4,7 @@ namespace Tests\Feature\Api;
 
 use App\Events\CharacterUpdated;
 use App\Events\DiceRolled;
+use App\Events\SpellCast;
 use App\Models\Campaign;
 use App\Models\Chapter;
 use App\Models\Character;
@@ -228,5 +229,185 @@ class ShareControllerTest extends TestCase
     public function test_roll_dice_returns_404_for_a_bad_token(): void
     {
         $this->postJson('/api/share/character/nope/roll', ['sides' => 20])->assertNotFound();
+    }
+
+    // ── Lancer un sort depuis la fiche partagée ──────────────────────────────
+
+    /**
+     * Le cas Freya : ses six sorts (Armure de mage, Bouclier, Main de mage…) n'ont NI
+     * jet d'attaque NI dégâts. Les lancer, c'est dépenser l'emplacement et l'annoncer.
+     */
+    public function test_casting_a_levelled_spell_spends_a_slot_and_announces_it(): void
+    {
+        Event::fake([SpellCast::class, CharacterUpdated::class]);
+        $character = Character::factory()->create([
+            'user_id' => $this->user->id, 'share_token' => 'tok-cast', 'name' => 'Freya',
+            'spell_slots' => ['1' => ['max' => 2, 'used' => 0]],
+        ]);
+
+        $this->patchJson('/api/share/character/tok-cast/cast', ['name' => 'Armure de mage', 'level' => 1])
+            ->assertOk()
+            ->assertJsonPath('data.spellcasting.slots.1.used', 1);
+
+        $this->assertSame(1, $character->fresh()->spell_slots['1']['used']);
+
+        Event::assertDispatched(
+            SpellCast::class,
+            fn (SpellCast $e) => $e->spellName === 'Armure de mage'
+                && $e->characterName === 'Freya'
+                && $e->level === 1,
+        );
+    }
+
+    /** Un tour de magie s'annonce mais ne consomme rien : il est à volonté. */
+    public function test_casting_a_cantrip_spends_no_slot(): void
+    {
+        Event::fake([SpellCast::class]);
+        $character = Character::factory()->create([
+            'user_id' => $this->user->id, 'share_token' => 'tok-cantrip',
+            'spell_slots' => ['1' => ['max' => 2, 'used' => 0]],
+        ]);
+
+        $this->patchJson('/api/share/character/tok-cantrip/cast', ['name' => 'Main de mage', 'level' => 0])
+            ->assertOk();
+
+        $this->assertSame(0, $character->fresh()->spell_slots['1']['used']);
+        Event::assertDispatched(SpellCast::class);
+    }
+
+    public function test_casting_without_a_free_slot_is_refused(): void
+    {
+        Event::fake([SpellCast::class]);
+        $character = Character::factory()->create([
+            'user_id' => $this->user->id, 'share_token' => 'tok-empty-slot',
+            'spell_slots' => ['1' => ['max' => 1, 'used' => 1]],
+        ]);
+
+        $this->patchJson('/api/share/character/tok-empty-slot/cast', ['name' => 'Bouclier', 'level' => 1])
+            ->assertStatus(422);
+
+        // Rien ne doit bouger, et surtout rien ne doit être annoncé.
+        $this->assertSame(1, $character->fresh()->spell_slots['1']['used']);
+        Event::assertNotDispatched(SpellCast::class);
+    }
+
+    public function test_casting_a_level_the_sheet_has_no_slots_for_is_refused(): void
+    {
+        Character::factory()->create([
+            'user_id' => $this->user->id, 'share_token' => 'tok-no-slot',
+            'spell_slots' => ['1' => ['max' => 2, 'used' => 0]],
+        ]);
+
+        $this->patchJson('/api/share/character/tok-no-slot/cast', ['name' => 'Boule de feu', 'level' => 3])
+            ->assertStatus(422);
+    }
+
+    public function test_casting_returns_404_for_a_bad_token(): void
+    {
+        $this->patchJson('/api/share/character/nope/cast', ['name' => 'Bouclier', 'level' => 1])
+            ->assertNotFound();
+    }
+
+    // ── Carnet d'aventure du joueur (privé) ──────────────────────────────────
+
+    public function test_notes_are_read_and_written_against_the_character_token(): void
+    {
+        $character = Character::factory()->create(['user_id' => $this->user->id, 'share_token' => 'tok-notes']);
+
+        $this->getJson('/api/share/character/tok-notes/notes')
+            ->assertOk()
+            ->assertExactJson(['data' => []]);
+
+        $this->putJson('/api/share/character/tok-notes/notes', ['notes' => [[
+            'id' => 'n1', 'type' => 'PNJ', 'title' => 'Le maire',
+            'body' => 'Il ment sur la nuit du meurtre.',
+            'created_at' => '2026-07-17T10:00:00Z', 'updated_at' => '2026-07-17T10:00:00Z',
+        ]]])
+            ->assertOk()
+            ->assertJsonPath('data.0.title', 'Le maire')
+            ->assertJsonPath('data.0.body', 'Il ment sur la nuit du meurtre.');
+
+        $this->assertSame('PNJ', $character->fresh()->adventure_notes[0]['type']);
+    }
+
+    /**
+     * Le piège n°3 du dépôt : validate() efface en silence les clés non déclarées.
+     * Deux pertes de données réelles sont venues de là. Ce test échoue si une clé de
+     * note cesse d'être déclarée dans la FormRequest.
+     */
+    public function test_saving_notes_keeps_every_declared_key(): void
+    {
+        Character::factory()->create(['user_id' => $this->user->id, 'share_token' => 'tok-keys']);
+
+        $note = [
+            'id' => 'n1', 'type' => 'Libre', 'title' => 'Titre',
+            'body' => 'Corps', 'created_at' => '2026-07-17T10:00:00Z',
+            'updated_at' => '2026-07-17T11:00:00Z',
+        ];
+
+        $this->putJson('/api/share/character/tok-keys/notes', ['notes' => [$note]])
+            ->assertOk()
+            ->assertJsonPath('data.0', $note);
+    }
+
+    public function test_an_empty_list_erases_the_notebook(): void
+    {
+        $character = Character::factory()->create([
+            'user_id' => $this->user->id, 'share_token' => 'tok-empty',
+            'adventure_notes' => [['id' => 'n1', 'type' => 'Libre', 'title' => 'x', 'body' => 'y']],
+        ]);
+
+        $this->putJson('/api/share/character/tok-empty/notes', ['notes' => []])
+            ->assertOk()
+            ->assertExactJson(['data' => []]);
+
+        $this->assertSame([], $character->fresh()->adventure_notes);
+    }
+
+    public function test_notes_require_an_id_and_a_type(): void
+    {
+        Character::factory()->create(['user_id' => $this->user->id, 'share_token' => 'tok-inv']);
+
+        $this->putJson('/api/share/character/tok-inv/notes', ['notes' => [['body' => 'orpheline']]])
+            ->assertStatus(422)
+            ->assertJsonValidationErrors(['notes.0.id', 'notes.0.type']);
+    }
+
+    public function test_notes_return_404_for_a_bad_token(): void
+    {
+        $this->getJson('/api/share/character/nope/notes')->assertNotFound();
+        $this->putJson('/api/share/character/nope/notes', ['notes' => []])->assertNotFound();
+    }
+
+    /**
+     * Les notes sont privées : elles ne doivent sortir QUE de leur route dédiée.
+     * CharacterResource part à la fois vers la console MJ et vers l'événement
+     * CharacterUpdated, diffusé sur le canal public de la campagne — donc à toute la
+     * table. Si quelqu'un ajoute `adventure_notes` à la ressource, ce test tombe.
+     */
+    public function test_the_notebook_never_leaks_through_the_shared_character_or_the_campaign(): void
+    {
+        $campaign = $this->sharedCampaign();
+        Character::factory()->create([
+            'user_id' => $this->user->id, 'campaign_id' => $campaign->id,
+            'share_token' => 'tok-priv',
+            'adventure_notes' => [[
+                'id' => 'n1', 'type' => 'Théorie', 'title' => 'Secret',
+                'body' => 'Je soupçonne le barde',
+            ]],
+        ]);
+
+        // On teste la structure décodée, pas le texte brut : en JSON les accents sont
+        // échappés (« soupçonne » devient « soupçonne »), donc un assertDontSee sur
+        // une phrase accentuée passe toujours — il ne prouve rien.
+        $sheet = $this->getJson('/api/share/character/tok-priv')->assertOk();
+        $this->assertArrayNotHasKey('adventure_notes', $sheet->json('data'));
+        $this->assertStringNotContainsString('barde', $sheet->getContent());
+
+        $shared = $this->getJson('/api/share/tok-share')->assertOk();
+        foreach ($shared->json('data.characters') ?? [] as $c) {
+            $this->assertArrayNotHasKey('adventure_notes', $c);
+        }
+        $this->assertStringNotContainsString('barde', $shared->getContent());
     }
 }

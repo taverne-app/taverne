@@ -36,6 +36,12 @@ class SharedCampaignResource extends JsonResource
             'battle_map'          => $this->playerBattleMap(),
             'time_of_day'         => $this->time_of_day,
             'combat_active'       => (bool) $this->combat_active,
+            // Le tour en cours, pour qu'une page joueur ouverte au milieu d'un combat
+            // sache de qui c'est le tour sans attendre le prochain clic du MJ.
+            'combat_active_kind'  => $this->combat_active_kind,
+            'combat_active_id'    => $this->combat_active_id ? (int) $this->combat_active_id : null,
+            'combat_round'        => (int) ($this->combat_round ?? 1),
+            'combat_location'     => $this->combat_location,
             'characters'          => CharacterResource::collection($this->whenLoaded('characters')),
             'combatants'          => CombatantResource::collection($this->whenLoaded('combatants')),
             'created_at'          => $this->created_at,

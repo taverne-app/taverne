@@ -69,6 +69,13 @@ export interface Location {
   status: 'inconnu' | 'connu' | 'exploré'
   reputation: 'héros' | 'respecté' | 'neutre' | 'suspect' | 'recherché'
   notes: string
+  /**
+   * Carte du lieu (plan de ville, de donjon…). URL relative (/storage/…) — jamais
+   * absolue (piège #4), sinon elle casse chez les joueurs. Absente sur les lieux
+   * d'avant l'ajout de ce champ, d'où l'optionnel. Exposée telle quelle aux joueurs
+   * via SharedCampaignResource.
+   */
+  map_url?: string
 }
 
 export interface MonsterAttack {
@@ -194,6 +201,20 @@ export interface Campaign {
   time_of_day: string | null
   /** Vrai quand un combat est lancé : c'est ce qui ouvre la vue Combat aux joueurs. */
   combat_active: boolean
+  /**
+   * Le tour en cours, persisté à chaque changement de tour du MJ. Sans lui, une page
+   * joueur ouverte en cours de combat resterait sur « tour inconnu » jusqu'au prochain
+   * clic du MJ — et griserait ses actions entre-temps.
+   */
+  combat_active_kind?: 'character' | 'combatant' | null
+  combat_active_id?: number | null
+  combat_round?: number
+  /**
+   * Nom du lieu (section Monde) qui sert de théâtre au combat. Mémorisé quand le MJ
+   * reprend la carte d'un lieu comme fond de plateau ; effacé s'il choisit une image
+   * qui n'est celle d'aucun lieu. Exposé aux joueurs via SharedCampaignResource.
+   */
+  combat_location?: string | null
   characters: Character[]
   combatants?: Combatant[]
   created_at: string
@@ -221,7 +242,7 @@ export async function getCampaign(id: number): Promise<Campaign> {
   return (await res.json()).data
 }
 
-export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; battle_map?: BattleMap | null; combat_active?: boolean }): Promise<Campaign> {
+export async function updateCampaign(id: number, data: { name?: string; description?: string; dm_notes?: string | null; saved_encounters?: SavedEncounter[]; npcs?: Npc[]; game_calendar?: Partial<GameCalendar>; party_treasury?: TreasureItem[]; locations?: Location[]; custom_monsters?: CustomMonster[]; factions?: Faction[]; random_tables?: RandomTable[]; campaign_map?: CampaignMap | null; battle_map?: BattleMap | null; combat_active?: boolean; combat_location?: string | null }): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${id}`, {
     method: 'PATCH',
     body: JSON.stringify(data),

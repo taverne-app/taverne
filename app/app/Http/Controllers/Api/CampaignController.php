@@ -78,6 +78,7 @@ class CampaignController extends Controller
             'campaign_map'          => ['sometimes', 'nullable', 'array'],
             'battle_map'            => ['sometimes', 'nullable', 'array'],
             'combat_active'         => ['sometimes', 'boolean'],
+            'combat_location'       => ['sometimes', 'nullable', 'string', 'max:120'],
         ]);
 
         $wasActive = $campaign->combat_active;
@@ -86,7 +87,7 @@ class CampaignController extends Controller
 
         // Déplacer un pion doit se voir en direct sur l'écran des joueurs.
         if (array_key_exists('battle_map', $validated) && $campaign->share_token) {
-            BattleMapUpdated::dispatch($campaign->share_token, $campaign->battle_map);
+            BattleMapUpdated::dispatch($campaign->share_token, $campaign->battle_map, $campaign->combat_location);
         }
 
         // Ouvrir/fermer le combat fait apparaître ou disparaître la vue Combat dans
@@ -182,12 +183,20 @@ class CampaignController extends Controller
             'round'       => ['required', 'integer', 'min:1'],
         ]);
 
-        CombatTurnUpdated::dispatch(
-            $campaign->share_token,
-            $request->input('active_kind'),
-            $request->input('active_id') ? (int) $request->input('active_id') : null,
-            $request->integer('round'),
-        );
+        $kind  = $request->input('active_kind');
+        $id    = $request->input('active_id') ? (int) $request->input('active_id') : null;
+        $round = $request->integer('round');
+
+        // On persiste AVANT de diffuser : l'événement ne touche que les pages déjà
+        // ouvertes. Une page joueur qui arrive après doit pouvoir lire le tour en cours,
+        // sinon elle reste sur « tour inconnu » et grise ses propres actions.
+        $campaign->update([
+            'combat_active_kind' => $kind,
+            'combat_active_id'   => $id,
+            'combat_round'       => $round,
+        ]);
+
+        CombatTurnUpdated::dispatch($campaign->share_token, $kind, $id, $round);
 
         return response()->json(['ok' => true]);
     }

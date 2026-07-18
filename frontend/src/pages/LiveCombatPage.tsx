@@ -45,6 +45,13 @@ export function LiveCombatPage() {
         setCharacters(c.characters ?? [])
         setCombatants((c as Campaign & { combatants?: Combatant[] }).combatants ?? [])
         setBattleMap(c.battle_map ?? null)
+        // Le tour en cours vient de la campagne : l'écho ne renseigne que les pages
+        // déjà ouvertes au moment où le MJ change de tour.
+        setLiveState({
+          active_kind: c.combat_active_kind ?? null,
+          active_id: c.combat_active_id ?? null,
+          round: c.combat_round ?? 1,
+        })
       })
       .catch(() => setError('Campagne introuvable ou lien révoqué.'))
       .finally(() => setLoading(false))
@@ -85,8 +92,9 @@ export function LiveCombatPage() {
           ? prev.map(c => c.id === e.character.id ? e.character : c)
           : [...prev, e.character])
       })
-      .listen('.campaign.battle-map-updated', (e: { battle_map: BattleMap | null }) => {
+      .listen('.campaign.battle-map-updated', (e: { battle_map: BattleMap | null; combat_location?: string | null }) => {
         setBattleMap(e.battle_map)
+        setCampaign(prev => prev ? { ...prev, combat_location: e.combat_location ?? null } : prev)
       })
     return () => { echo.leave(`campaign-share.${token}`); echo.disconnect() }
   }, [token])
@@ -132,6 +140,11 @@ export function LiveCombatPage() {
   const isActive = (kind: string, id: number) =>
     liveState.active_kind === kind && liveState.active_id === id
 
+  // Même bascule que la console MJ : avec une image de plateau, la carte EST la page
+  // (plein écran, ruban en bas). Sans image, rien à afficher en grand — on garde la
+  // liste qui défile, seule vue lisible des combattants.
+  const hasBattleImage = !!battleMap?.image_url
+
   if (loading) return (
     <div className="min-h-screen bg-stone-950 flex items-center justify-center">
       <p className="text-stone-400 text-sm">Chargement…</p>
@@ -147,12 +160,19 @@ export function LiveCombatPage() {
   return (
     <>
     <SharedSidebar campaignShareToken={token} />
-    <div className="ml-14 min-h-screen bg-stone-950 text-white">
-      <header className="sticky top-0 z-10 border-b border-stone-800 bg-stone-950/90 backdrop-blur-sm px-4 py-3">
-        <div className="max-w-lg mx-auto flex items-center justify-between gap-3">
+    {/* En plein écran, la hauteur est bornée au viewport et c'est le plateau qui prend
+        la place restante : `min-h-screen` laisserait la page défiler sous le ruban. */}
+    <div className={`ml-14 bg-stone-950 text-white ${hasBattleImage ? 'h-[100dvh] flex flex-col overflow-hidden' : 'min-h-screen'}`}>
+      <header className={`shrink-0 border-b border-stone-800 bg-stone-950/90 backdrop-blur-sm px-4 py-3 ${hasBattleImage ? '' : 'sticky top-0 z-10'}`}>
+        <div className={`${hasBattleImage ? '' : 'max-w-lg'} mx-auto flex items-center justify-between gap-3`}>
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-amber-400 font-bold shrink-0">⚔</span>
             <h1 className="font-semibold text-white truncate">{campaign.name}</h1>
+            {campaign.combat_location && (
+              <span className="shrink-0 text-xs bg-stone-800 border border-stone-700 text-amber-300/90 rounded-full px-2.5 py-0.5" title="Lieu du combat">
+                📍 {campaign.combat_location}
+              </span>
+            )}
             {liveState.active_kind && (
               <span className="shrink-0 text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded-full px-2.5 py-0.5">
                 Round {liveState.round}
@@ -171,9 +191,26 @@ export function LiveCombatPage() {
         </div>
       </header>
 
-      {/* pb-52 : le dock est `fixed` et recouvrirait la fin du ruban d'initiative. */}
+      {/* Plateau plein écran. `pb-44` réserve la place de la barre du bas (ruban + dock),
+          qui est `fixed` et recouvrirait sinon le bas de la carte. */}
+      {hasBattleImage && (
+        <div className="flex-1 min-h-0 px-3 sm:px-4 pt-3 pb-44">
+          <BattleMapBoard
+            map={battleMap}
+            combatants={combatants}
+            characters={characters}
+            fullscreen
+            cameraKey={token ? `share:${token}` : undefined}
+            activeRef={liveState.active_kind && liveState.active_id ? { kind: liveState.active_kind as 'combatant' | 'character', id: liveState.active_id } : null}
+          />
+        </div>
+      )}
+
+      {/* Vue sans plateau : la liste verticale reste la seule façon de voir le combat.
+          Avec un plateau, c'est le ruban du bas qui joue ce rôle — pas les deux. */}
+      {!hasBattleImage && (
       <main className="max-w-lg mx-auto px-4 py-6 pb-52 space-y-6">
-        {battleMap && (battleMap.image_url || battleMap.tokens.length > 0) && (
+        {battleMap && battleMap.tokens.length > 0 && (
           <BattleMapBoard
             map={battleMap}
             combatants={combatants}
@@ -280,17 +317,75 @@ export function LiveCombatPage() {
           </div>
         )}
       </main>
-
-      {token && (
-        <PlayerCombatDock
-          campaignToken={token}
-          activeKind={liveState.active_kind}
-          activeId={liveState.active_id}
-          // Les PV encaissés ici doivent se voir dans le ruban sans attendre l'écho,
-          // qui peut ne pas être configuré (auto-hébergement sans Reverb).
-          onCharacterChange={updated => setCharacters(prev => prev.map(c => c.id === updated.id ? updated : c))}
-        />
       )}
+
+      {/* ─────────── Barre du bas : ruban d'initiative puis dock du joueur ───────────
+          Une SEULE barre `fixed` pour les deux : empilés dans des conteneurs séparés,
+          le second passerait sous le premier. `left-14` = largeur de la barre latérale,
+          qu'un `left-0` ferait recouvrir. */}
+      <div className="fixed bottom-0 left-14 right-0 z-30 border-t border-amber-700/40 bg-stone-900/95 backdrop-blur shadow-[0_-8px_24px_rgba(0,0,0,0.45)]">
+        {rows.length > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2">
+            <span className="shrink-0 text-stone-600 text-[10px] uppercase tracking-widest pr-1">Ordre</span>
+            <div className="flex-1 min-w-0 overflow-x-auto flex gap-1.5">
+              {rows.map(row => {
+                const active = isActive(row.kind, row.id)
+                const pct = row.maxHp > 0 ? Math.max(0, Math.min(100, (row.hp / row.maxHp) * 100)) : 0
+                return (
+                  <div
+                    key={row.key}
+                    className={`w-24 shrink-0 rounded-lg border px-2 py-1 transition-colors ${
+                      active ? 'bg-amber-500/15 border-amber-500/60 ring-1 ring-amber-500/40' : 'bg-stone-800/70 border-stone-700'
+                    }`}
+                  >
+                    <div className="flex items-center gap-1">
+                      <span className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center shrink-0 border ${
+                        row.isEnemy ? 'bg-red-900/50 border-red-700/50 text-red-300'
+                          : row.kind === 'character' ? 'bg-sky-900/50 border-sky-700/50 text-sky-300'
+                          : 'bg-stone-700 border-stone-600 text-stone-300'
+                      }`}>{row.init}</span>
+                      <span className={`text-xs font-medium truncate ${active ? 'text-amber-200' : 'text-stone-200'}`}>{row.name}</span>
+                    </div>
+                    <div className="mt-1 flex items-center gap-1 h-3">
+                      {/* Vue joueurs : les PV des ennemis restent cachés, comme dans la
+                          liste verticale. Ne jamais afficher `row.hp` pour un ennemi. */}
+                      {row.isEnemy ? (
+                        <span className="text-[9px] text-stone-600">PV ?</span>
+                      ) : (
+                        <>
+                          <div className="flex-1 h-1 bg-stone-700 rounded-full overflow-hidden">
+                            <div className={`h-full ${hpColor(row.hp, row.maxHp)}`} style={{ width: `${pct}%` }} />
+                          </div>
+                          <span className={`text-[9px] tabular-nums ${row.isDying ? 'text-red-400' : 'text-stone-500'}`}>{row.hp}</span>
+                        </>
+                      )}
+                    </div>
+                    {row.conditions.length > 0 && (
+                      <p className="mt-0.5 text-[9px] text-purple-400/80 truncate">
+                        {row.conditions.map(c => CONDITIONS_FR[c] ?? c).join(', ')}
+                      </p>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            {liveState.active_kind && (
+              <span className="shrink-0 text-stone-500 text-xs tabular-nums">R{liveState.round}</span>
+            )}
+          </div>
+        )}
+
+        {token && (
+          <PlayerCombatDock
+            campaignToken={token}
+            activeKind={liveState.active_kind}
+            activeId={liveState.active_id}
+            // Les PV encaissés ici doivent se voir dans le ruban sans attendre l'écho,
+            // qui peut ne pas être configuré (auto-hébergement sans Reverb).
+            onCharacterChange={updated => setCharacters(prev => prev.map(c => c.id === updated.id ? updated : c))}
+          />
+        )}
+      </div>
     </div>
     </>
   )

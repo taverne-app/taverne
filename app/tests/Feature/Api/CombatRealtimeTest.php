@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Api;
 
+use App\Events\BattleMapUpdated;
 use App\Events\CharacterUpdated;
 use App\Events\CombatantRemoved;
 use App\Events\CombatantUpdated;
@@ -285,6 +286,84 @@ class CombatRealtimeTest extends TestCase
             CombatTurnUpdated::class,
             fn (CombatTurnUpdated $e) => $e->shareToken === 'tok-turn' && $e->round === 3,
         );
+    }
+
+    /**
+     * Le tour doit être PERSISTÉ, pas seulement diffusé : l'événement ne touche que les
+     * pages déjà ouvertes. Une page joueur qui arrive en cours de combat lit le tour ici.
+     * Sans ça elle reste sur « tour inconnu » et grise les actions du joueur — c'était le
+     * bug qui rendait les dés d'Anok inertes.
+     */
+    public function test_broadcasting_a_turn_persists_it_for_pages_opened_later(): void
+    {
+        Event::fake([CombatTurnUpdated::class]);
+        $campaign = $this->campaign(['share_token' => 'tok-persist']);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/combat-turn", [
+                'active_kind' => 'character', 'active_id' => 7, 'round' => 2,
+            ])
+            ->assertOk();
+
+        $campaign->refresh();
+        $this->assertSame('character', $campaign->combat_active_kind);
+        $this->assertSame(7, (int) $campaign->combat_active_id);
+        $this->assertSame(2, (int) $campaign->combat_round);
+
+        // Et la vue joueurs doit le lire sans attendre le prochain clic du MJ.
+        $this->getJson('/api/share/tok-persist')
+            ->assertOk()
+            ->assertJsonPath('data.combat_active_kind', 'character')
+            ->assertJsonPath('data.combat_active_id', 7)
+            ->assertJsonPath('data.combat_round', 2);
+    }
+
+    /** Fin de combat : le tour retombe à « inconnu » au lieu de désigner un mort. */
+    public function test_a_null_turn_is_persisted_too(): void
+    {
+        Event::fake([CombatTurnUpdated::class]);
+        $campaign = $this->campaign([
+            'share_token' => 'tok-null', 'combat_active_kind' => 'character', 'combat_active_id' => 9,
+        ]);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/campaigns/{$campaign->id}/combat-turn", [
+                'active_kind' => null, 'active_id' => null, 'round' => 1,
+            ])
+            ->assertOk();
+
+        $campaign->refresh();
+        $this->assertNull($campaign->combat_active_kind);
+        $this->assertNull($campaign->combat_active_id);
+    }
+
+    /** Le lieu du combat est persisté, diffusé aux joueurs et lisible sur leur vue. */
+    public function test_combat_location_is_persisted_broadcast_and_shared(): void
+    {
+        Event::fake([BattleMapUpdated::class]);
+        $campaign = $this->campaign(['share_token' => 'tok-lieu']);
+
+        $this->actingAs($this->user)
+            ->patchJson("/api/campaigns/{$campaign->id}", [
+                'battle_map'      => ['image_url' => '/storage/plans/padhiver.png', 'grid' => null, 'tokens' => []],
+                'combat_location' => 'Padhiver',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.combat_location', 'Padhiver');
+
+        $campaign->refresh();
+        $this->assertSame('Padhiver', $campaign->combat_location);
+
+        // La diffusion transporte le lieu, pour que le label des joueurs suive l'image.
+        Event::assertDispatched(
+            BattleMapUpdated::class,
+            fn (BattleMapUpdated $e) => $e->broadcastWith()['combat_location'] === 'Padhiver',
+        );
+
+        // Et la vue joueurs le lit.
+        $this->getJson('/api/share/tok-lieu')
+            ->assertOk()
+            ->assertJsonPath('data.combat_location', 'Padhiver');
     }
 
     // ─────────────────────── Forme de la diffusion (canaux/payload) ───────────────────────
