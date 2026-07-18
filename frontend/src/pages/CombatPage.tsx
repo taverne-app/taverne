@@ -2375,7 +2375,11 @@ export function CombatPage() {
                               <div className="flex flex-wrap gap-1 mt-1">
                                 {castable.map((spell, si) => {
                                   const dice = spellDice(character, spell)
-                                  if (!dice || !character.spellcasting.ability) {
+                                  // Le jet d'attaque a besoin du bonus d'incantation (donc de la
+                                  // caractéristique) ; les DÉGÂTS ne sont qu'un lancer de dés et
+                                  // restent lançables même sans caractéristique (ex. sort à JS).
+                                  const canAttack = !!character.spellcasting.ability
+                                  if (!dice && !canAttack) {
                                     return (
                                       <span key={si} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
                                         ✦ {spell.name}
@@ -2385,20 +2389,26 @@ export function CombatPage() {
                                   }
                                   return (
                                     <span key={si} className="inline-flex items-center gap-0.5">
-                                      <button
-                                        onClick={() => handleRollSpell(character, spell, 'attack')}
-                                        title={`Attaque: 1d20${character.spellcasting.attack_bonus >= 0 ? '+' : ''}${character.spellcasting.attack_bonus} · DD ${character.spellcasting.save_dc}`}
-                                        className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors"
-                                      >
-                                        ✦ {spell.name}
-                                      </button>
-                                      <button
-                                        onClick={() => handleRollSpell(character, spell, 'damage')}
-                                        title={`Dégâts: ${dice}`}
-                                        className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors"
-                                      >
-                                        {dice}
-                                      </button>
+                                      {canAttack ? (
+                                        <button
+                                          onClick={() => handleRollSpell(character, spell, 'attack')}
+                                          title={`Attaque: 1d20${character.spellcasting.attack_bonus >= 0 ? '+' : ''}${character.spellcasting.attack_bonus} · DD ${character.spellcasting.save_dc}`}
+                                          className={`text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 ${dice ? 'rounded-l' : 'rounded'} px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors`}
+                                        >
+                                          ✦ {spell.name}
+                                        </button>
+                                      ) : (
+                                        <span className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded-l px-1.5 py-0.5">✦ {spell.name}</span>
+                                      )}
+                                      {dice && (
+                                        <button
+                                          onClick={() => handleRollSpell(character, spell, 'damage')}
+                                          title={`Dégâts: ${dice}`}
+                                          className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors"
+                                        >
+                                          {dice}
+                                        </button>
+                                      )}
                                       <SpellLevelBadge character={character} level={spell.level} />
                                     </span>
                                   )
@@ -4486,10 +4496,12 @@ export function CombatPage() {
                         ))}
                         {castable.map((spell, si) => {
                           const dice = spellDice(ch, spell)
-                          // Sans dés ni caractéristique d'incantation, il n'y a rien à
-                          // lancer : le sort reste une pastille de rappel, pas un bouton
-                          // qui promet un jet inexistant.
-                          if (!dice || !ch.spellcasting.ability) {
+                          // Le jet d'attaque a besoin de la caractéristique d'incantation ;
+                          // les DÉGÂTS ne sont qu'un lancer de dés, lançables sans elle (sort
+                          // à JS, ou perso sans caractéristique renseignée). Sans dés ni
+                          // attaque possible, le sort reste une simple pastille de rappel.
+                          const canAttack = !!ch.spellcasting.ability
+                          if (!dice && !canAttack) {
                             return (
                               <span key={`s${si}`} className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded px-1.5 py-0.5">
                                 ✦ {spell.name}
@@ -4499,8 +4511,14 @@ export function CombatPage() {
                           }
                           return (
                             <span key={`s${si}`} className="inline-flex items-center gap-0.5">
-                              <button onClick={() => handleRollSpell(ch, spell, 'attack')} className="text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 rounded-l px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors">✦ {spell.name}</button>
-                              <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${dice}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{dice}</button>
+                              {canAttack ? (
+                                <button onClick={() => handleRollSpell(ch, spell, 'attack')} className={`text-xs bg-violet-900/50 border border-violet-700/40 text-violet-300 ${dice ? 'rounded-l' : 'rounded'} px-1.5 py-0.5 hover:bg-violet-800/60 transition-colors`}>✦ {spell.name}</button>
+                              ) : (
+                                <span className="text-xs bg-violet-900/30 border border-violet-800/40 text-violet-300/90 rounded-l px-1.5 py-0.5">✦ {spell.name}</span>
+                              )}
+                              {dice && (
+                                <button onClick={() => handleRollSpell(ch, spell, 'damage')} title={`Dégâts: ${dice}`} className="text-xs bg-indigo-900/50 border border-indigo-700/40 text-indigo-300 rounded-r px-1.5 py-0.5 hover:bg-indigo-800/60 transition-colors">{dice}</button>
+                              )}
                               <SpellLevelBadge character={ch} level={spell.level} />
                             </span>
                           )
