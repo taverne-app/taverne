@@ -82,6 +82,43 @@ function SpellLevelBadge({ character, level }: { character: Character; level: nu
   )
 }
 
+/**
+ * Emplacements de sort d'un personnage, en pastilles cliquables : pleines =
+ * disponibles, vides = dépensés. Cliquer dépense (ou restaure) un emplacement.
+ * Muet si le personnage n'a pas de caractéristique d'incantation ou aucun
+ * emplacement — un simple lanceur de tours de magie n'en a pas.
+ */
+function SpellSlots({ character, onUse, className = '' }: { character: Character; onUse: (level: number, action: 'use' | 'restore') => void; className?: string }) {
+  const entries = Object.entries(character.spellcasting.slots)
+    .filter(([, slot]) => slot.max > 0)
+    .sort(([a], [b]) => Number(a) - Number(b))
+  if (!character.spellcasting.ability || entries.length === 0) return null
+  return (
+    <div className={`flex flex-wrap gap-x-3 gap-y-0.5 ${className}`}>
+      {entries.map(([lvl, slot]) => {
+        const available = slot.max - slot.used
+        return (
+          <span key={lvl} className="flex items-center gap-1">
+            <span className="text-stone-600 text-xs w-3">{lvl}</span>
+            {Array.from({ length: slot.max }, (_, i) => (
+              <button
+                key={i}
+                onClick={() => onUse(Number(lvl), i < available ? 'use' : 'restore')}
+                title={i < available ? `Dépenser emplacement niv.${lvl}` : `Restaurer emplacement niv.${lvl}`}
+                className={`w-3 h-3 rounded-full border transition-colors ${
+                  i < available
+                    ? 'bg-violet-500 border-violet-400 hover:bg-violet-400'
+                    : 'bg-transparent border-stone-600 hover:border-violet-600'
+                }`}
+              />
+            ))}
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 function rollMacro(character: Character, macro: AttackMacro, type: 'attack' | 'damage'): { label: string; total: number; detail: string } {
   if (type === 'attack') {
     const bonus = macro.attack_bonus ?? 0
@@ -2418,33 +2455,7 @@ export function CombatPage() {
                           })()}
 
                           {/* Emplacements de sort */}
-                          {character.spellcasting.ability && Object.keys(character.spellcasting.slots).length > 0 && (
-                            <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
-                              {Object.entries(character.spellcasting.slots)
-                                .filter(([, slot]) => slot.max > 0)
-                                .sort(([a], [b]) => Number(a) - Number(b))
-                                .map(([lvl, slot]) => {
-                                  const available = slot.max - slot.used
-                                  return (
-                                    <span key={lvl} className="flex items-center gap-1">
-                                      <span className="text-stone-600 text-xs w-3">{lvl}</span>
-                                      {Array.from({ length: slot.max }, (_, i) => (
-                                        <button
-                                          key={i}
-                                          onClick={() => handleUseSlot(character, Number(lvl), i < available ? 'use' : 'restore')}
-                                          title={i < available ? `Dépenser emplacement niv.${lvl}` : `Restaurer emplacement niv.${lvl}`}
-                                          className={`w-3 h-3 rounded-full border transition-colors ${
-                                            i < available
-                                              ? 'bg-violet-500 border-violet-400 hover:bg-violet-400'
-                                              : 'bg-transparent border-stone-600 hover:border-violet-600'
-                                          }`}
-                                        />
-                                      ))}
-                                    </span>
-                                  )
-                                })}
-                            </div>
-                          )}
+                          <SpellSlots character={character} onUse={(lvl, action) => handleUseSlot(character, lvl, action)} className="mt-1.5" />
 
                           {/* Mobile HP controls */}
                           <div className="sm:hidden flex items-center gap-2 mt-1.5 flex-wrap">
@@ -4525,6 +4536,9 @@ export function CombatPage() {
                         })}
                       </div>
                     )}
+                    {/* Emplacements de sort : dépensables directement depuis le dock du
+                        combattant actif, comme dans la vue sans plateau. */}
+                    <SpellSlots character={ch} onUse={(lvl, action) => handleUseSlot(ch, lvl, action)} />
                   </div>
                 )
               }
