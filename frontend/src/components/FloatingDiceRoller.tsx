@@ -1,4 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
+import { useAuth } from '../contexts/AuthContext'
+import { createEcho, createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
+import { getCampaignRolls } from '../api/campaigns'
+import { getSharedCampaignRolls } from '../api/share'
+import type { DiceRoll } from '../api/characters'
 
 const DICE = [4, 6, 8, 10, 12, 20, 100] as const
 
@@ -12,16 +17,27 @@ interface RollResult {
   sides: number
 }
 
+/**
+ * Contexte campagne du lanceur : d'où viennent les jets de TOUTE la table.
+ * `dm` passe par le canal privé authentifié, `share` par le canal public du lien.
+ * Absent → le lanceur reste local (aucun historique commun).
+ */
+export type RollerCampaign =
+  | { kind: 'dm'; id: number }
+  | { kind: 'share'; token: string }
+
 function sign(n: number) { return n >= 0 ? `+${n}` : `${n}` }
 
-export function FloatingDiceRoller() {
+export function FloatingDiceRoller({ campaign }: { campaign?: RollerCampaign }) {
   const [open, setOpen]       = useState(false)
   const [sides, setSides]     = useState<typeof DICE[number]>(20)
   const [count, setCount]     = useState(1)
   const [modInput, setModInput] = useState('')
   const [adv, setAdv]         = useState<'none' | 'adv' | 'dis'>('none')
   const [history, setHistory] = useState<RollResult[]>([])
+  const [tableRolls, setTableRolls] = useState<DiceRoll[]>([])
   const panelRef = useRef<HTMLDivElement>(null)
+  const { token: authToken } = useAuth()
 
   // Close on outside click
   useEffect(() => {
@@ -43,6 +59,39 @@ export function FloatingDiceRoller() {
     document.addEventListener('keydown', handler)
     return () => document.removeEventListener('keydown', handler)
   }, [])
+
+  // Historique de la table : on charge les 10 derniers à l'ouverture puis on suit en
+  // direct. Le canal ne s'abonne que panneau ouvert, pour ne pas tenir un WebSocket
+  // ouvert en permanence sur toutes les pages où flotte le bouton.
+  useEffect(() => {
+    if (!open || !campaign) return
+    let cancelled = false
+
+    const fetchInitial = campaign.kind === 'dm'
+      ? getCampaignRolls(campaign.id)
+      : getSharedCampaignRolls(campaign.token)
+    fetchInitial.then(rolls => { if (!cancelled) setTableRolls(rolls) }).catch(() => { /* historique indisponible */ })
+
+    if (!REALTIME_CONFIGURED) return () => { cancelled = true }
+    // Le canal MJ est privé (authentifié) ; le canal joueurs est public.
+    if (campaign.kind === 'dm' && !authToken) return () => { cancelled = true }
+    const echo = campaign.kind === 'dm' ? createEcho(authToken!) : createPublicEcho()
+    const channelName = campaign.kind === 'dm' ? `campaign.${campaign.id}` : `campaign-share.${campaign.token}`
+    const channel = campaign.kind === 'dm' ? echo.private(channelName) : echo.channel(channelName)
+    channel.listen('.dice.rolled', (e: DiceRoll) => {
+      setTableRolls(prev => {
+        // Un même jet ne peut arriver deux fois (timestamp + personnage identiques).
+        if (prev.some(r => r.timestamp === e.timestamp && r.character_id === e.character_id)) return prev
+        return [e, ...prev].slice(0, 10)
+      })
+    })
+
+    return () => {
+      cancelled = true
+      echo.leave(channelName)
+      echo.disconnect()
+    }
+  }, [open, campaign, authToken])
 
   function roll() {
     const mod = parseInt(modInput, 10) || 0
@@ -103,7 +152,7 @@ export function FloatingDiceRoller() {
           {/* Count + Modifier row */}
           <div className="flex items-center gap-2">
             {adv === 'none' && (
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 shrink-0">
                 <button
                   onClick={() => setCount(c => Math.max(1, c - 1))}
                   className="w-6 h-6 rounded bg-stone-800 text-stone-400 text-sm hover:bg-stone-700 transition-colors"
@@ -120,14 +169,16 @@ export function FloatingDiceRoller() {
                 <span className="text-stone-500 text-xs">dés</span>
               </div>
             )}
-            <div className="flex-1 flex items-center gap-1.5">
-              <span className="text-stone-500 text-xs">mod</span>
+            {/* min-w-0 : sans lui, la largeur intrinsèque d'un input[number] l'empêche de
+                rétrécir dans le flex et il déborde du panneau. */}
+            <div className="flex-1 min-w-0 flex items-center gap-1.5">
+              <span className="text-stone-500 text-xs shrink-0">mod</span>
               <input
                 type="number"
                 value={modInput}
                 onChange={e => setModInput(e.target.value)}
                 placeholder="0"
-                className="flex-1 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                className="w-full min-w-0 bg-stone-800 border border-stone-700 rounded px-2 py-1 text-white text-sm text-center focus:outline-none focus:border-amber-500 transition-colors [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               />
             </div>
           </div>
@@ -173,16 +224,40 @@ export function FloatingDiceRoller() {
             </div>
           )}
 
-          {/* History */}
-          {history.length > 1 && (
-            <div className="space-y-0.5 border-t border-stone-800 pt-2">
-              {history.slice(1, 6).map((r, i) => (
-                <div key={i} className="flex items-center justify-between text-xs">
-                  <span className="text-stone-600">{r.expr}</span>
-                  <span className="text-stone-500 font-semibold">{r.total}</span>
+          {/* Historique de la table : jets de tous les personnages, avec leur provenance. */}
+          {campaign ? (
+            <div className="border-t border-stone-800 pt-2">
+              <p className="text-stone-600 text-[10px] uppercase tracking-widest mb-1">Derniers jets de la table</p>
+              {tableRolls.length === 0 ? (
+                <p className="text-stone-600 text-xs italic">Aucun jet pour l'instant.</p>
+              ) : (
+                <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                  {tableRolls.map((r, i) => (
+                    <div key={`${r.timestamp}-${r.character_id}-${i}`} className="flex items-center justify-between gap-2 text-xs">
+                      <span className="text-stone-400 truncate">
+                        <span className="text-stone-300">{r.label}</span>
+                        <span className="text-stone-600"> — {r.character_name}</span>
+                      </span>
+                      <span className={`font-bold shrink-0 ${
+                        r.advantage ? 'text-emerald-400' : r.disadvantage ? 'text-red-400' : 'text-stone-200'
+                      }`}>{r.total}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
+          ) : (
+            /* Hors campagne : simple rappel de mes derniers lancers locaux. */
+            history.length > 1 && (
+              <div className="space-y-0.5 border-t border-stone-800 pt-2">
+                {history.slice(1, 6).map((r, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-stone-600">{r.expr}</span>
+                    <span className="text-stone-500 font-semibold">{r.total}</span>
+                  </div>
+                ))}
+              </div>
+            )
           )}
         </div>
       )}

@@ -24,6 +24,17 @@ class ShareController extends Controller
         return new SharedCampaignResource($campaign);
     }
 
+    /**
+     * Journal des derniers jets de la campagne, pour le lanceur de dés côté joueurs.
+     * Public : posséder le lien de partage suffit, comme pour le reste de la vue partagée.
+     */
+    public function campaignRolls(string $token): JsonResponse
+    {
+        $campaign = Campaign::where('share_token', $token)->firstOrFail();
+
+        return response()->json(['data' => $campaign->recent_rolls ?? []]);
+    }
+
     public function showCharacter(string $token): CharacterResource
     {
         $character = Character::where('share_token', $token)->with('campaign')->firstOrFail();
@@ -177,7 +188,7 @@ class ShareController extends Controller
             'timestamp'      => now()->toISOString(),
         ];
 
-        DiceRolled::dispatch($roll);
+        $roll = DiceRolled::record($character, $roll);
 
         return response()->json($roll);
     }

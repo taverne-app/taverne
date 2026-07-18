@@ -203,7 +203,7 @@ class CharacterController extends Controller
             'timestamp'      => now()->toISOString(),
         ];
 
-        DiceRolled::dispatch($roll);
+        $roll = DiceRolled::record($character, $roll);
 
         return response()->json($roll);
     }

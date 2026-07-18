@@ -271,7 +271,7 @@ export function SharedCampaignPage() {
         {token && <PlayerNotes campaignToken={token} />}
 
       </main>
-      <FloatingDiceRoller />
+      <FloatingDiceRoller campaign={token ? { kind: 'share', token } : undefined} />
       <RulesCompendium />
     </div>
     </>

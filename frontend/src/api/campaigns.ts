@@ -1,5 +1,5 @@
 import { apiFetch, ApiError } from './client'
-import type { Character } from './characters'
+import type { Character, DiceRoll } from './characters'
 import type { Combatant } from './combatants'
 
 export interface SavedEncounter {
@@ -273,6 +273,13 @@ export async function broadcastCombatTurn(
     method: 'POST',
     body: JSON.stringify(payload),
   })
+}
+
+/** Journal des 10 derniers jets de la campagne (plus récent en tête), côté MJ. */
+export async function getCampaignRolls(campaignId: number): Promise<DiceRoll[]> {
+  const res = await apiFetch(`/campaigns/${campaignId}/rolls`)
+  if (!res.ok) throw new ApiError(res.status, await res.json())
+  return (await res.json()).data
 }
 
 export async function setCampaignTimeOfDay(campaignId: number, timeOfDay: string | null): Promise<void> {

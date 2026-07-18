@@ -201,6 +201,14 @@ class CampaignController extends Controller
         return response()->json(['ok' => true]);
     }
 
+    /** Journal des derniers jets de la campagne, pour le lanceur de dés côté MJ. */
+    public function rolls(Request $request, Campaign $campaign): JsonResponse
+    {
+        $this->authorize($request, $campaign);
+
+        return response()->json(['data' => $campaign->recent_rolls ?? []]);
+    }
+
     private function authorize(Request $request, Campaign $campaign): void
     {
         abort_if($campaign->user_id !== $request->user()->id, 403);

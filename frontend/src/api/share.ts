@@ -10,6 +10,15 @@ export async function getSharedCampaign(token: string): Promise<Campaign> {
   return (await res.json()).data
 }
 
+/** Journal des 10 derniers jets de la campagne (plus récent en tête), côté joueurs. */
+export async function getSharedCampaignRolls(token: string): Promise<DiceRoll[]> {
+  const res = await fetch(`/api/share/${token}/rolls`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error('Historique des jets indisponible.')
+  return (await res.json()).data
+}
+
 export async function generateShareToken(campaignId: number): Promise<Campaign> {
   const res = await apiFetch(`/campaigns/${campaignId}/share`, { method: 'POST' })
   if (!res.ok) throw new ApiError(res.status, await res.json())

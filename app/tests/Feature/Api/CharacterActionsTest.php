@@ -203,6 +203,51 @@ class CharacterActionsTest extends TestCase
         Event::assertDispatched(DiceRolled::class);
     }
 
+    public function test_a_roll_is_recorded_in_its_campaigns_history_and_served(): void
+    {
+        Event::fake([DiceRolled::class]);
+        $campaign = \App\Models\Campaign::factory()->create(['user_id' => $this->user->id, 'share_token' => 'tok-rolls']);
+        $character = $this->character(['campaign_id' => $campaign->id]);
+
+        $this->actingAs($this->user)
+            ->postJson("/api/characters/{$character->id}/roll", [
+                'sides' => 20, 'count' => 1, 'modifier' => 2, 'label' => 'Épée longue',
+            ])
+            ->assertOk();
+
+        // Journalisé avec sa provenance et le personnage lié.
+        $campaign->refresh();
+        $this->assertCount(1, $campaign->recent_rolls);
+        $this->assertSame('Épée longue', $campaign->recent_rolls[0]['label']);
+        $this->assertSame($character->name, $campaign->recent_rolls[0]['character_name']);
+        // Le jeton de routage sert au canal, il ne doit pas fuiter dans le journal.
+        $this->assertArrayNotHasKey('campaign_share_token', $campaign->recent_rolls[0]);
+
+        // Servi côté MJ (authentifié) et côté joueurs (lien de partage).
+        $this->actingAs($this->user)
+            ->getJson("/api/campaigns/{$campaign->id}/rolls")
+            ->assertOk()
+            ->assertJsonPath('data.0.label', 'Épée longue');
+
+        $this->getJson('/api/share/tok-rolls/rolls')
+            ->assertOk()
+            ->assertJsonPath('data.0.character_name', $character->name);
+    }
+
+    public function test_the_campaign_roll_journal_keeps_only_the_last_ten(): void
+    {
+        $campaign = \App\Models\Campaign::factory()->create(['user_id' => $this->user->id]);
+        foreach (range(1, 12) as $n) {
+            $campaign->pushRecentRoll(['label' => "jet $n", 'total' => $n]);
+        }
+
+        $campaign->refresh();
+        $this->assertCount(10, $campaign->recent_rolls);
+        // Le plus récent est en tête, les deux plus anciens sont tombés.
+        $this->assertSame('jet 12', $campaign->recent_rolls[0]['label']);
+        $this->assertSame('jet 3', $campaign->recent_rolls[9]['label']);
+    }
+
     // ── Partage de fiche ─────────────────────────────────────────────────────
 
     public function test_share_generates_a_token_and_revoke_clears_it(): void

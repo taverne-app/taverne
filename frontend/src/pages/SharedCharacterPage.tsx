@@ -721,7 +721,7 @@ export function SharedCharacterPage() {
           </div>
         </div>
       </main>
-      <FloatingDiceRoller />
+      <FloatingDiceRoller campaign={character?.campaign_share_token ? { kind: 'share', token: character.campaign_share_token } : undefined} />
       <RulesCompendium />
     </div>
     </>

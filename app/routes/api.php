@@ -34,6 +34,7 @@ Route::post('/share/character/{token}/roll',    [ShareController::class, 'rollDi
 Route::patch('/share/character/{token}/cast',    [ShareController::class, 'castSpell']);
 Route::get('/share/character/{token}/notes',    [ShareController::class, 'notes']);
 Route::put('/share/character/{token}/notes',    [ShareController::class, 'updateNotes']);
+Route::get('/share/{token}/rolls',              [ShareController::class, 'campaignRolls']);
 Route::get('/share/{token}',                    [ShareController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -59,6 +60,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('share',                    [CampaignController::class, 'share']);
         Route::delete('share',                  [CampaignController::class, 'revokeShare']);
         Route::post('combat-turn',              [CampaignController::class, 'broadcastTurn']);
+        Route::get('rolls',                     [CampaignController::class, 'rolls']);
         Route::patch('time-of-day',             [CampaignController::class, 'setTimeOfDay']);
         Route::post('chapters/reorder', [ChapterController::class, 'reorder']);
         Route::apiResource('chapters', ChapterController::class)->except(['show']);
