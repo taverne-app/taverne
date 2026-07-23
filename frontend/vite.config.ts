@@ -15,6 +15,13 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
       },
+      // WebSocket Reverb : en dev, Echo vise l'origine (localhost:3000/5174),
+      // ce relais le porte jusqu'au conteneur reverb. Miroir du nginx frontend.
+      '/app': {
+        target: 'ws://localhost:8080',
+        ws: true,
+        changeOrigin: true,
+      },
     },
   },
 })
