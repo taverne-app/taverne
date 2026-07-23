@@ -231,6 +231,38 @@ class ShareControllerTest extends TestCase
         $this->postJson('/api/share/character/nope/roll', ['sides' => 20])->assertNotFound();
     }
 
+    // ── Le joueur lance SON initiative depuis la vue Combat ──────────────────────
+
+    public function test_player_rolls_own_initiative_and_it_lands_in_the_order(): void
+    {
+        Event::fake([CharacterUpdated::class, DiceRolled::class]);
+        // Dextérité 16 → mod +3 : le résultat doit tomber dans [1+3, 20+3] = [4, 23].
+        $character = Character::factory()->create([
+            'user_id' => $this->user->id, 'share_token' => 'tok-init', 'dexterity' => 16,
+        ]);
+
+        $this->postJson('/api/share/character/tok-init/initiative')
+            ->assertOk()
+            ->assertJson(fn ($json) => $json->where(
+                'data.combat.initiative_roll',
+                fn ($v) => $v >= 4 && $v <= 23,
+            )->etc());
+
+        $roll = $character->fresh()->initiative_roll;
+        $this->assertNotNull($roll);
+        $this->assertGreaterThanOrEqual(4, $roll);
+        $this->assertLessThanOrEqual(23, $roll);
+
+        // La place dans l'ordre (CharacterUpdated) ET le jet au journal (DiceRolled).
+        Event::assertDispatched(CharacterUpdated::class);
+        Event::assertDispatched(DiceRolled::class);
+    }
+
+    public function test_roll_initiative_returns_404_for_a_bad_token(): void
+    {
+        $this->postJson('/api/share/character/nope/initiative')->assertNotFound();
+    }
+
     // ── Lancer un sort depuis la fiche partagée ──────────────────────────────
 
     /**

@@ -223,7 +223,7 @@ export function LiveCombatPage() {
           <div className="text-center py-16">
             <p className="text-stone-700 text-5xl mb-4">⚔</p>
             <p className="text-stone-400 text-base font-medium">Combat pas encore commencé</p>
-            <p className="text-stone-600 text-sm mt-1">Les participants apparaîtront ici une fois les initiatives lancées.</p>
+            <p className="text-stone-600 text-sm mt-1">Lancez votre initiative ci-dessous&nbsp;: vous prendrez alors place dans l'ordre.</p>
           </div>
         ) : (
           <div className="space-y-2">

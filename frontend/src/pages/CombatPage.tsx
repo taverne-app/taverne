@@ -977,6 +977,30 @@ export function CombatPage() {
     void setCombatActive(true)
   }
 
+  /**
+   * « Lancer le combat » ouvre l'accès aux joueurs SANS tirer leur initiative : chacun
+   * lance la sienne depuis la vue Combat (dock joueur). On ne tire ici que pour les
+   * combattants — PNJ et monstres, que personne d'autre ne lancerait — et on respecte
+   * ceux qui ont déjà une initiative (ajoutés avec une valeur). « + Manquants » reste
+   * le recours du MJ pour compléter un joueur absent qui ne lancera pas lui-même.
+   */
+  async function handleLaunchCombat() {
+    const d20 = () => Math.floor(Math.random() * 20) + 1
+    await run(() => Promise.all(
+      combatants
+        .filter(cb => cb.initiative_roll == null)
+        .map(async cb => {
+          if (!campaignId) return
+          const mod = resolvedMonsters[cb.id]?.initiative_mod ?? 0
+          const roll = d20() + mod
+          const updated = await updateCombatantInitiative(campaignId, cb.id, roll)
+          setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
+        }),
+    ), "Les initiatives des combattants n'ont pas toutes pu être enregistrées.")
+    setManualOrder(null)
+    void setCombatActive(true)
+  }
+
   async function handleCombatantHp(combatantId: number, type: 'damage' | 'heal') {
     if (!campaignId) return
     const raw = combatantHpInputs[combatantId] ?? ''
@@ -1840,11 +1864,11 @@ export function CombatPage() {
                   {/* Actions clés du combat, toujours à portée (plus besoin d'ouvrir le tiroir). */}
                   {(characters.length > 0 || combatants.length > 0) && (
                     <button
-                      onClick={() => handleRollAllInitiative(false)}
+                      onClick={handleLaunchCombat}
                       className="text-xs font-medium rounded-lg px-3 py-1.5 border bg-amber-600/20 border-amber-600/40 text-amber-400 hover:bg-amber-600/40 transition-colors"
-                      title="Lance 1d20 + modificateur pour tous les participants — ouvre l'accès aux joueurs"
+                      title="Ouvre le combat aux joueurs (chacun lance son initiative) et tire celle des PNJ"
                     >
-                      ⚅ Lancer l'initiative
+                      ⚔ Lancer le combat
                     </button>
                   )}
                   {(characters.length > 0 || combatants.length > 0) && (
@@ -2051,14 +2075,14 @@ export function CombatPage() {
               )}
               {(characters.length > 0 || combatants.length > 0) && (
                 <div className="flex gap-1.5">
-                  {/* En plein écran, « Lancer l'initiative » vit dans la barre du haut. */}
+                  {/* En plein écran, « Lancer le combat » vit dans la barre du haut. */}
                   {!hasBattleImage && (
                     <button
-                      onClick={() => handleRollAllInitiative(false)}
+                      onClick={handleLaunchCombat}
                       className="bg-amber-600/20 hover:bg-amber-600/40 border border-amber-600/40 text-amber-400 text-xs font-medium rounded-lg px-3 py-1.5 transition-colors"
-                      title="Lance 1d20 + modificateur pour tous les participants"
+                      title="Ouvre le combat aux joueurs (chacun lance son initiative) et tire celle des PNJ"
                     >
-                      ⚅ Lancer l'initiative
+                      ⚔ Lancer le combat
                     </button>
                   )}
                   {(characters.some(c => c.combat.initiative_roll == null) || combatants.some(cb => cb.initiative_roll == null)) && (

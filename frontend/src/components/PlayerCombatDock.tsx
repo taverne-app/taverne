@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { Character } from '../api/characters'
 import { getSharedCharacter } from '../api/characters'
-import { updateSharedCharacterHp, rollSharedDice, castSharedSpell } from '../api/share'
+import { updateSharedCharacterHp, rollSharedDice, rollSharedInitiative, castSharedSpell } from '../api/share'
 import { usePlayerCharacter } from '../lib/playerIdentity'
 import { parseDamageDice } from '../lib/dice'
 import { scaleCantripDamage } from '../data/spells'
@@ -99,6 +99,27 @@ export function PlayerCombatDock({ campaignToken, activeId, activeKind, onCharac
       setHpInput('')
     } catch {
       setError('PV non enregistrés.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /**
+   * Le joueur lance SON initiative depuis la vue Combat : c'est ce qui l'inscrit dans
+   * l'ordre. Le MJ ne lance plus l'initiative des joueurs — « Lancer le combat » ne fait
+   * qu'ouvrir l'accès, à chacun de tirer la sienne ici. Le serveur tire (pas de triche).
+   */
+  async function rollInitiative() {
+    if (!charToken) return
+    setBusy(true)
+    setError(null)
+    try {
+      const updated = await rollSharedInitiative(charToken)
+      setCharacter(updated)
+      onCharacterChange?.(updated)
+      setLastRoll(`Initiative → ${updated.combat.initiative_roll}`)
+    } catch {
+      setError('Initiative non enregistrée.')
     } finally {
       setBusy(false)
     }
@@ -215,7 +236,14 @@ export function PlayerCombatDock({ campaignToken, activeId, activeKind, onCharac
             <button onClick={() => applyHp('heal')} disabled={busy} className="bg-emerald-900/60 hover:bg-emerald-800/80 disabled:opacity-40 border border-emerald-700/50 text-emerald-300 text-xs rounded px-2 py-1 transition-colors">Soin</button>
           </div>
 
-          <button onClick={() => roll('Initiative', 20, character.modifiers.dexterity)} disabled={busy} className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded px-2 py-1 hover:text-white disabled:opacity-40 transition-colors">⚅ d20</button>
+          {/* Jet d'initiative : l'action qui inscrit le joueur dans l'ordre du combat.
+              Tant qu'il n'a pas tiré, le bouton pulse pour l'appeler à le faire ; ensuite
+              il montre le résultat et permet de relancer. */}
+          {character.combat.initiative_roll == null ? (
+            <button onClick={rollInitiative} disabled={busy} className="text-xs font-semibold bg-amber-600/25 border border-amber-600/50 text-amber-300 rounded px-2.5 py-1 hover:bg-amber-600/40 disabled:opacity-40 transition-colors animate-pulse">⚅ Lancer mon initiative</button>
+          ) : (
+            <button onClick={rollInitiative} disabled={busy} title="Relancer mon initiative" className="text-xs bg-stone-800 border border-stone-700 text-stone-300 rounded px-2 py-1 hover:text-white disabled:opacity-40 transition-colors">⚅ Init. <span className="text-amber-300 font-bold">{character.combat.initiative_roll}</span></button>
+          )}
 
           {/* Rien à changer quand une seule fiche de la campagne est connue ici : le
               dock la reprendrait aussitôt. Le bouton n'apparaît que s'il y a un choix. */}

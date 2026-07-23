@@ -193,6 +193,43 @@ class ShareController extends Controller
         return response()->json($roll);
     }
 
+    /**
+     * Le joueur lance SON initiative depuis la vue Combat. C'est le serveur qui tire
+     * (1d20 + mod. de Dextérité) : le résultat est une place dans l'ordre du combat, pas
+     * un jet décoratif — le laisser au client permettrait de choisir son initiative. Le
+     * jet apparaît aussi au journal de la table, comme un jet de dé ordinaire, et
+     * CharacterUpdated l'inscrit dans l'ordre chez le MJ et les autres joueurs.
+     */
+    public function rollInitiative(string $token): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $modifier = $character->modifier($character->dexterity);
+        $die      = random_int(1, 20);
+        $total    = $die + $modifier;
+
+        $character->update(['initiative_roll' => $total]);
+        $fresh = $character->fresh();
+
+        DiceRolled::record($fresh, [
+            'character_id'   => $fresh->id,
+            'character_name' => $fresh->name,
+            'label'          => 'Initiative',
+            'count'          => 1,
+            'sides'          => 20,
+            'rolls'          => [$die],
+            'modifier'       => $modifier,
+            'total'          => $total,
+            'advantage'      => false,
+            'disadvantage'   => false,
+            'timestamp'      => now()->toISOString(),
+        ]);
+
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
     private function applyDamage(Character $character, int $amount): void
     {
         $remaining = max(0, $amount - $character->temporary_hp);

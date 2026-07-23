@@ -115,3 +115,16 @@ export async function rollSharedDice(
   if (!res.ok) throw new Error('Erreur jet de dés')
   return res.json()
 }
+
+/**
+ * Le joueur lance SON initiative : le serveur tire (1d20 + mod. Dex) et l'inscrit dans
+ * l'ordre du combat. Renvoie la fiche à jour pour rafraîchir le ruban sans attendre l'écho.
+ */
+export async function rollSharedInitiative(token: string): Promise<Character> {
+  const res = await fetch(`/api/share/character/${token}/initiative`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+  })
+  if (!res.ok) throw new Error('Initiative non enregistrée')
+  return (await res.json()).data
+}
