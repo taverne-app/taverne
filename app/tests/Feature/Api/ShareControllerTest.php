@@ -449,12 +449,24 @@ class ShareControllerTest extends TestCase
     // états réversibles. Les tests qui suivent tiennent cette frontière autant que le
     // comportement — aucune ne doit jamais permettre de retirer quoi que ce soit.
 
+    /**
+     * La factory tire la classe, le niveau et les caractéristiques au hasard. Le
+     * plafond de sorts préparables en dépendant (niveau + mod. d'incantation), un
+     * tirage malheureux — clerc niveau 1, sagesse 8 → plafond de 1 — faisait échouer
+     * en 422 des tests qui ne parlent pas du plafond. D'où ces valeurs par défaut,
+     * qui laissent une marge confortable (magicien niv. 5, INT 16 → 8 préparables).
+     * `$attrs` passe avant : un test qui fixe sa classe ou son niveau garde la main.
+     */
     private function playerCharacter(array $attrs = []): Character
     {
         return Character::factory()->create([
             'user_id'     => $this->user->id,
             'share_token' => 'tok-joueur',
-        ] + $attrs);
+        ] + $attrs + [
+            'character_class' => 'Magicien',
+            'level'           => 5,
+            'intelligence'    => 16,
+        ]);
     }
 
     public function test_le_joueur_ajoute_et_depense_des_pieces(): void
