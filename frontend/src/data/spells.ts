@@ -7,9 +7,7 @@ export const SRD_SPELLS: [string, number][] = [
   ['Prestidigitation', 0], ['Flamme sacrée', 0],
   ['Gourdin magique', 0], ['Poigne électrique', 0], ['Stabilisation', 0],
   ['Thaumaturgie', 0], ['Fouet épineux', 0], ['Coup au but', 0],
-  ['Moquerie cruelle', 0], ['Bouffée de poison', 0], ['Lame retentissante', 0],
-  ['Rayon de givre', 0], ['Flammes', 0], ['Résistance', 0],
-  ['Lame aux flammes vertes', 0], ['Infestation', 0],
+  ['Moquerie cruelle', 0], ['Bouffée de poison', 0], ['Rayon de givre', 0], ['Flammes', 0], ['Résistance', 0],
   // Niveau 1
   ['Alarme', 1], ['Amitié avec les animaux', 1], ['Fléau', 1], ['Bénédiction', 1],
   ['Mains brûlantes', 1], ['Charme-personne', 1], ['Couleurs dansantes', 1],
@@ -20,7 +18,7 @@ export const SRD_SPELLS: [string, number][] = [
   ['Repli expéditif', 1], ['Lueurs féeriques', 1], ['Simulacre de vie', 1],
   ['Feuille morte', 1], ['Appel de familier', 1], ['Nappe de brouillard', 1],
   ['Baies nourricières', 1], ['Graisse', 1], ['Éclair traçant', 1],
-  ['Mot de guérison', 1], ['Héroïsme', 1], ['Fou rire de Tasha', 1],
+  ['Mot de guérison', 1], ['Héroïsme', 1], ['Rire hideux', 1],
   ['Marque du chasseur', 1], ['Identification', 1], ['Texte illusoire', 1],
   ['Blessure', 1], ['Saut', 1], ['Grande foulée', 1], ['Armure de mage', 1],
   ['Projectile magique', 1], ['Protection contre le mal et le bien', 1],
@@ -28,7 +26,7 @@ export const SRD_SPELLS: [string, number][] = [
   ['Sanctuaire', 1], ['Bouclier', 1], ['Bouclier de la foi', 1],
   ['Image silencieuse', 1], ['Sommeil', 1], ['Communication avec les animaux', 1],
   ['Vague tonnante', 1], ['Serviteur invisible', 1], ['Trait ensorcelé', 1],
-  ['Orbe chromatique', 1], ['Disque flottant de Tenser', 1],
+  ['Orbe chromatique', 1], ['Disque flottant', 1],
   // Niveau 2
   ['Aide', 2], ['Modification d’apparence', 2], ['Messager animal', 2],
   ['Verrou magique', 2], ['Augure', 2], ['Peau d’écorce', 2],
@@ -48,8 +46,8 @@ export const SRD_SPELLS: [string, number][] = [
   ['Silence', 2], ['Pattes d’araignée', 2], ['Croissance d’épines', 2],
   ['Arme spirituelle', 2], ['Suggestion', 2], ['Lien de protection', 2],
   ['Toile d’araignée', 2], ['Zone de vérité', 2],
-  ['Rayon ardent', 2], ['Image miroir', 2], ['Flèche acide de Melf', 2],
-  ['Force fantasmagorique', 2], ['Aura magique de Nystul', 2],
+  ['Rayon ardent', 2], ['Image miroir', 2], ['Flèche acide', 2],
+  ['Force fantasmagorique', 2], ['Aura magique de l’arcaniste', 2],
   // Niveau 3
   ['Animation des morts', 3], ['Aura de vitalité', 3], ['Lueur d’espoir', 3],
   ['Malédiction', 3], ['Clignotement', 3], ['Appel de la foudre', 3],
@@ -57,8 +55,7 @@ export const SRD_SPELLS: [string, number][] = [
   ['Création de nourriture et d’eau', 3], ['Lumière du jour', 3],
   ['Dissipation de la magie', 3], ['Peur', 3], ['Mort simulée', 3],
   ['Boule de feu', 3], ['Vol', 3], ['Forme gazeuse', 3],
-  ['Glyphe de protection', 3], ['Hâte', 3], ['Voracité de Hadar', 3],
-  ['Motif hypnotique', 3], ['Petite hutte de Léomund', 3], ['Éclair', 3],
+  ['Glyphe de protection', 3], ['Hâte', 3], ['Motif hypnotique', 3], ['Petite hutte', 3], ['Éclair', 3],
   ['Cercle magique', 3], ['Image majeure', 3], ['Mot de guérison de groupe', 3],
   ['Fusion dans la pierre', 3], ['Antidétection', 3], ['Monture fantôme', 3],
   ['Croissance végétale', 3], ['Protection contre une énergie', 3],
@@ -71,16 +68,16 @@ export const SRD_SPELLS: [string, number][] = [
   ['Œil magique', 4], ['Bannissement', 4], ['Flétrissement', 4],
   ['Compulsion', 4], ['Confusion', 4], ['Invocation d’élémentaires mineurs', 4],
   ['Contrôle de l’eau', 4], ['Protection contre la mort', 4], ['Porte dimensionnelle', 4],
-  ['Divination', 4], ['Domination de bête', 4], ['Tentacules noirs d’Evard', 4],
+  ['Divination', 4], ['Domination de bête', 4], ['Tentacules noirs', 4],
   ['Fabrication', 4], ['Bouclier de feu', 4], ['Liberté de mouvement', 4],
   ['Insecte géant', 4], ['Invisibilité supérieure', 4], ['Gardien de la foi', 4],
-  ['Terrain hallucinatoire', 4], ['Tempête de grêle', 4], ['Coffre secret de Léomund', 4],
-  ['Localisation de créature', 4], ['Sphère résiliente d’Otiluke', 4],
+  ['Terrain hallucinatoire', 4], ['Tempête de grêle', 4], ['Coffre secret', 4],
+  ['Localisation de créature', 4], ['Sphère résiliente', 4],
   ['Assassin imaginaire', 4], ['Métamorphose', 4], ['Façonnage de la pierre', 4],
   ['Peau de pierre', 4], ['Mur de feu', 4],
   // Niveau 5
   ['Animation d’objets', 5], ['Coquille antivie', 5],
-  ['Main de Bigby', 5], ['Éveil', 5], ['Châtiment du ban', 5],
+  ['Main arcanique', 5], ['Éveil', 5], ['Châtiment du ban', 5],
   ['Brume mortelle', 5], ['Communion', 5], ['Communion avec la nature', 5],
   ['Cône de froid', 5], ['Invocation d’élémentaire', 5], ['Contagion', 5],
   ['Création', 5], ['Vague destructrice', 5], ['Dissipation du mal et du bien', 5],
@@ -88,7 +85,7 @@ export const SRD_SPELLS: [string, number][] = [
   ['Quête', 5], ['Restauration supérieure', 5], ['Immobilisation de monstre', 5],
   ['Fléau d’insectes', 5], ['Mythes et légendes', 5], ['Soins de groupe', 5],
   ['Apparence trompeuse', 5], ['Modification de mémoire', 5], ['Passe-muraille', 5],
-  ['Contrat', 5], ['Rappel à la vie', 5], ['Lien télépathique de Rary', 5],
+  ['Contrat', 5], ['Rappel à la vie', 5], ['Lien télépathique', 5],
   ['Réincarnation', 5], ['Scrutation', 5], ['Double illusoire', 5],
   ['Télékinésie', 5], ['Cercle de téléportation', 5], ['Passage par les arbres', 5],
   ['Mur de force', 5], ['Mur de pierre', 5],
@@ -99,15 +96,15 @@ export const SRD_SPELLS: [string, number][] = [
   ['Sens de l’orientation', 6], ['Pétrification', 6], ['Interdiction', 6],
   ['Globe d’invulnérabilité', 6], ['Contamination', 6],
   ['Guérison', 6], ['Festin des héros', 6], ['Terraformage', 6],
-  ['Suggestion de groupe', 6], ['Sphère glaciale d’Otiluke', 6],
-  ['Danse irrésistible d’Otto', 6], ['Allié planaire', 6], ['Illusion programmée', 6],
+  ['Suggestion de groupe', 6], ['Sphère glaciale', 6],
+  ['Danse irrésistible', 6], ['Allié planaire', 6], ['Illusion programmée', 6],
   ['Rayon de soleil', 6], ['Voie végétale', 6], ['Vision suprême', 6],
   ['Mur de glace', 6], ['Mur d’épines', 6], ['Marche sur le vent', 6],
   // Niveau 7
   ['Invocation de céleste', 7], ['Boule de feu à retardement', 7], ['Parole divine', 7],
   ['Forme éthérée', 7], ['Doigt de mort', 7], ['Tempête de feu', 7],
-  ['Cage de force', 7], ['Mirage', 7], ['Manoir somptueux de Mordenkainen', 7],
-  ['Épée de Mordenkainen', 7], ['Changement de plan', 7], ['Rayons prismatiques', 7],
+  ['Cage de force', 7], ['Mirage', 7], ['Manoir somptueux', 7],
+  ['Épée arcanique', 7], ['Changement de plan', 7], ['Rayons prismatiques', 7],
   ['Projection d’image', 7], ['Régénération', 7], ['Résurrection', 7],
   ['Inversion de la gravité', 7], ['Dissimulation', 7], ['Simulacre', 7],
   ['Symbole', 7], ['Téléportation', 7], ['Tourbillon', 7],
@@ -168,12 +165,9 @@ export const SPELL_META: Record<string, SpellMeta> = {
   'Coup au but':          { school: 'div', concentration: true  },
   'Moquerie cruelle':              { school: 'enc', concentration: false },
   'Bouffée de poison':     { school: 'inv', concentration: false },
-  'Lame retentissante':      { school: 'evo', concentration: false },
   'Rayon de givre':        { school: 'evo', concentration: false },
   'Flammes':   { school: 'inv', concentration: false },
   'Résistance':            { school: 'abj', concentration: true  },
-  'Lame aux flammes vertes':            { school: 'evo', concentration: false },
-  'Infestation':           { school: 'inv', concentration: false },
   // Niveau 1
   'Alarme':                { school: 'abj', concentration: false },
   'Amitié avec les animaux': { school: 'enc', concentration: false },
@@ -203,7 +197,7 @@ export const SPELL_META: Record<string, SpellMeta> = {
   'Éclair traçant':      { school: 'evo', concentration: false },
   'Mot de guérison':       { school: 'evo', concentration: false },
   'Héroïsme':              { school: 'enc', concentration: true  },
-  'Fou rire de Tasha':         { school: 'enc', concentration: true  },
+  'Rire hideux':         { school: 'enc', concentration: true  },
   'Marque du chasseur':    { school: 'div', concentration: true  },
   'Identification':        { school: 'div', concentration: false },
   'Texte illusoire':    { school: 'ill', concentration: false },
@@ -224,7 +218,7 @@ export const SPELL_META: Record<string, SpellMeta> = {
   'Serviteur invisible':   { school: 'inv', concentration: false },
   'Trait ensorcelé':     { school: 'enc', concentration: true  },
   'Orbe chromatique':      { school: 'evo', concentration: false },
-  'Disque flottant de Tenser': { school: 'inv', concentration: false },
+  'Disque flottant': { school: 'inv', concentration: false },
   // Niveau 2
   'Aide':                  { school: 'abj', concentration: false },
   'Messager animal':       { school: 'enc', concentration: false },
@@ -273,9 +267,9 @@ export const SPELL_META: Record<string, SpellMeta> = {
   'Zone de vérité':        { school: 'enc', concentration: false },
   'Rayon ardent':          { school: 'evo', concentration: false },
   'Image miroir':          { school: 'ill', concentration: false },
-  'Flèche acide de Melf':  { school: 'inv', concentration: false },
+  'Flèche acide':  { school: 'inv', concentration: false },
   'Force fantasmagorique': { school: 'ill', concentration: true  },
-  'Aura magique de Nystul':{ school: 'ill', concentration: false },
+  'Aura magique de l’arcaniste':{ school: 'ill', concentration: false },
   // Niveau 3
   'Animation des morts':   { school: 'nec', concentration: false },
   'Aura de vitalité':      { school: 'evo', concentration: true  },
@@ -436,24 +430,23 @@ export const SPELL_META: Record<string, SpellMeta> = {
   'Toile d’araignée':          { school: 'inv', concentration: true  },
   'Lueur d’espoir':           { school: 'enc', concentration: true  },
   'Création de nourriture et d’eau': { school: 'inv', concentration: false },
-  'Voracité de Hadar':                  { school: 'inv', concentration: true  },
-  'Petite hutte de Léomund':        { school: 'abj', concentration: false },
+  'Petite hutte':        { school: 'abj', concentration: false },
   'Fusion dans la pierre':          { school: 'tra', concentration: false },
   'Protection contre une énergie': { school: 'abj', concentration: true  },
   'Marche sur l’eau':          { school: 'tra', concentration: false },
   'Œil magique':                    { school: 'div', concentration: true  },
   'Contrôle de l’eau':         { school: 'tra', concentration: true  },
-  'Tentacules noirs d’Evard':        { school: 'inv', concentration: true  },
-  'Coffre secret de Léomund':       { school: 'inv', concentration: false },
-  'Sphère résiliente d’Otiluke': { school: 'abj', concentration: true  },
+  'Tentacules noirs':        { school: 'inv', concentration: true  },
+  'Coffre secret':       { school: 'inv', concentration: false },
+  'Sphère résiliente': { school: 'abj', concentration: true  },
   'Peau de pierre':                 { school: 'abj', concentration: true  },
   'Coquille antivie': { school: 'abj', concentration: true  },
-  'Main de Bigby':       { school: 'evo', concentration: true  },
+  'Main arcanique':       { school: 'evo', concentration: true  },
   'Châtiment du ban':               { school: 'evo', concentration: true  },
   'Dissipation du mal et du bien':  { school: 'abj', concentration: true  },
   'Fléau d’insectes':           { school: 'inv', concentration: true  },
   'Apparence trompeuse':                      { school: 'ill', concentration: false },
-  'Lien télépathique de Rary':             { school: 'div', concentration: false },
+  'Lien télépathique':             { school: 'div', concentration: false },
   'Passage par les arbres':         { school: 'inv', concentration: false },
   'Portail magique':          { school: 'inv', concentration: true  },
   'Chaîne d’éclairs':          { school: 'evo', concentration: false },
@@ -462,14 +455,14 @@ export const SPELL_META: Record<string, SpellMeta> = {
   'Sens de l’orientation':              { school: 'div', concentration: true  },
   'Pétrification':                { school: 'tra', concentration: true  },
   'Globe d’invulnérabilité':   { school: 'abj', concentration: true  },
-  'Sphère glaciale d’Otiluke': { school: 'evo', concentration: false },
-  'Danse irrésistible d’Otto': { school: 'enc', concentration: true  },
+  'Sphère glaciale': { school: 'evo', concentration: false },
+  'Danse irrésistible': { school: 'enc', concentration: true  },
   'Rayon de soleil':                { school: 'evo', concentration: true  },
   'Mur de glace':                   { school: 'evo', concentration: true  },
   'Mur d’épines':              { school: 'inv', concentration: true  },
   'Boule de feu à retardement':     { school: 'evo', concentration: true  },
-  'Manoir somptueux de Mordenkainen':         { school: 'inv', concentration: false },
-  'Épée de Mordenkainen':           { school: 'evo', concentration: true  },
+  'Manoir somptueux':         { school: 'inv', concentration: false },
+  'Épée arcanique':           { school: 'evo', concentration: true  },
   'Projection d’image':                 { school: 'ill', concentration: true  },
   'Inversion de la gravité':        { school: 'tra', concentration: true  },
   'Contrôle du climat':  { school: 'tra', concentration: true  },
@@ -487,12 +480,18 @@ export const SPELL_META: Record<string, SpellMeta> = {
 // ── Noms alternatifs ──────────────────────────────────────────────────────────
 
 /**
- * Anciens noms → nom officiel désormais affiché. Le compendium a été aligné sur
- * la nomenclature de la VF officielle (aidedd.org / Manuel des joueurs) ; cette
- * table garde les anciennes traductions (celle qu'un MJ peut avoir en tête, ou
- * sous laquelle un personnage a déjà enregistré un sort) pour que la recherche
- * les retrouve. La clé est le nom cherché, la valeur le nom présent dans
- * SRD_SPELLS. Générée depuis l'audit aidedd ; à enrichir au fil des divergences.
+ * Anciens noms → nom retenu dans SRD_SPELLS. La clé est ce qu'on cherche, la valeur
+ * ce qu'on affiche : un sort doit se retrouver sous la traduction qu'un MJ a en tête,
+ * ou sous celle avec laquelle un personnage l'a déjà enregistré.
+ *
+ * Cette table ne contient AUCUN nom propre de Greyhawk (Bigby, Mordenkainen, Tasha…).
+ * Ces noms sont exclus du SRD, donc de la licence sous laquelle on l'utilise : les
+ * garder comme synonymes de recherche ferait entrer dans le dépôt ce que le SRD en
+ * retire, pour un gain de confort négligeable. La règle se vérifie d'un grep, et une
+ * règle vérifiable vaut mieux qu'une exception à justifier.
+ *
+ * Conséquence assumée : un sort enregistré sur une fiche sous « Rire de Tasha » reste
+ * affiché tel quel, mais n'est plus rattaché à son détail ni à son homonyme SRD.
  */
 export const SPELL_ALIASES: Record<string, string> = {
   'Aspersion acide': 'Aspersion d’acide',
@@ -502,10 +501,8 @@ export const SPELL_ALIASES: Record<string, string> = {
   'Épargner les mourants': 'Stabilisation',
   'Vraie frappe': 'Coup au but',
   'Vacherie': 'Moquerie cruelle',
-  'Lame de tonnerre': 'Lame retentissante',
   'Trait de givre': 'Rayon de givre',
   'Produire une flamme': 'Flammes',
-  'Lame verte': 'Lame aux flammes vertes',
   'Bane': 'Fléau',
   // Corrections et doublons issus du nettoyage des 8 entrées problématiques.
   'Clause de contingence': 'Prévoyance',
@@ -522,7 +519,6 @@ export const SPELL_ALIASES: Record<string, string> = {
   'Chute de plume': 'Feuille morte',
   'Trouver son familier': 'Appel de familier',
   'Éclair directeur': 'Éclair traçant',
-  'Rire de Tasha': 'Fou rire de Tasha',
   'Écriture illusoire': 'Texte illusoire',
   'Grand pas': 'Grande foulée',
   'Missile magique': 'Projectile magique',
@@ -551,8 +547,6 @@ export const SPELL_ALIASES: Record<string, string> = {
   'Invoquer des animaux': 'Invocation d’animaux',
   'Feindre la mort': 'Mort simulée',
   'Glyphe de garde': 'Glyphe de protection',
-  'Faim de Hadar': 'Voracité de Hadar',
-  'Petite hutte de Léomond': 'Petite hutte de Léomund',
   'Non-détection': 'Antidétection',
   'Protection contre l’énergie': 'Protection contre une énergie',
   'Envoi de message': 'Communication à distance',
@@ -565,15 +559,12 @@ export const SPELL_ALIASES: Record<string, string> = {
   'Maîtrise de l’eau': 'Contrôle de l’eau',
   'Mort repoussée': 'Protection contre la mort',
   'Dominer une bête': 'Domination de bête',
-  'Tentacules d’Evard': 'Tentacules noirs d’Evard',
   'Tempête de glace': 'Tempête de grêle',
-  'Coffre secret de Léomond': 'Coffre secret de Léomund',
   'Localiser une créature': 'Localisation de créature',
-  'Sphère résistante d’Otiluke': 'Sphère résiliente d’Otiluke',
   'Tueur fantôme': 'Assassin imaginaire',
   'Animation des objets': 'Animation d’objets',
   'Barrière antimagie des vivants': 'Coquille antivie',
-  'Main de l’archimage': 'Main de Bigby',
+  'Main de l’archimage': 'Main arcanique',
   'Smite bannisseur': 'Châtiment du ban',
   'Invoquer un élémentaire': 'Invocation d’élémentaire',
   'Dominer une personne': 'Domination de personne',
@@ -585,7 +576,6 @@ export const SPELL_ALIASES: Record<string, string> = {
   'Légende': 'Mythes et légendes',
   'Tromperie': 'Apparence trompeuse',
   'Lien planaire': 'Contrat',
-  'Télépathie de Rary': 'Lien télépathique de Rary',
   'Illusion semblable': 'Double illusoire',
   'Voyage dans les arbres': 'Passage par les arbres',
   'Portail d’arcane': 'Portail magique',
@@ -597,7 +587,6 @@ export const SPELL_ALIASES: Record<string, string> = {
   'Invoquer un céleste': 'Invocation de céleste',
   'Éthéralité': 'Forme éthérée',
   'Mirage arcane': 'Mirage',
-  'Manoir de Mordenkainen': 'Manoir somptueux de Mordenkainen',
   'Vaporisation prismatique': 'Rayons prismatiques',
   'Image projetée': 'Projection d’image',
   'Séquestration': 'Dissimulation',
@@ -620,7 +609,6 @@ export const SPELL_ALIASES: Record<string, string> = {
   'Cauchemar': 'Frayeur',
   'Modifier la mémoire': 'Modification de mémoire',
   'Festin de héros': 'Festin des héros',
-  'Sphère de glace d’Otiluke': 'Sphère glaciale d’Otiluke',
   'Transport végétal': 'Voie végétale',
   'Vrai regard': 'Vision suprême',
   'Marche dans le vent': 'Marche sur le vent',
@@ -685,8 +673,6 @@ export const SPELL_DAMAGE: Record<string, string> = {
   'Bouffée de poison': '1d12',
   'Rayon de givre': '1d8',
   'Flammes': '1d8',
-  'Infestation': '1d6',
-  'Lame retentissante': '1d8',
 
   // ── Niveau 1 ──
   'Mains brûlantes': '3d6',
@@ -701,7 +687,7 @@ export const SPELL_DAMAGE: Record<string, string> = {
   // ── Niveau 2 ──
   'Nuée de dagues': '4d4',
   'Rayon ardent': '2d6',        // par rayon (3 rayons au niveau 2)
-  'Flèche acide de Melf': '4d4',
+  'Flèche acide': '4d4',
   'Lame de feu': '3d6',
   'Sphère de feu': '2d6',
   'Rayon de lune': '2d10',
@@ -714,7 +700,6 @@ export const SPELL_DAMAGE: Record<string, string> = {
   'Éclair': '8d6',
   'Appel de la foudre': '3d10',
   'Toucher du vampire': '3d6',
-  'Voracité de Hadar': '2d6',
   'Esprits gardiens': '3d8',
 
   // ── Niveau 4 ──
@@ -723,7 +708,7 @@ export const SPELL_DAMAGE: Record<string, string> = {
   'Mur de feu': '5d8',
   'Bouclier de feu': '2d8',
   'Assassin imaginaire': '4d10',
-  'Tentacules noirs d’Evard': '3d6',
+  'Tentacules noirs': '3d6',
 
   // ── Niveau 5 ──
   'Cône de froid': '8d8',

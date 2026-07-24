@@ -3779,7 +3779,10 @@ export function CharacterPage() {
                               )
                             })()}
                             {(() => {
-                              const detail = SPELL_DETAILS[spell.name]
+                              // Par le nom canonique : une fiche peut porter un sort
+                              // enregistré sous une ancienne nomenclature, et son détail
+                              // doit rester accessible sans réécrire la fiche.
+                              const detail = SPELL_DETAILS[canonicalSpellName(spell.name)]
                               return (
                                 <span className="relative group/spell">
                                   <span className="cursor-default">{spell.name}</span>
