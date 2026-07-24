@@ -16,6 +16,7 @@ import { TIME_OF_DAY_CONFIG, type TimeOfDay } from '../lib/timeOfDay'
 import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
 import { RulesCompendium } from '../components/RulesCompendium'
 import { SharedSidebar } from '../components/SharedSidebar'
+import { SrdAttribution } from '../components/SrdAttribution'
 import { useSharedTheme, type Theme } from '../lib/sharedTheme'
 import { rememberSharedSheet } from '../lib/sharedSheets'
 
@@ -979,9 +980,10 @@ export function SharedCharacterPage() {
               </div>
             )}
 
-            <p className={`text-center text-xs pt-2 pb-2 ${th.footer}`}>
+            <p className={`text-center text-xs pt-2 ${th.footer}`}>
               Fiche joueur — Taverne
             </p>
+            <SrdAttribution className={`pb-2 ${th.footer}`} />
 
           </div>
         </div>

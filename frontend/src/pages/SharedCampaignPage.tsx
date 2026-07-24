@@ -6,6 +6,7 @@ import { formatGold } from '../lib/gold'
 import { MarkdownText } from '../components/MarkdownText'
 import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
 import { RulesCompendium } from '../components/RulesCompendium'
+import { SrdAttribution } from '../components/SrdAttribution'
 import { SharedSidebar } from '../components/SharedSidebar'
 import { PlayerNotes } from '../components/PlayerNotes'
 import { SharedCodex } from '../components/SharedCodex'
@@ -279,6 +280,8 @@ export function SharedCampaignPage() {
         {token && <SharedCodex campaignToken={token} />}
 
         {token && <PlayerNotes campaignToken={token} />}
+
+        <SrdAttribution className="text-stone-700 pt-6" />
 
       </main>
       <FloatingDiceRoller campaign={token ? { kind: 'share', token } : undefined} />

@@ -126,3 +126,29 @@ Consultez [CONTRIBUTING.md](CONTRIBUTING.md) pour les conventions de code et le 
 ## Licence
 
 Distribué sous [licence MIT](LICENSE). © 2026 taverne-app.
+
+### Contenu de jeu
+
+Taverne s'appuie sur le **System Reference Document 5.1**, publié par Wizards of the
+Coast sous licence Creative Commons Attribution 4.0. L'attribution ci-dessous est une
+**obligation de cette licence**, pas une politesse : sans elle, l'usage sort du cadre
+qui l'autorise.
+
+> This work includes material from the System Reference Document 5.1 (“SRD 5.1”) by
+> Wizards of the Coast LLC, available at
+> <https://dnd.wizards.com/resources/systems-reference-document>. The SRD 5.1 is
+> licensed under the Creative Commons Attribution 4.0 International License, available
+> at <https://creativecommons.org/licenses/by/4.0/legalcode>.
+
+Ce que cette licence **ne couvre pas**, et que le projet n'utilise donc pas :
+
+- les **marques** — « Dungeons & Dragons », « D&D », les logos et l'identité visuelle
+  de Wizards of the Coast. Taverne se décrit comme compatible avec la 5e édition ; il
+  ne s'en réclame pas et n'est affilié à personne ;
+- les créatures et éléments **hors SRD** (tyrannœil, flagelleur mental, githyanki…),
+  volontairement absents du bestiaire ;
+- les **traductions françaises officielles**, qui sont des œuvres dérivées relevant de
+  leurs propres éditeurs. La terminologie française de Taverne doit rester une
+  traduction du SRD anglais, jamais une reprise d'une VF publiée.
+
+Taverne est un projet indépendant, sans lien avec Wizards of the Coast LLC.

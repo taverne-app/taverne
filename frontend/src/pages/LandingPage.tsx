@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom'
 import { createCheckoutSession } from '../api/billing'
 import { useState } from 'react'
+import { SrdAttribution } from '../components/SrdAttribution'
 
 const FEATURES = [
   {
@@ -213,6 +214,7 @@ export function LandingPage() {
           <Link to="/legal"   className="hover:text-stone-400 transition-colors">CGV</Link>
           <Link to="/privacy" className="hover:text-stone-400 transition-colors">Confidentialité</Link>
         </p>
+        <SrdAttribution className="text-stone-700 mt-3 px-4" />
       </footer>
     </div>
   )
