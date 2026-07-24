@@ -12,42 +12,47 @@ export interface GeneratedNpc {
 
 const RACES = ['Humain', 'Elfe', 'Nain', 'Halfelin', 'Gnome', 'Demi-elfe', 'Demi-orque', 'Tiefelin', 'Draconique']
 
+// Ces listes sont bâties sur de l'onomastique historique réelle (domaine public),
+// une aire linguistique par race : franc/médiéval, gallois, vieux norrois, anglais
+// rural, slave occidental, breton, turco-mongol, grec byzantin, persan.
+// Ne JAMAIS y recopier une table de noms d'un manuel : le SRD 5.1 n'en contient
+// aucune, elles ne sont donc pas couvertes par la licence CC BY qu'annonce LICENSE.
 const NAMES: Record<string, { m: string[]; f: string[] }> = {
   Humain: {
-    m: ['Aldric', 'Beren', 'Calder', 'Doran', 'Edric', 'Farek', 'Garet', 'Hamal', 'Ivar', 'Jorin', 'Keldyn', 'Lorin', 'Marek', 'Norvin', 'Osric', 'Peran', 'Rodyn', 'Soran', 'Taren', 'Ulric', 'Varyn', 'Westan', 'Xander', 'Yoric', 'Zorin'],
-    f: ['Aelys', 'Brynn', 'Calia', 'Dara', 'Elara', 'Fern', 'Gilda', 'Hana', 'Isra', 'Jora', 'Kira', 'Lyra', 'Mira', 'Nara', 'Odra', 'Petra', 'Rael', 'Sela', 'Tara', 'Ursa', 'Vela', 'Wren', 'Xyla', 'Yara', 'Zora'],
+    m: ['Thibaut', 'Gauvain', 'Renaud', 'Foulques', 'Amaury', 'Bertran', 'Guiral', 'Enguerrand', 'Aymeric', 'Baudouin', 'Clovis', 'Eudes', 'Gontran', 'Hervé', 'Jocelin', 'Lambert', 'Mainard', 'Odilon', 'Perceval', 'Raoul', 'Sévrin', 'Tancrède', 'Vivien', 'Wandrille', 'Yvon'],
+    f: ['Aliénor', 'Berthe', 'Clémence', 'Douce', 'Ermengarde', 'Flore', 'Guiburc', 'Héloïse', 'Isabeau', 'Jehanne', 'Laurence', 'Mahaut', 'Nicolette', 'Oriane', 'Perrine', 'Radegonde', 'Sibylle', 'Tiphaine', 'Ursule', 'Viviane', 'Ysolde', 'Adelis', 'Blanchefleur', 'Emeline', 'Garsende'],
   },
   Elfe: {
-    m: ['Aelar', 'Caelum', 'Erevan', 'Faenor', 'Galindel', 'Hadarai', 'Immeral', 'Jelenneth', 'Keleneth', 'Laucian', 'Mindartis', 'Naeris', 'Orym', 'Paelias', 'Quarion', 'Riardon', 'Soveliss', 'Thamior', 'Varis', 'Zephyros'],
-    f: ['Adrie', 'Birel', 'Caelynn', 'Dara', 'Enna', 'Faral', 'Gennal', 'Halia', 'Irann', 'Keyla', 'Leshanna', 'Mialee', 'Naivara', 'Quelenna', 'Raven', 'Sariel', 'Thia', 'Vadania', 'Valanthe', 'Xanaphia'],
+    m: ['Aneurin', 'Bleddyn', 'Caradoc', 'Elidir', 'Gwalchmai', 'Idris', 'Llywel', 'Maredudd', 'Nudd', 'Owain', 'Rhydderch', 'Sulien', 'Taliesin', 'Urien', 'Yestin', 'Cadfael', 'Deiniol', 'Emrys', 'Gwynfor', 'Iolo'],
+    f: ['Aderyn', 'Blodwen', 'Ceridwen', 'Delyth', 'Eluned', 'Ffion', 'Gwenllian', 'Heulwen', 'Iona', 'Meinir', 'Nesta', 'Olwen', 'Rhiannon', 'Seren', 'Tegwen', 'Wynne', 'Arianwen', 'Briallen', 'Enid', 'Morwenna'],
   },
   Nain: {
-    m: ['Adrik', 'Alberich', 'Baern', 'Barendd', 'Brottor', 'Bruenor', 'Dain', 'Darrak', 'Delg', 'Eberk', 'Einkil', 'Fargrim', 'Flint', 'Gardain', 'Harbek', 'Kildrak', 'Morgran', 'Orsik', 'Oskar', 'Rangrim', 'Rurik', 'Taklinn', 'Thoradin', 'Thorin', 'Tordek', 'Traubon', 'Travok', 'Ulfgar', 'Veit', 'Vondal'],
-    f: ['Amber', 'Artin', 'Audhild', 'Bardryn', 'Dagnal', 'Diesa', 'Eldeth', 'Falkrunn', 'Finellen', 'Gunnloda', 'Gurdis', 'Helja', 'Hlin', 'Kathra', 'Kristryd', 'Mardred', 'Riswynn', 'Sannl', 'Torbera', 'Torgga', 'Vistra'],
+    m: ['Arnvid', 'Bersi', 'Dagfinn', 'Eyvind', 'Folkvar', 'Grimkel', 'Halvard', 'Ingvar', 'Jorund', 'Kolbein', 'Ludin', 'Magnvald', 'Njal', 'Ottar', 'Ragnvald', 'Sigvard', 'Thrand', 'Ulfar', 'Vermund', 'Yngvar', 'Bardi', 'Hrolf', 'Skapti', 'Torfinn', 'Gudbrand', 'Hallgrim', 'Ozur', 'Sturla', 'Vigfus', 'Asgeir'],
+    f: ['Asta', 'Bergljot', 'Dagny', 'Eir', 'Frida', 'Gudrun', 'Halldis', 'Ingebjorg', 'Jorunn', 'Katla', 'Ljufa', 'Ragnhild', 'Sigrun', 'Solveig', 'Thordis', 'Unnur', 'Valdis', 'Yrsa', 'Astrid', 'Groa', 'Herdis'],
   },
   Halfelin: {
-    m: ['Alton', 'Ander', 'Cade', 'Corrin', 'Eldon', 'Errich', 'Finnan', 'Garret', 'Lindal', 'Lyle', 'Merric', 'Milo', 'Osborn', 'Perrin', 'Reed', 'Roscoe', 'Wellby'],
-    f: ['Andry', 'Bree', 'Callie', 'Cora', 'Euphemia', 'Jillian', 'Kithri', 'Lavinia', 'Lidda', 'Merla', 'Nedda', 'Paela', 'Portia', 'Seraphina', 'Shaena', 'Trym', 'Vani', 'Verna'],
+    m: ['Ambrose', 'Barnaby', 'Cobb', 'Dillon', 'Emory', 'Fenwick', 'Hollis', 'Jasper', 'Marlow', 'Orson', 'Quillon', 'Rowan', 'Sylvan', 'Tobias', 'Willem', 'Yarrow', 'Nolan'],
+    f: ['Amity', 'Briar', 'Clover', 'Daisy', 'Elowen', 'Fennel', 'Gilly', 'Hazel', 'Ivy', 'Juniper', 'Linnet', 'Mabel', 'Nettle', 'Opal', 'Poppy', 'Rosalind', 'Tansy', 'Willa'],
   },
   Gnome: {
-    m: ['Alston', 'Alvyn', 'Boddynock', 'Brocc', 'Burgell', 'Dimble', 'Eldon', 'Erky', 'Fonkin', 'Frug', 'Gerbo', 'Gimble', 'Glim', 'Jebeddo', 'Kellen', 'Namfoodle', 'Orryn', 'Roondar', 'Seebo', 'Sindri', 'Warryn', 'Wurp', 'Zook'],
-    f: ['Bimpnottin', 'Breena', 'Caramip', 'Carlin', 'Donella', 'Duvamil', 'Ella', 'Ellyjobell', 'Ellywick', 'Lilli', 'Loopmottin', 'Lorilla', 'Mardnab', 'Nissa', 'Nyx', 'Oda', 'Orla', 'Roywyn', 'Shamil', 'Tana', 'Waywocket', 'Zanna'],
+    m: ['Bogdan', 'Cvetko', 'Dobrik', 'Fedko', 'Gostko', 'Hodek', 'Ivko', 'Jarek', 'Kuzma', 'Lubko', 'Milko', 'Nedko', 'Ondrek', 'Pavko', 'Radko', 'Stanko', 'Tomko', 'Vitko', 'Zdenko', 'Branko', 'Danko', 'Lesko', 'Mirko'],
+    f: ['Bogna', 'Cvetka', 'Dobrava', 'Fenka', 'Goldana', 'Hedvika', 'Ivka', 'Jarka', 'Kalina', 'Ludmila', 'Milena', 'Nedka', 'Olenka', 'Petka', 'Radka', 'Slavka', 'Toska', 'Vesna', 'Zlata', 'Branka', 'Danica', 'Lesna'],
   },
   'Demi-elfe': {
-    m: ['Alas', 'Brynn', 'Cedric', 'Dalen', 'Eiren', 'Farek', 'Galan', 'Haren', 'Ivan', 'Jared', 'Kael', 'Lerin', 'Maron', 'Naren', 'Orin', 'Peren'],
-    f: ['Adrie', 'Brena', 'Calla', 'Daera', 'Elowyn', 'Faerel', 'Gara', 'Helan', 'Ilia', 'Jana', 'Kira', 'Lira', 'Mara', 'Nira', 'Orla', 'Peria'],
+    m: ['Aurel', 'Brennan', 'Cadwal', 'Doryan', 'Emrik', 'Fintan', 'Gaelan', 'Hywel', 'Ilan', 'Joran', 'Kerrin', 'Lucan', 'Merrick', 'Nevyn', 'Orvyn', 'Tristan'],
+    f: ['Aeline', 'Bryluen', 'Carys', 'Delwyn', 'Elinor', 'Faelis', 'Gwenaig', 'Hesper', 'Ilwen', 'Jocelyne', 'Kerensa', 'Lowena', 'Melisande', 'Nolwenn', 'Orlaith', 'Sabine'],
   },
   'Demi-orque': {
-    m: ['Dench', 'Feng', 'Gell', 'Henk', 'Holg', 'Imsh', 'Keth', 'Krusk', 'Mhurren', 'Ront', 'Shump', 'Thokk'],
-    f: ['Baggi', 'Emen', 'Engong', 'Kansif', 'Myev', 'Neega', 'Ovak', 'Ownka', 'Shautha', 'Sutha', 'Vola', 'Volen', 'Yevelda'],
+    m: ['Bataar', 'Churek', 'Dorgo', 'Erkhen', 'Gorkha', 'Hulgan', 'Karguz', 'Mongke', 'Nogai', 'Sartaq', 'Temur', 'Yesun'],
+    f: ['Alagh', 'Borte', 'Chagan', 'Eshi', 'Gerel', 'Khulan', 'Munkha', 'Oyuun', 'Sarnai', 'Tselmeg', 'Uyanga', 'Yalta', 'Zolzaya'],
   },
   Tiefelin: {
-    m: ['Akmenos', 'Amnon', 'Barakas', 'Damakos', 'Ekemon', 'Iados', 'Kairon', 'Leucis', 'Melech', 'Mordai', 'Morthos', 'Pelaios', 'Skamos', 'Therai'],
-    f: ['Akta', 'Anakis', 'Bryseis', 'Criella', 'Damaia', 'Ea', 'Kallista', 'Lerissa', 'Makaria', 'Nemeia', 'Orianna', 'Phelaia', 'Rieta'],
+    m: ['Anthemios', 'Balthios', 'Cyriakos', 'Doriphos', 'Elpidios', 'Hyrkanos', 'Kaleb', 'Lysandros', 'Menachem', 'Nikanor', 'Ozias', 'Phineas', 'Symeon', 'Tharsis'],
+    f: ['Amissa', 'Berenike', 'Chrysanthe', 'Doriane', 'Elissa', 'Hekabe', 'Ioanna', 'Kassandre', 'Melitene', 'Nephele', 'Ourania', 'Photine', 'Thaleia'],
   },
   Draconique: {
-    m: ['Arjhan', 'Balasar', 'Bharash', 'Donaar', 'Ghesh', 'Heskan', 'Kriv', 'Medrash', 'Mehen', 'Nadarr', 'Pandjed', 'Patrin', 'Rhogar', 'Shamash', 'Shedinn', 'Tarhun', 'Torinn'],
-    f: ['Akra', 'Biri', 'Daar', 'Farideh', 'Harann', 'Havilar', 'Jheri', 'Kava', 'Korinn', 'Mishann', 'Nala', 'Perra', 'Raiann', 'Sora', 'Surina', 'Thava', 'Uadjit'],
+    m: ['Arvand', 'Bahman', 'Dariush', 'Esfandiar', 'Faramarz', 'Goshtasp', 'Hushang', 'Iraj', 'Kavus', 'Manuchehr', 'Nariman', 'Piran', 'Rostam', 'Sohrab', 'Tahmuras', 'Vahram', 'Zarir'],
+    f: ['Arnavaz', 'Banu', 'Dinaz', 'Farangis', 'Golnar', 'Homai', 'Katayoun', 'Manizheh', 'Nahid', 'Parisa', 'Rudabeh', 'Shirin', 'Tahmineh', 'Vashti', 'Yasna', 'Zarrin', 'Anahita'],
   },
 }
 

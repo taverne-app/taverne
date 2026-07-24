@@ -149,6 +149,8 @@ Ce que cette licence **ne couvre pas**, et que le projet n'utilise donc pas :
   volontairement absents du bestiaire ;
 - les **traductions françaises officielles**, qui sont des œuvres dérivées relevant de
   leurs propres éditeurs. La terminologie française de Taverne doit rester une
-  traduction du SRD anglais, jamais une reprise d'une VF publiée.
+  traduction du SRD anglais, jamais une reprise d'une VF publiée ;
+- les **tables de noms de personnages**, absentes du SRD. Celles du générateur de PNJ
+  sont bâties sur de l'onomastique historique réelle, relevant du domaine public.
 
 Taverne est un projet indépendant, sans lien avec Wizards of the Coast LLC.
