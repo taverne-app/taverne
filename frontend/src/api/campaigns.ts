@@ -2,9 +2,20 @@ import { apiFetch, ApiError } from './client'
 import type { Character, DiceRoll } from './characters'
 import type { Combatant } from './combatants'
 
+/**
+ * Une ligne d'ennemis : une créature du bestiaire et son nombre. Le FP est recopié
+ * au moment du choix plutôt que relu dans le bestiaire, pour que l'XP de fin de
+ * combat reste juste même si la créature est renommée ou supprimée ensuite.
+ */
+export interface EncounterEntry {
+  monster_name: string
+  count: number
+  cr?: string
+}
+
 export interface SavedEncounter {
   name: string
-  entries: { monster_name: string; count: number; cr?: string }[]
+  entries: EncounterEntry[]
 }
 
 export interface Npc {
@@ -29,7 +40,14 @@ export interface PrepScene {
   title: string
   location_name: string
   npc_names: string[]
+  /** Rappel libre du nom de la rencontre. Ne sert plus à monter le combat : voir `enemies`. */
   encounter_name: string
+  /**
+   * Créatures choisies dans le bestiaire (SRD + personnalisé), qui montent le combat
+   * en un clic. Absent des scènes créées avant leur introduction : celles-là retombent
+   * sur `encounter_name` et la rencontre sauvegardée qui porte ce nom.
+   */
+  enemies?: EncounterEntry[]
   treasure: string
   hook: string
   notes: string

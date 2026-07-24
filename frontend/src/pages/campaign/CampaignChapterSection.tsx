@@ -1,7 +1,9 @@
 import { useState, useMemo, useEffect } from 'react'
 import { MarkdownText } from '../../components/MarkdownText'
 import { MicButton } from '../../components/MicButton'
-import type { PrepScene, SceneKind } from '../../api/campaigns'
+import type { EncounterEntry, PrepScene, SceneKind } from '../../api/campaigns'
+import { EnemyPicker } from '../../components/EnemyPicker'
+import { MONSTERS } from '../../data/monsters'
 import { useToast } from '../../contexts/ToastContext'
 import type { SectionProps } from './shared'
 import { uuid } from './shared'
@@ -213,7 +215,7 @@ export default function CampaignChapterSection(props: SectionProps) {
   const emptyScene = (): PrepScene => ({
     id: uuid(),
     kind: 'event',
-    title: '', location_name: '', npc_names: [], encounter_name: '',
+    title: '', location_name: '', npc_names: [], encounter_name: '', enemies: [],
     treasure: '', hook: '', notes: '', done: false,
   })
 
@@ -237,29 +239,49 @@ export default function CampaignChapterSection(props: SectionProps) {
   const scenes = active ? prepOf(active).scenes : []
 
   /**
+   * Créatures d'une scène. Les scènes créées avant le choix dans le bestiaire n'ont
+   * pas de liste : on retombe sur la rencontre sauvegardée qui porte le nom saisi à
+   * la main, pour qu'elles continuent de monter leur combat.
+   */
+  const sceneEnemies = (sc: PrepScene): EncounterEntry[] =>
+    sc.enemies && sc.enemies.length > 0
+      ? sc.enemies
+      : (campaign.saved_encounters ?? []).find(e => e.name === sc.encounter_name)?.entries ?? []
+
+  /**
+   * PV de départ d'une créature. Le bestiaire de la campagne prime sur le SRD (un MJ
+   * qui a retouché un gobelin veut le sien) ; 10 n'est qu'un dernier recours pour une
+   * créature qui a disparu du bestiaire depuis la préparation.
+   */
+  const monsterHp = (name: string): number =>
+    (campaign.custom_monsters ?? []).find(m => m.name.toLowerCase() === name.toLowerCase())?.hp_avg
+    ?? MONSTERS.find(m => m.name.toLowerCase() === name.toLowerCase())?.hp_avg
+    ?? 10
+
+  /**
    * Monte le combat d'une scène : crée les combattants de la rencontre référencée
    * (avec leur FP, sans quoi l'XP de fin de combat serait perdue) et bascule sur la
    * page Combat. C'est le geste qui fait gagner du temps à la table.
    */
   async function handleLaunchSceneCombat(sc: PrepScene) {
-    const enc = (campaign.saved_encounters ?? []).find(e => e.name === sc.encounter_name)
-    if (!enc || enc.entries.length === 0) {
-      toast.error('Aucune rencontre sauvegardée liée à cette scène.')
+    const entries = sceneEnemies(sc)
+    if (entries.length === 0) {
+      toast.error('Aucune créature sur cette scène. Ajoutez-en depuis le bestiaire.')
       return
     }
     setSaving(true)
     try {
-      await Promise.all(enc.entries.flatMap(entry =>
+      await Promise.all(entries.flatMap(entry =>
         Array.from({ length: entry.count }, (_, i) =>
           createCombatant(campaign.id, {
             name: entry.count > 1 ? `${entry.monster_name} ${i + 1}` : entry.monster_name,
             cr: entry.cr ?? null,
-            max_hp: (campaign.custom_monsters ?? []).find(m => m.name === entry.monster_name)?.hp_avg ?? 10,
+            max_hp: monsterHp(entry.monster_name),
             faction: 'ennemi',
           })
         )
       ))
-      toast.success(`${enc.name} — combattants ajoutés.`)
+      toast.success(`${entries.reduce((n, e) => n + e.count, 0)} combattants ajoutés.`)
       navigate(`/combat?campaign=${campaign.id}`)
     } catch {
       toast.error("Le combat n'a pas pu être monté.")
@@ -315,6 +337,9 @@ export default function CampaignChapterSection(props: SectionProps) {
         lines.push(`### ${idx + 1}. ${s.title}${s.done ? ' ✓' : ''}`)
         if (s.location_name) lines.push(`**Lieu :** ${s.location_name}`)
         if (s.encounter_name) lines.push(`**Rencontre :** ${s.encounter_name}`)
+        if (s.enemies && s.enemies.length > 0) {
+          lines.push(`**Ennemis :** ${s.enemies.map(e => `${e.count}× ${e.monster_name}${e.cr ? ` (FP ${e.cr})` : ''}`).join(', ')}`)
+        }
         if (s.hook) lines.push(`**Accroche :** ${s.hook}`)
         if (s.treasure) lines.push(`**Trésor :** ${s.treasure}`)
         if (s.notes) { lines.push(''); lines.push(s.notes) }
@@ -683,10 +708,20 @@ export default function CampaignChapterSection(props: SectionProps) {
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <input type="text" value={sceneDraft.location_name} onChange={e => setSceneDraft(d => ({ ...d, location_name: e.target.value }))} placeholder="Lieu" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors" />
-                    <input type="text" value={sceneDraft.encounter_name} onChange={e => setSceneDraft(d => ({ ...d, encounter_name: e.target.value }))} placeholder="Rencontre liée" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors" />
+                    <input type="text" value={sceneDraft.encounter_name} onChange={e => setSceneDraft(d => ({ ...d, encounter_name: e.target.value }))} placeholder="Nom de la rencontre (rappel)" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors" />
                     <input type="text" value={sceneDraft.hook} onChange={e => setSceneDraft(d => ({ ...d, hook: e.target.value }))} placeholder="Accroche / déclencheur" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors" />
                     <input type="text" value={sceneDraft.treasure} onChange={e => setSceneDraft(d => ({ ...d, treasure: e.target.value }))} placeholder="Trésor / récompense" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-stone-200 text-sm placeholder-stone-600 focus:outline-none focus:border-sky-500 transition-colors" />
                   </div>
+                  {/* Réservé au combat : ailleurs, la liste n'aurait rien à monter. */}
+                  {(sceneDraft.kind ?? 'event') === 'combat' && (
+                    <EnemyPicker
+                      value={sceneDraft.enemies ?? []}
+                      onChange={enemies => setSceneDraft(d => ({ ...d, enemies }))}
+                      customMonsters={campaign.custom_monsters ?? []}
+                      savedEncounters={campaign.saved_encounters ?? []}
+                      partyLevels={characters.map(c => c.level)}
+                    />
+                  )}
                   <textarea
                     value={sceneDraft.notes}
                     onChange={e => setSceneDraft(d => ({ ...d, notes: e.target.value }))}
@@ -739,6 +774,21 @@ export default function CampaignChapterSection(props: SectionProps) {
                     <div key={scene.id} className={`border rounded-lg overflow-hidden transition-colors ${scene.done ? 'border-stone-800 opacity-60' : 'border-sky-800/40'}`}>
                       {editingSceneId === scene.id ? (
                         <div className="px-3 py-3 space-y-2">
+                          {/* La nature était figée à la création : sans elle ici, une scène
+                              typée « événement » ne pouvait jamais recevoir d'ennemis. */}
+                          <div className="flex flex-wrap gap-1.5">
+                            {(Object.keys(SCENE_KINDS) as SceneKind[]).map(k => (
+                              <button
+                                key={k}
+                                onClick={() => setEditSceneDraft(d => ({ ...d, kind: k }))}
+                                className={`text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${
+                                  (editSceneDraft.kind ?? 'event') === k
+                                    ? SCENE_KINDS[k].color
+                                    : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                                }`}
+                              >{SCENE_KINDS[k].icon} {SCENE_KINDS[k].label}</button>
+                            ))}
+                          </div>
                           <input
                             type="text"
                             value={editSceneDraft.title}
@@ -749,10 +799,19 @@ export default function CampaignChapterSection(props: SectionProps) {
                           />
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                             <input type="text" value={editSceneDraft.location_name} onChange={e => setEditSceneDraft(d => ({ ...d, location_name: e.target.value }))} placeholder="Lieu" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
-                            <input type="text" value={editSceneDraft.encounter_name} onChange={e => setEditSceneDraft(d => ({ ...d, encounter_name: e.target.value }))} placeholder="Rencontre liée" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
+                            <input type="text" value={editSceneDraft.encounter_name} onChange={e => setEditSceneDraft(d => ({ ...d, encounter_name: e.target.value }))} placeholder="Nom de la rencontre (rappel)" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
                             <input type="text" value={editSceneDraft.hook} onChange={e => setEditSceneDraft(d => ({ ...d, hook: e.target.value }))} placeholder="Accroche / déclencheur" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
                             <input type="text" value={editSceneDraft.treasure} onChange={e => setEditSceneDraft(d => ({ ...d, treasure: e.target.value }))} placeholder="Trésor / récompense" className="min-w-0 bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors" />
                           </div>
+                          {(editSceneDraft.kind ?? 'event') === 'combat' && (
+                            <EnemyPicker
+                              value={editSceneDraft.enemies ?? []}
+                              onChange={enemies => setEditSceneDraft(d => ({ ...d, enemies }))}
+                              customMonsters={campaign.custom_monsters ?? []}
+                              savedEncounters={campaign.saved_encounters ?? []}
+                              partyLevels={characters.map(c => c.level)}
+                            />
+                          )}
                           <textarea value={editSceneDraft.notes} onChange={e => setEditSceneDraft(d => ({ ...d, notes: e.target.value }))} placeholder="Notes…" rows={2} className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-1.5 text-stone-200 text-sm focus:outline-none focus:border-sky-500 transition-colors resize-none" />
                           <div className="flex justify-between items-center">
                             <button onClick={() => setEditingSceneId(null)} className="text-stone-500 hover:text-stone-300 text-xs transition-colors">Annuler</button>
@@ -777,11 +836,11 @@ export default function CampaignChapterSection(props: SectionProps) {
                             >{SCENE_KINDS[sceneKind(scene)].icon}</span>
                             <p className={`text-sm font-medium flex-1 min-w-0 truncate ${scene.done ? 'line-through text-stone-500' : 'text-white'}`}>{scene.title}</p>
                             {scene.location_name && <span className="hidden sm:inline text-stone-600 text-xs shrink-0">📍 {scene.location_name}</span>}
-                            {sceneKind(scene) === 'combat' && scene.encounter_name && (
+                            {sceneKind(scene) === 'combat' && sceneEnemies(scene).length > 0 && (
                               <button
                                 onClick={e => { e.stopPropagation(); handleLaunchSceneCombat(scene) }}
                                 disabled={saving}
-                                title={`Monter « ${scene.encounter_name} » et aller au combat`}
+                                title={`Monter ${sceneEnemies(scene).map(e => `${e.count}× ${e.monster_name}`).join(', ')} et aller au combat`}
                                 className="shrink-0 text-xs font-semibold rounded px-2 py-0.5 border bg-red-700/30 border-red-600/50 text-red-300 hover:bg-red-700/60 disabled:opacity-40 transition-colors"
                               >⚔ Lancer</button>
                             )}
@@ -819,6 +878,16 @@ export default function CampaignChapterSection(props: SectionProps) {
                               {scene.location_name && <p className="sm:hidden text-stone-400">📍 <span className="text-stone-300">{scene.location_name}</span></p>}
                               {scene.hook && <p className="text-stone-400">⚡ <span className="text-stone-300">{scene.hook}</span></p>}
                               {scene.encounter_name && <p className="text-stone-400">⚔ <span className="text-stone-300">{scene.encounter_name}</span></p>}
+                              {sceneEnemies(scene).length > 0 && (() => {
+                                const entries = sceneEnemies(scene)
+                                const diff = computeEncounterDifficulty(entries, characters.map(c => c.level))
+                                return (
+                                  <p className="text-stone-400">
+                                    👹 <span className="text-stone-300">{entries.map(e => `${e.count}× ${e.monster_name}`).join(', ')}</span>
+                                    {diff && <span className={`ml-2 font-semibold ${difficultyColor(diff)}`}>{diff}</span>}
+                                  </p>
+                                )
+                              })()}
                               {scene.treasure && <p className="text-stone-400">💰 <span className="text-stone-300">{scene.treasure}</span></p>}
                               {scene.notes && <MarkdownText className="text-stone-300 mt-1">{scene.notes}</MarkdownText>}
                             </div>

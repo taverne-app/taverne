@@ -116,6 +116,41 @@ class ChapterTest extends TestCase
             ->assertJsonPath('data.prep.npc_names.0', 'Gundren');
     }
 
+    /**
+     * Les ennemis d'une scène sont choisis dans le bestiaire et montent le combat en un
+     * clic : si la validation rabotait cette clé imbriquée, le bouton « Lancer »
+     * disparaîtrait sans un mot après enregistrement (piège des clés non déclarées).
+     */
+    public function test_update_keeps_the_scene_enemies(): void
+    {
+        $campaign = $this->campaign();
+        $chapter  = $campaign->chapters()->create(['title' => 'Chapitre 1', 'position' => 1]);
+
+        $this->actingAs($this->user)
+            ->putJson("/api/campaigns/{$campaign->id}/chapters/{$chapter->id}", [
+                'prep' => [
+                    'scenes' => [[
+                        'id'      => 'abc',
+                        'kind'    => 'combat',
+                        'title'   => 'Embuscade',
+                        'done'    => false,
+                        'enemies' => [
+                            ['monster_name' => 'Gobelin', 'count' => 4, 'cr' => '1/4'],
+                            ['monster_name' => 'Worg',    'count' => 1, 'cr' => '1/2'],
+                        ],
+                    ]],
+                    'npc_names'       => [],
+                    'location_names'  => [],
+                    'encounter_names' => [],
+                ],
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.prep.scenes.0.enemies.0.monster_name', 'Gobelin')
+            ->assertJsonPath('data.prep.scenes.0.enemies.0.count', 4)
+            ->assertJsonPath('data.prep.scenes.0.enemies.0.cr', '1/4')
+            ->assertJsonPath('data.prep.scenes.0.enemies.1.monster_name', 'Worg');
+    }
+
     public function test_store_forbids_someone_elses_campaign(): void
     {
         $campaign = Campaign::factory()->create();
