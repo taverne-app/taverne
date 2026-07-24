@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   updateCampaign,
   type Npc,
@@ -261,8 +261,55 @@ export default function CampaignWorldSection({
   const [editLocationDraft, setEditLocationDraft]   = useState<Location>(emptyLocationDraft())
   const [editFactionDraft, setEditFactionDraft]   = useState<Faction>(emptyFactionDraft())
 
+  // Quel bloc du Monde est ouvert. Retenu par campagne : on revient d'un aller-retour
+  // vers une fiche de PNJ là où on était, pas systématiquement sur les notes.
+  type WorldSection = 'notes' | 'npcs' | 'locations' | 'map' | 'factions'
+  const [worldSection, setWorldSection] = useState<WorldSection>(() => {
+    const saved = localStorage.getItem(`taverne:monde:${campaign.id}`)
+    return (['notes', 'npcs', 'locations', 'map', 'factions'] as const).includes(saved as WorldSection)
+      ? (saved as WorldSection)
+      : 'npcs'
+  })
+
+  useEffect(() => {
+    localStorage.setItem(`taverne:monde:${campaign.id}`, worldSection)
+  }, [campaign.id, worldSection])
+
+  const worldSections = [
+    { key: 'notes'     as const, icon: '🔒', label: 'Notes privées', count: null },
+    { key: 'npcs'      as const, icon: '👥', label: 'PNJ',           count: (campaign.npcs ?? []).length },
+    { key: 'locations' as const, icon: '📍', label: 'Lieux',         count: (campaign.locations ?? []).length },
+    { key: 'map'       as const, icon: '🗺', label: 'Carte',         count: null },
+    { key: 'factions'  as const, icon: '⚑', label: 'Factions',      count: (campaign.factions ?? []).length },
+  ]
+
   return (
-    <>
+    <div className="grid gap-4 md:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
+      {/* Sommaire du Monde. Les cinq blocs tenaient dans une seule colonne : il fallait
+          faire défiler la page entière pour atteindre les factions. */}
+      <nav className="bg-stone-900 border border-stone-800 rounded-xl p-2 self-start md:sticky md:top-20">
+        {worldSections.map(s => (
+          <button
+            key={s.key}
+            onClick={() => setWorldSection(s.key)}
+            className={`w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-left transition-colors ${
+              worldSection === s.key
+                ? 'bg-amber-600/20 text-amber-300 font-semibold'
+                : 'text-stone-400 hover:bg-stone-800/60 hover:text-white'
+            }`}
+          >
+            <span className="shrink-0">{s.icon}</span>
+            <span className="flex-1 min-w-0 truncate">{s.label}</span>
+            {s.count != null && s.count > 0 && (
+              <span className="text-stone-600 text-xs shrink-0">{s.count}</span>
+            )}
+          </button>
+        ))}
+      </nav>
+
+      <div className="space-y-6 min-w-0">
+        {worldSection === 'notes' && (
+        <>
         {/* Notes privées MJ */}
         <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -301,7 +348,11 @@ export default function CampaignWorldSection({
           )}
         </div>
 
+        </>
+        )}
+
         {/* Tracker de PNJs */}
+        {worldSection === 'npcs' && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
@@ -714,7 +765,10 @@ export default function CampaignWorldSection({
           )}
         </div>
 
+        )}
+
         {/* Lieux */}
+        {worldSection === 'locations' && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
@@ -1072,7 +1126,10 @@ export default function CampaignWorldSection({
           )}
         </div>
 
+        )}
+
         {/* Carte de campagne */}
+        {worldSection === 'map' && (
         <div>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">Carte de campagne</h2>
@@ -1241,7 +1298,10 @@ export default function CampaignWorldSection({
           )}
         </div>
 
+        )}
+
         {/* Factions */}
+        {worldSection === 'factions' && (
         <div>
           <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
             <h2 className="text-stone-400 text-xs font-semibold uppercase tracking-widest">
@@ -1465,7 +1525,8 @@ export default function CampaignWorldSection({
             )
           )}
         </div>
-
-    </>
+        )}
+      </div>
+    </div>
   )
 }

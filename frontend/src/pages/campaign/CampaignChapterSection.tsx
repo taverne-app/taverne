@@ -342,16 +342,13 @@ export default function CampaignChapterSection(props: SectionProps) {
   const unfiltered = !sceneSearch && sceneStatusFilter === 'all'
 
   return (
-    <>
-      {/* La liste des chapitres : l'ordre du récit, remaniable. */}
-      <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
-        <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-          <div className="min-w-0">
-            <h2 className="text-stone-300 text-sm font-semibold">Chapitres</h2>
-            <p className="text-stone-500 text-xs mt-0.5">
-              L'ordre n'est qu'un fil conducteur — remontez un chapitre si les joueurs vous y emmènent
-            </p>
-          </div>
+    <div className="grid gap-4 md:grid-cols-[minmax(0,280px)_minmax(0,1fr)]">
+      {/* Sommaire des chapitres : la liste EST la navigation. Elle reste visible pendant
+          qu'on travaille le détail à droite, et défile pour elle-même si les chapitres
+          débordent la hauteur de l'écran. L'ordre du récit s'y remanie toujours. */}
+      <nav className="bg-stone-900 border border-stone-800 rounded-xl p-3 self-start md:sticky md:top-20 md:max-h-[calc(100vh-6rem)] md:overflow-y-auto">
+        <div className="flex items-center justify-between gap-2 mb-3">
+          <h2 className="text-stone-300 text-sm font-semibold">Chapitres</h2>
           <button
             onClick={handleAddChapter}
             disabled={savingChapter}
@@ -451,10 +448,10 @@ export default function CampaignChapterSection(props: SectionProps) {
             })}
           </div>
         )}
-      </div>
+      </nav>
 
       {/* Le chapitre sélectionné : sa préparation, ses scènes, son ambiance. */}
-      <div className="bg-stone-900 border border-stone-800 rounded-xl p-5">
+      <div className="bg-stone-900 border border-stone-800 rounded-xl p-5 min-w-0">
         <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
           <div className="min-w-0">
             <h2 className="text-stone-300 text-sm font-semibold truncate">
@@ -836,6 +833,6 @@ export default function CampaignChapterSection(props: SectionProps) {
           </div>
         )}
       </div>
-    </>
+    </div>
   )
 }
