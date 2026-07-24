@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCharacter, type Character, type AbilityName, type DiceRoll } from '../api/characters'
 import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
-import { PortraitLightbox } from '../components/PortraitLightbox'
+import { ImageLightbox } from '../components/ImageLightbox'
 import { MarkdownText } from '../components/MarkdownText'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { parseDamageDice } from '../lib/dice'
@@ -279,7 +279,7 @@ export function SharedCharacterPage() {
       <header className="border-b border-stone-800 bg-stone-900/80 backdrop-blur sticky top-0 z-10">
         <div className="max-w-2xl mx-auto px-4 h-14 flex items-center gap-3">
           {character.portrait_url && (
-            <PortraitLightbox
+            <ImageLightbox
               src={character.portrait_url}
               alt={character.name}
               className="w-8 h-8 rounded-full object-cover border border-stone-700 shrink-0"
@@ -330,7 +330,7 @@ export function SharedCharacterPage() {
             {/* Portrait */}
             {character.portrait_url && (
               <div className={`flex flex-col items-center pb-2 ${th.portraitBorder}`}>
-                <PortraitLightbox
+                <ImageLightbox
                   src={character.portrait_url}
                   alt={character.name}
                   className={`w-28 h-36 rounded-xl object-cover object-top border-2 shadow-lg mb-3 ${th.portraitImgBorder}`}

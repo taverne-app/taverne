@@ -7,6 +7,7 @@ import {
 import { createCombatant } from '../../api/combatants'
 import { CR_XP } from '../../data/monsters'
 import { ImagePicker } from '../../components/ImagePicker'
+import { ImageLightbox } from '../../components/ImageLightbox'
 import type { SectionProps } from './shared'
 
 /**
@@ -377,11 +378,10 @@ export default function CampaignBestiary({ campaign, setCampaign, saving }: Sect
                     <div className="flex items-stretch">
                       {/* Vignette */}
                       {m.image_url ? (
-                        <img
+                        <ImageLightbox
                           src={m.image_url}
                           alt={m.name}
                           className="w-24 sm:w-28 object-cover shrink-0 bg-stone-950"
-                          onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                         />
                       ) : (
                         <div className="w-24 sm:w-28 shrink-0 bg-stone-950/60 flex items-center justify-center text-3xl text-stone-700">🐾</div>

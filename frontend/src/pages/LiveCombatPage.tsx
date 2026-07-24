@@ -5,7 +5,7 @@ import type { Campaign, BattleMap } from '../api/campaigns'
 import type { Combatant } from '../api/combatants'
 import type { Character } from '../api/characters'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
-import { PortraitLightbox } from '../components/PortraitLightbox'
+import { ImageLightbox } from '../components/ImageLightbox'
 import { SharedSidebar } from '../components/SharedSidebar'
 import { BattleMapBoard } from '../components/BattleMapBoard'
 import { PlayerCombatDock } from '../components/PlayerCombatDock'
@@ -247,7 +247,7 @@ export function LiveCombatPage() {
                       </span>
 
                       {row.portrait ? (
-                        <PortraitLightbox
+                        <ImageLightbox
                           src={row.portrait}
                           alt={row.name}
                           className="w-9 h-9 rounded-full object-cover shrink-0 border border-stone-700"

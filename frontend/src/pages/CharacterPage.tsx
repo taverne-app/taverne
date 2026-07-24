@@ -50,7 +50,7 @@ import { SRD_SPELLS, SPELL_DAMAGE, spellMatchesQuery } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
 import { SPELL_DETAILS } from '../data/spell_details'
 import { computeMulticlassSlots, maxPreparedSpells } from '../data/multiclass'
-import { PortraitLightbox } from '../components/PortraitLightbox'
+import { ImageLightbox } from '../components/ImageLightbox'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
 import { ImagePicker } from '../components/ImagePicker'
@@ -1814,7 +1814,7 @@ export function CharacterPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-start gap-4 min-w-0">
                 {character.portrait_url && (
-                  <PortraitLightbox
+                  <ImageLightbox
                     src={character.portrait_url}
                     alt={character.name}
                     className="w-16 h-16 rounded-full object-cover shrink-0 border-2 border-stone-700"
