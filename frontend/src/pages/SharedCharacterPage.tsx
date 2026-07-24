@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { getSharedCharacter, type Character, type AbilityName, type DiceRoll } from '../api/characters'
-import { updateSharedCharacterHp, rollSharedDice } from '../api/share'
+import {
+  updateSharedCharacterHp, rollSharedDice,
+  updateSharedCurrency, prepareSharedSpell, addSharedSpell,
+  addSharedInventoryItem, toggleSharedInventoryEquipped,
+  sharedLongRest, sharedShortRest, type CoinDeltas,
+} from '../api/share'
+import { SRD_SPELLS, SPELL_DAMAGE, spellMatchesQuery } from '../data/spells'
 import { ImageLightbox } from '../components/ImageLightbox'
 import { MarkdownText } from '../components/MarkdownText'
 import { createPublicEcho, REALTIME_CONFIGURED } from '../lib/echo'
@@ -181,6 +187,15 @@ export function SharedCharacterPage() {
   const [hpInput, setHpInput] = useState('1')
   const [hpLoading, setHpLoading] = useState(false)
   const [isMyTurn, setIsMyTurn] = useState(false)
+  // Écritures du joueur : un seul verrou pour toutes, le serveur reste l'arbitre.
+  const [busy, setBusy] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
+  const [restResult, setRestResult] = useState<string | null>(null)
+  const [shortRestDice, setShortRestDice] = useState('1')
+  const [spellSearch, setSpellSearch] = useState('')
+  const [addingSpell, setAddingSpell] = useState(false)
+  const [addingItem, setAddingItem] = useState(false)
+  const [itemDraft, setItemDraft] = useState({ name: '', quantity: '1', weight: '', notes: '' })
   const [combatRound, setCombatRound] = useState<number | null>(null)
   const [timeOfDay, setTimeOfDay] = useState<TimeOfDay>('none')
   const { theme } = useSharedTheme()
@@ -227,6 +242,38 @@ export function SharedCharacterPage() {
     finally { setRolling(false) }
   }
 
+  /**
+   * Point de passage de toute écriture du joueur sur sa fiche. Le serveur répond avec
+   * la fiche recalculée : on la prend telle quelle plutôt que de deviner localement,
+   * sinon un refus (bourse à découvert, plafond de préparation) laisserait l'écran
+   * afficher un état que la base n'a pas.
+   */
+  async function playerAction(run: () => Promise<Character>) {
+    if (!token || busy) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      setCharacter(await run())
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Modification refusée')
+    } finally { setBusy(false) }
+  }
+
+  async function handleShortRest() {
+    if (!token || busy) return
+    const dice = parseInt(shortRestDice, 10)
+    if (!dice || dice < 1) return
+    setBusy(true)
+    setActionError(null)
+    try {
+      const res = await sharedShortRest(token, dice)
+      setCharacter(res.character)
+      setRestResult(`Repos court : ${res.rolls.join(' + ')} ${res.modifier >= 0 ? '+' : '−'} ${Math.abs(res.modifier)}/dé — ${res.total_healed} PV rendus.`)
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : 'Repos non enregistré')
+    } finally { setBusy(false) }
+  }
+
   async function handleHp(type: 'damage' | 'heal') {
     if (!token || !character || hpLoading) return
     const amount = parseInt(hpInput, 10)
@@ -268,7 +315,6 @@ export function SharedCharacterPage() {
 
   const allSkills = Object.entries(character.skills).sort(([a], [b]) => a.localeCompare(b))
   const currency = character.currency
-  const hasCurrency = Object.values(currency).some(v => v > 0)
   const equippedItems = character.inventory.items.filter(i => i.equipped)
 
   return (
@@ -342,6 +388,15 @@ export function SharedCharacterPage() {
                   {character.race} · {character.character_class}{character.subclass ? ` (${character.subclass})` : ''} · Niv. {character.level}
                 </p>
               </div>
+            )}
+
+            {/* Un refus du serveur (bourse à découvert, sort absent) doit se voir :
+                sans ça le joueur reclique en croyant à un bug d'affichage. */}
+            {actionError && (
+              <div
+                onClick={() => setActionError(null)}
+                className="rounded-xl border border-red-700 bg-red-950/80 text-red-300 text-xs p-3 cursor-pointer"
+              >{actionError}</div>
             )}
 
             {/* Roll toast */}
@@ -589,7 +644,17 @@ export function SharedCharacterPage() {
                             return (
                               <div key={i} className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 border text-xs ${spell.prepared ? th.spellPrepared : th.spellUnprepared}`}>
                                 {spell.concentration && <span className={th.spellConcentration}>◈</span>}
-                                <span className="font-medium">{spell.name}</span>
+                                {/* Un tour de magie ne se prépare pas : il est toujours disponible. */}
+                                {spell.level > 0 ? (
+                                  <button
+                                    onClick={() => playerAction(() => prepareSharedSpell(token!, spell.name, !spell.prepared))}
+                                    disabled={busy}
+                                    title={spell.prepared ? 'Préparé — cliquez pour retirer de la préparation' : 'Non préparé — cliquez pour préparer'}
+                                    className="font-medium hover:opacity-70 disabled:opacity-50 transition-opacity"
+                                  >{spell.prepared ? '◉' : '○'} {spell.name}</button>
+                                ) : (
+                                  <span className="font-medium">{spell.name}</span>
+                                )}
                                 {spell.damage_dice && (dmg ? (
                                   <button
                                     onClick={() => roll({ count: dmg.count, sides: dmg.sides, modifier: dmg.modifier, label: `Dégâts — ${spell.name}` })}
@@ -608,6 +673,62 @@ export function SharedCharacterPage() {
                     ))}
                   </div>
                 )}
+
+                {/* Ajout d'un sort. Aucune suppression ici : retirer un sort reste au MJ. */}
+                <div className={`border-t ${th.innerBorder} mt-3 pt-3`}>
+                  {!addingSpell ? (
+                    <button
+                      onClick={() => setAddingSpell(true)}
+                      className={`text-xs ${th.detailsSummary} hover:opacity-70 transition-opacity`}
+                    >+ Ajouter un sort</button>
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="text"
+                          value={spellSearch}
+                          onChange={e => setSpellSearch(e.target.value)}
+                          autoFocus
+                          placeholder="Rechercher un sort…"
+                          className={`flex-1 min-w-0 rounded-lg px-3 py-1.5 text-xs border ${th.input}`}
+                        />
+                        <button
+                          onClick={() => { setAddingSpell(false); setSpellSearch('') }}
+                          className={`text-xs ${th.textMuted} hover:opacity-70 transition-opacity`}
+                        >Annuler</button>
+                      </div>
+                      {spellSearch.trim().length >= 2 && (
+                        <div className="space-y-0.5 max-h-44 overflow-y-auto">
+                          {SRD_SPELLS
+                            .filter(([name]) => spellMatchesQuery(name, spellSearch.trim().toLowerCase()))
+                            .filter(([name]) => !character.spellcasting.spells.some(s => s.name === name))
+                            .slice(0, 10)
+                            .map(([name, level]) => (
+                              <button
+                                key={name}
+                                onClick={() => playerAction(async () => {
+                                  const updated = await addSharedSpell(token!, {
+                                    name, level,
+                                    ...(SPELL_DAMAGE[name] ? { damage_dice: SPELL_DAMAGE[name] } : {}),
+                                  })
+                                  setAddingSpell(false)
+                                  setSpellSearch('')
+                                  return updated
+                                })}
+                                disabled={busy}
+                                className={`w-full flex items-center gap-2 rounded px-2 py-1 text-xs text-left border ${th.spellUnprepared} hover:opacity-80 disabled:opacity-50 transition-opacity`}
+                              >
+                                <span className="flex-1 min-w-0 truncate">{name}</span>
+                                <span className={`shrink-0 ${th.textMuted}`}>
+                                  {level === 0 ? 'Tour' : `Niv. ${level}`}
+                                </span>
+                              </button>
+                            ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -634,58 +755,191 @@ export function SharedCharacterPage() {
               </div>
             )}
 
-            {/* Inventory */}
-            {equippedItems.length > 0 && (
-              <div className={`border rounded-xl p-4 ${th.section}`}>
-                <h2 className={`${th.sectionHeader} mb-3`}>Équipement</h2>
+            {/* Inventory — la section s'affiche même vide, sinon on ne pourrait
+                jamais y ajouter le premier objet. */}
+            <div className={`border rounded-xl p-4 ${th.section}`}>
+              <h2 className={`${th.sectionHeader} mb-3`}>Équipement</h2>
+              {equippedItems.length > 0 && (
                 <div className="space-y-1">
                   {equippedItems.map((item, i) => (
                     <div key={i} className="flex items-center gap-2 text-sm">
-                      <span className="text-emerald-500 text-xs shrink-0">●</span>
+                      <button
+                        onClick={() => playerAction(() => toggleSharedInventoryEquipped(token!, item.name, false))}
+                        disabled={busy}
+                        title="Déséquiper"
+                        className="text-emerald-500 text-xs shrink-0 hover:opacity-60 disabled:opacity-40 transition-opacity"
+                      >●</button>
                       <span className={`flex-1 truncate ${th.text}`}>{item.name}</span>
                       {item.quantity > 1 && <span className={`text-xs shrink-0 ${th.textMuted}`}>×{item.quantity}</span>}
                       {item.magical && <span className={`text-xs shrink-0 ${th.magicalItem}`}>✦</span>}
                     </div>
                   ))}
                 </div>
-                {character.inventory.items.filter(i => !i.equipped).length > 0 && (
-                  <details className="mt-3">
-                    <summary className={`text-xs cursor-pointer ${th.detailsSummary}`}>
-                      + {character.inventory.items.filter(i => !i.equipped).length} objets non équipés
-                    </summary>
-                    <div className="mt-2 space-y-1">
-                      {character.inventory.items.filter(i => !i.equipped).map((item, i) => (
-                        <div key={i} className="flex items-center gap-2 text-sm">
-                          <span className={`text-xs shrink-0 ${th.textMuted}`}>○</span>
-                          <span className={`flex-1 truncate ${th.textMuted}`}>{item.name}</span>
-                          {item.quantity > 1 && <span className={`text-xs shrink-0 ${th.textMuted}`}>×{item.quantity}</span>}
-                        </div>
-                      ))}
+              )}
+              {character.inventory.items.filter(i => !i.equipped).length > 0 && (
+                <details className="mt-3" open={equippedItems.length === 0}>
+                  <summary className={`text-xs cursor-pointer ${th.detailsSummary}`}>
+                    + {character.inventory.items.filter(i => !i.equipped).length} objets non équipés
+                  </summary>
+                  <div className="mt-2 space-y-1">
+                    {character.inventory.items.filter(i => !i.equipped).map((item, i) => (
+                      <div key={i} className="flex items-center gap-2 text-sm">
+                        <button
+                          onClick={() => playerAction(() => toggleSharedInventoryEquipped(token!, item.name, true))}
+                          disabled={busy}
+                          title="Équiper"
+                          className={`text-xs shrink-0 ${th.textMuted} hover:opacity-60 disabled:opacity-40 transition-opacity`}
+                        >○</button>
+                        <span className={`flex-1 truncate ${th.textMuted}`}>{item.name}</span>
+                        {item.quantity > 1 && <span className={`text-xs shrink-0 ${th.textMuted}`}>×{item.quantity}</span>}
+                      </div>
+                    ))}
+                  </div>
+                </details>
+              )}
+
+              {/* Ajout d'un objet. Pas de suppression : ce que le joueur ramasse, seul
+                  le MJ peut le retirer. */}
+              <div className={`border-t ${th.innerBorder} mt-3 pt-3`}>
+                {!addingItem ? (
+                  <button
+                    onClick={() => setAddingItem(true)}
+                    className={`text-xs ${th.detailsSummary} hover:opacity-70 transition-opacity`}
+                  >+ Ajouter un objet</button>
+                ) : (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      value={itemDraft.name}
+                      onChange={e => setItemDraft(d => ({ ...d, name: e.target.value }))}
+                      autoFocus
+                      placeholder="Nom de l'objet *"
+                      className={`w-full rounded-lg px-3 py-1.5 text-xs border ${th.input}`}
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      <input
+                        type="number" min="1"
+                        value={itemDraft.quantity}
+                        onChange={e => setItemDraft(d => ({ ...d, quantity: e.target.value }))}
+                        placeholder="Qté"
+                        className={`min-w-0 rounded-lg px-2 py-1.5 text-xs border ${th.input}`}
+                      />
+                      <input
+                        type="number" min="0" step="0.1"
+                        value={itemDraft.weight}
+                        onChange={e => setItemDraft(d => ({ ...d, weight: e.target.value }))}
+                        placeholder="Poids"
+                        className={`min-w-0 rounded-lg px-2 py-1.5 text-xs border ${th.input}`}
+                      />
+                      <input
+                        type="text"
+                        value={itemDraft.notes}
+                        onChange={e => setItemDraft(d => ({ ...d, notes: e.target.value }))}
+                        placeholder="Note"
+                        className={`min-w-0 rounded-lg px-2 py-1.5 text-xs border ${th.input}`}
+                      />
                     </div>
-                  </details>
+                    <div className="flex justify-between items-center">
+                      <button
+                        onClick={() => { setAddingItem(false); setItemDraft({ name: '', quantity: '1', weight: '', notes: '' }) }}
+                        className={`text-xs ${th.textMuted} hover:opacity-70 transition-opacity`}
+                      >Annuler</button>
+                      <button
+                        onClick={() => playerAction(async () => {
+                          const updated = await addSharedInventoryItem(token!, {
+                            name: itemDraft.name.trim(),
+                            quantity: parseInt(itemDraft.quantity, 10) || 1,
+                            ...(itemDraft.weight ? { weight: parseFloat(itemDraft.weight) } : {}),
+                            ...(itemDraft.notes.trim() ? { notes: itemDraft.notes.trim() } : {}),
+                          })
+                          setAddingItem(false)
+                          setItemDraft({ name: '', quantity: '1', weight: '', notes: '' })
+                          return updated
+                        })}
+                        disabled={busy || !itemDraft.name.trim()}
+                        className="text-xs font-semibold rounded-lg px-3 py-1 bg-emerald-700 hover:bg-emerald-600 text-white disabled:opacity-40 transition-colors"
+                      >Ajouter</button>
+                    </div>
+                  </div>
                 )}
               </div>
-            )}
+            </div>
 
-            {/* Currency */}
-            {hasCurrency && (
-              <div className={`border rounded-xl p-4 ${th.section}`}>
-                <h2 className={`${th.sectionHeader} mb-3`}>Monnaie</h2>
-                <div className="flex flex-wrap gap-3">
-                  {(['pp', 'po', 'pe', 'pa', 'pc'] as const).map(key => {
-                    const labels: Record<string, string> = { pp: 'Platine', po: 'Or', pe: 'Électrum', pa: 'Argent', pc: 'Cuivre' }
-                    const val = currency[key]
-                    if (!val) return null
-                    return (
-                      <div key={key} className="text-center">
-                        <p className={`text-xs ${th.textMuted}`}>{labels[key]}</p>
-                        <p className={`font-bold ${th.text}`}>{val}</p>
+            {/* Currency — toujours affichée : une bourse vide doit pouvoir se remplir.
+                Les boutons envoient des MOUVEMENTS (+1 / −1), jamais un solde : au
+                partage d'un butin, plusieurs joueurs écrivent en même temps et des
+                deltas s'additionnent là où deux soldes absolus s'écraseraient. */}
+            <div className={`border rounded-xl p-4 ${th.section}`}>
+              <h2 className={`${th.sectionHeader} mb-3`}>Monnaie</h2>
+              <div className="flex flex-wrap gap-4">
+                {(['pp', 'po', 'pe', 'pa', 'pc'] as const).map(key => {
+                  const labels: Record<string, string> = { pp: 'Platine', po: 'Or', pe: 'Électrum', pa: 'Argent', pc: 'Cuivre' }
+                  const val = currency[key]
+                  const move = (amount: number) =>
+                    playerAction(() => updateSharedCurrency(token!, { [key]: amount } as CoinDeltas))
+                  return (
+                    <div key={key} className="text-center">
+                      <p className={`text-xs ${th.textMuted}`}>{labels[key]}</p>
+                      <p className={`font-bold ${th.text}`}>{val}</p>
+                      <div className="flex items-center justify-center gap-1 mt-0.5">
+                        <button
+                          onClick={() => move(-1)}
+                          disabled={busy || val <= 0}
+                          title={`Dépenser 1 ${labels[key]}`}
+                          className={`text-xs leading-none px-1 ${th.textMuted} hover:opacity-60 disabled:opacity-30 transition-opacity`}
+                        >−</button>
+                        <button
+                          onClick={() => move(1)}
+                          disabled={busy}
+                          title={`Gagner 1 ${labels[key]}`}
+                          className={`text-xs leading-none px-1 ${th.textMuted} hover:opacity-60 disabled:opacity-40 transition-opacity`}
+                        >+</button>
+                        <button
+                          onClick={() => move(10)}
+                          disabled={busy}
+                          title={`Gagner 10 ${labels[key]}`}
+                          className={`text-[10px] leading-none px-1 ${th.textMuted} hover:opacity-60 disabled:opacity-40 transition-opacity`}
+                        >+10</button>
                       </div>
-                    )
-                  })}
-                </div>
+                    </div>
+                  )
+                })}
               </div>
-            )}
+            </div>
+
+            {/* Repos — la règle est celle du MJ, appliquée par le serveur. */}
+            <div className={`border rounded-xl p-4 ${th.section}`}>
+              <h2 className={`${th.sectionHeader} mb-3`}>Repos</h2>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => playerAction(async () => {
+                    const updated = await sharedLongRest(token!)
+                    setRestResult('Repos long : PV, emplacements et ressources restaurés.')
+                    return updated
+                  })}
+                  disabled={busy}
+                  className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-indigo-700 hover:bg-indigo-600 text-white disabled:opacity-40 transition-colors"
+                >🌙 Repos long</button>
+                <div className="flex items-center gap-1.5">
+                  <input
+                    type="number" min="1"
+                    value={shortRestDice}
+                    onChange={e => setShortRestDice(e.target.value)}
+                    title="Dés de vie à dépenser"
+                    className={`w-14 rounded-lg px-2 py-1.5 text-xs border ${th.input}`}
+                  />
+                  <button
+                    onClick={handleShortRest}
+                    disabled={busy}
+                    className="text-xs font-semibold rounded-lg px-3 py-1.5 bg-amber-700 hover:bg-amber-600 text-white disabled:opacity-40 transition-colors"
+                  >🔥 Repos court</button>
+                </div>
+                <span className={`text-xs ${th.textMuted}`}>
+                  Dés de vie : {character.combat.hit_dice_remaining}/{character.combat.hit_dice_max}
+                </span>
+              </div>
+              {restResult && <p className={`text-xs mt-2 ${th.textAccent}`}>{restResult}</p>}
+            </div>
 
             {/* Features */}
             {character.features.length > 0 && (

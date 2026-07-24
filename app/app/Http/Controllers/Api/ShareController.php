@@ -147,6 +147,241 @@ class ShareController extends Controller
         return new CharacterResource($fresh);
     }
 
+    /**
+     * ── Écritures du joueur sur sa propre fiche ───────────────────────────────
+     *
+     * Le jeton de partage est une capacité au porteur : qui a le lien EST le
+     * personnage. Ces routes n'offrent donc que l'AJOUT et la MODIFICATION D'UN
+     * ÉTAT RÉVERSIBLE — jamais la suppression. Un lien qui circule ne doit pas
+     * pouvoir vider une fiche, et rien ici ne rattraperait la perte (ni dump ni PITR).
+     *
+     * Elles écrivent toutes une INTENTION, jamais un état complet : « +15 po »,
+     * « prépare ce sort », « ajoute cet objet ». Le serveur calcule le résultat.
+     * Envoyer le tableau entier laisserait un onglet resté ouvert écraser en silence
+     * ce que le MJ vient de modifier.
+     */
+
+    /**
+     * Bourse : des mouvements, pas un solde. Deux joueurs qui se partagent un butin
+     * écrivent en même temps ; des deltas s'additionnent là où deux soldes absolus
+     * s'écraseraient. Une bourse ne peut pas devenir négative.
+     */
+    public function updateCurrency(string $token, Request $request): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $validated = $request->validate([
+            'deltas'    => ['required', 'array'],
+            'deltas.pc' => ['sometimes', 'integer', 'between:-99999,99999'],
+            'deltas.pa' => ['sometimes', 'integer', 'between:-99999,99999'],
+            'deltas.pe' => ['sometimes', 'integer', 'between:-99999,99999'],
+            'deltas.po' => ['sometimes', 'integer', 'between:-99999,99999'],
+            'deltas.pp' => ['sometimes', 'integer', 'between:-99999,99999'],
+        ]);
+
+        $currency = ($character->currency ?? []) + ['pc' => 0, 'pa' => 0, 'pe' => 0, 'po' => 0, 'pp' => 0];
+
+        foreach ($validated['deltas'] as $coin => $delta) {
+            $next = (int) ($currency[$coin] ?? 0) + (int) $delta;
+            abort_if($next < 0, 422, "Pas assez de {$coin} dans la bourse.");
+            $currency[$coin] = $next;
+        }
+
+        $character->update(['currency' => $currency]);
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
+    /**
+     * Prépare ou dé-prépare un sort. Le sort est désigné par son NOM et non par son
+     * rang dans la liste : le MJ peut réordonner ou insérer un sort entre le moment
+     * où la fiche s'affiche et celui où le joueur coche.
+     */
+    public function prepareSpell(string $token, Request $request): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $validated = $request->validate([
+            'name'     => ['required', 'string', 'max:120'],
+            'prepared' => ['required', 'boolean'],
+        ]);
+
+        $spells = $character->spells_known ?? [];
+        $found  = false;
+
+        foreach ($spells as &$spell) {
+            if (($spell['name'] ?? null) === $validated['name']) {
+                $spell['prepared'] = $validated['prepared'];
+                $found = true;
+            }
+        }
+        unset($spell);
+
+        abort_unless($found, 404, "Ce sort n'est pas sur la fiche.");
+
+        $character->update(['spells_known' => $spells]);
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
+    /**
+     * Ajoute un sort à la fiche. Un sort déjà présent n'est pas dupliqué : la
+     * réponse est alors la fiche inchangée, ce qui rend le geste idempotent — un
+     * double-clic ou un renvoi réseau ne crée pas deux entrées.
+     */
+    public function addSpell(string $token, Request $request): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $validated = $request->validate([
+            'name'        => ['required', 'string', 'max:120'],
+            'level'       => ['required', 'integer', 'min:0', 'max:9'],
+            'damage_dice' => ['sometimes', 'nullable', 'string', 'max:40'],
+        ]);
+
+        $spells = $character->spells_known ?? [];
+
+        $exists = collect($spells)->contains(
+            fn ($s) => mb_strtolower($s['name'] ?? '') === mb_strtolower($validated['name'])
+        );
+
+        if (! $exists) {
+            $spells[] = array_filter([
+                'name'        => $validated['name'],
+                'level'       => (int) $validated['level'],
+                'prepared'    => true,
+                'damage_dice' => $validated['damage_dice'] ?? null,
+            ], fn ($v) => $v !== null);
+
+            $character->update(['spells_known' => $spells]);
+        }
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
+    /**
+     * Ajoute un objet à l'inventaire. Un objet du même nom voit sa quantité
+     * augmenter plutôt que d'apparaître deux fois — c'est ce qu'on attend en
+     * ramassant une seconde torche.
+     */
+    public function addInventoryItem(string $token, Request $request): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $validated = $request->validate([
+            'name'     => ['required', 'string', 'max:120'],
+            'quantity' => ['required', 'integer', 'min:1', 'max:9999'],
+            'weight'   => ['sometimes', 'numeric', 'min:0', 'max:9999'],
+            'value_gp' => ['sometimes', 'nullable', 'numeric', 'min:0', 'max:999999'],
+            'notes'    => ['sometimes', 'nullable', 'string', 'max:500'],
+        ]);
+
+        $inventory = $character->inventory ?? [];
+        $merged    = false;
+
+        foreach ($inventory as &$item) {
+            if (mb_strtolower($item['name'] ?? '') === mb_strtolower($validated['name'])) {
+                $item['quantity'] = (int) ($item['quantity'] ?? 0) + (int) $validated['quantity'];
+                $merged = true;
+                break;
+            }
+        }
+        unset($item);
+
+        if (! $merged) {
+            $inventory[] = [
+                'name'     => $validated['name'],
+                'quantity' => (int) $validated['quantity'],
+                'weight'   => (float) ($validated['weight'] ?? 0),
+                'value_gp' => $validated['value_gp'] ?? null,
+                'notes'    => $validated['notes'] ?? '',
+                'equipped' => false,
+            ];
+        }
+
+        $character->update(['inventory' => $inventory]);
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
+    /** Équipe ou déséquipe un objet déjà porté — réversible, donc ouvert au joueur. */
+    public function toggleInventoryEquipped(string $token, Request $request): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $validated = $request->validate([
+            'name'     => ['required', 'string', 'max:120'],
+            'equipped' => ['required', 'boolean'],
+        ]);
+
+        $inventory = $character->inventory ?? [];
+        $found     = false;
+
+        foreach ($inventory as &$item) {
+            if (($item['name'] ?? null) === $validated['name']) {
+                $item['equipped'] = $validated['equipped'];
+                $found = true;
+            }
+        }
+        unset($item);
+
+        abort_unless($found, 404, "Cet objet n'est pas dans l'inventaire.");
+
+        $character->update(['inventory' => $inventory]);
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
+    /** Repos long, même règle que côté MJ : elle vit dans le modèle. */
+    public function longRest(string $token): CharacterResource
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $character->applyLongRest();
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return new CharacterResource($fresh);
+    }
+
+    public function shortRest(string $token, Request $request): JsonResponse
+    {
+        $character = Character::where('share_token', $token)->firstOrFail();
+
+        $request->validate([
+            'dice_spent' => ['required', 'integer', 'min:1'],
+        ]);
+
+        $conMod = $character->modifier($character->constitution);
+        $result = $character->applyShortRest($request->integer('dice_spent'));
+
+        $fresh = $character->fresh();
+        CharacterUpdated::dispatch($fresh);
+
+        return response()->json([
+            'character'    => (new CharacterResource($fresh))->resolve(),
+            'rolls'        => $result['rolls'],
+            'modifier'     => $conMod,
+            'total_healed' => $result['healed'],
+        ]);
+    }
+
     public function rollDice(string $token, Request $request): JsonResponse
     {
         $character = Character::where('share_token', $token)->firstOrFail();

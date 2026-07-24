@@ -216,6 +216,80 @@ class Character extends Model
         return $this->death_saves_failures < 3;
     }
 
+    /**
+     * Repos long : la règle vit ici et non dans un contrôleur, parce que le MJ et le
+     * joueur la déclenchent depuis deux routes différentes. Deux implémentations
+     * dériveraient — et un repos qui ne rend pas la même chose des deux côtés est
+     * un bug qu'on ne verrait qu'à table.
+     */
+    public function applyLongRest(): void
+    {
+        $slots = $this->spell_slots ?? [];
+        foreach ($slots as &$slot) {
+            $slot['used'] = 0;
+        }
+        unset($slot);
+
+        $remaining = $this->hit_dice_remaining ?? $this->level;
+        $restored  = (int) ceil($this->level / 2);
+
+        $resources = $this->resources ?? [];
+        foreach ($resources as &$res) {
+            if (($res['reset'] ?? '') === 'long') {
+                $res['current'] = $res['max'];
+            }
+        }
+        unset($res);
+
+        $this->update([
+            // L'effet principal d'un repos long : on récupère TOUS ses points de vie.
+            'current_hp'            => $this->max_hp,
+            // Les PV temporaires ne survivent pas à un repos long (PHB).
+            'temporary_hp'          => 0,
+            // Un repos long retire un niveau d'épuisement.
+            'exhaustion_level'      => max(0, ($this->exhaustion_level ?? 0) - 1),
+            'spell_slots'           => $slots,
+            'death_saves_successes' => 0,
+            'death_saves_failures'  => 0,
+            'hit_dice_remaining'    => min($this->level, $remaining + $restored),
+            'resources'             => $resources,
+        ]);
+    }
+
+    /**
+     * Repos court : dépense des dés de vie et rend les PV correspondants.
+     * Renvoie le détail des jets — la table veut voir ce qui est sorti.
+     *
+     * @return array{rolls: int[], healed: int}
+     */
+    public function applyShortRest(int $diceSpent): array
+    {
+        $remaining = $this->hit_dice_remaining ?? $this->level;
+        $diceType  = $this->hit_dice_type ?? 8;
+        $conMod    = $this->modifier($this->constitution);
+
+        abort_if($diceSpent > $remaining, 422, 'Pas assez de dés de vie disponibles.');
+
+        $rolls       = array_map(fn () => random_int(1, $diceType), range(1, $diceSpent));
+        $totalHealed = max(0, array_sum($rolls) + ($conMod * $diceSpent));
+
+        $resources = $this->resources ?? [];
+        foreach ($resources as &$res) {
+            if (($res['reset'] ?? '') === 'short') {
+                $res['current'] = $res['max'];
+            }
+        }
+        unset($res);
+
+        $this->update([
+            'current_hp'         => min($this->max_hp, $this->current_hp + $totalHealed),
+            'hit_dice_remaining' => $remaining - $diceSpent,
+            'resources'          => $resources,
+        ]);
+
+        return ['rolls' => $rolls, 'healed' => $totalHealed];
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);

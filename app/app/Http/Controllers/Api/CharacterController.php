@@ -216,38 +216,17 @@ class CharacterController extends Controller
             'dice_spent' => ['required', 'integer', 'min:1'],
         ]);
 
-        $diceSpent = $request->integer('dice_spent');
-        $remaining = $character->hit_dice_remaining ?? $character->level;
-        $diceType  = $character->hit_dice_type ?? 8;
-        $conMod    = $character->modifier($character->constitution);
-
-        abort_if($diceSpent > $remaining, 422, 'Pas assez de dés de vie disponibles.');
-
-        $rolls = array_map(fn () => random_int(1, $diceType), range(1, $diceSpent));
-        $totalHealed = max(0, array_sum($rolls) + ($conMod * $diceSpent));
-
-        $resources = $character->resources ?? [];
-        foreach ($resources as &$res) {
-            if (($res['reset'] ?? '') === 'short') {
-                $res['current'] = $res['max'];
-            }
-        }
-        unset($res);
-
-        $character->update([
-            'current_hp'         => min($character->max_hp, $character->current_hp + $totalHealed),
-            'hit_dice_remaining' => $remaining - $diceSpent,
-            'resources'          => $resources,
-        ]);
+        $conMod = $character->modifier($character->constitution);
+        $result = $character->applyShortRest($request->integer('dice_spent'));
 
         $fresh = $character->fresh();
         CharacterUpdated::dispatch($fresh);
 
         return response()->json([
             'character'    => (new CharacterResource($fresh))->resolve(),
-            'rolls'        => $rolls,
+            'rolls'        => $result['rolls'],
             'modifier'     => $conMod,
-            'total_healed' => $totalHealed,
+            'total_healed' => $result['healed'],
         ]);
     }
 
@@ -255,37 +234,8 @@ class CharacterController extends Controller
     {
         $this->authorizeCharacter($request, $character);
 
-        $slots = $character->spell_slots ?? [];
-        foreach ($slots as &$slot) {
-            $slot['used'] = 0;
-        }
-        unset($slot);
+        $character->applyLongRest();
 
-        $remaining = $character->hit_dice_remaining ?? $character->level;
-        $restored  = (int) ceil($character->level / 2);
-
-        $resources = $character->resources ?? [];
-        foreach ($resources as &$res) {
-            if (($res['reset'] ?? '') === 'long') {
-                $res['current'] = $res['max'];
-            }
-        }
-        unset($res);
-
-        $character->update([
-            // L'effet principal d'un repos long : on récupère TOUS ses points de vie.
-            // Il manquait — le repos rendait les sorts et les dés de vie, mais pas les PV.
-            'current_hp'            => $character->max_hp,
-            // Les PV temporaires ne survivent pas à un repos long (PHB).
-            'temporary_hp'          => 0,
-            // Un repos long retire un niveau d'épuisement.
-            'exhaustion_level'      => max(0, ($character->exhaustion_level ?? 0) - 1),
-            'spell_slots'           => $slots,
-            'death_saves_successes' => 0,
-            'death_saves_failures'  => 0,
-            'hit_dice_remaining'    => min($character->level, $remaining + $restored),
-            'resources'             => $resources,
-        ]);
         $fresh = $character->fresh();
         CharacterUpdated::dispatch($fresh);
 

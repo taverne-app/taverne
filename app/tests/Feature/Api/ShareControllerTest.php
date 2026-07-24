@@ -442,4 +442,191 @@ class ShareControllerTest extends TestCase
         }
         $this->assertStringNotContainsString('barde', $shared->getContent());
     }
+
+    // ── Écritures du joueur sur sa propre fiche ──────────────────────────────
+    //
+    // Le jeton est une capacité au porteur : ces routes n'offrent que l'ajout et des
+    // états réversibles. Les tests qui suivent tiennent cette frontière autant que le
+    // comportement — aucune ne doit jamais permettre de retirer quoi que ce soit.
+
+    private function playerCharacter(array $attrs = []): Character
+    {
+        return Character::factory()->create([
+            'user_id'     => $this->user->id,
+            'share_token' => 'tok-joueur',
+        ] + $attrs);
+    }
+
+    public function test_le_joueur_ajoute_et_depense_des_pieces(): void
+    {
+        $character = $this->playerCharacter(['currency' => ['po' => 10, 'pa' => 3, 'pc' => 0, 'pe' => 0, 'pp' => 0]]);
+
+        $this->patchJson('/api/share/character/tok-joueur/currency', ['deltas' => ['po' => 15]])
+            ->assertOk()
+            ->assertJsonPath('data.currency.po', 25);
+
+        $this->patchJson('/api/share/character/tok-joueur/currency', ['deltas' => ['po' => -5, 'pa' => -3]])
+            ->assertOk()
+            ->assertJsonPath('data.currency.po', 20)
+            ->assertJsonPath('data.currency.pa', 0);
+
+        $this->assertSame(20, $character->fresh()->currency['po']);
+    }
+
+    /** Une bourse négative n'existe pas : la dépense de trop est refusée en bloc. */
+    public function test_le_joueur_ne_peut_pas_vider_sa_bourse_en_dessous_de_zero(): void
+    {
+        $character = $this->playerCharacter(['currency' => ['po' => 5, 'pa' => 0, 'pc' => 0, 'pe' => 0, 'pp' => 0]]);
+
+        $this->patchJson('/api/share/character/tok-joueur/currency', ['deltas' => ['po' => -6]])
+            ->assertStatus(422);
+
+        $this->assertSame(5, $character->fresh()->currency['po']);
+    }
+
+    public function test_le_joueur_prepare_et_deprepare_un_sort(): void
+    {
+        $character = $this->playerCharacter(['spells_known' => [
+            ['name' => 'Projectile magique', 'level' => 1, 'prepared' => false],
+            ['name' => 'Bouclier',           'level' => 1, 'prepared' => true],
+        ]]);
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Projectile magique', 'prepared' => true,
+        ])->assertOk();
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Bouclier', 'prepared' => false,
+        ])->assertOk();
+
+        $spells = $character->fresh()->spells_known;
+        $this->assertTrue($spells[0]['prepared']);
+        $this->assertFalse($spells[1]['prepared']);
+    }
+
+    /**
+     * Le sort est désigné par son nom : préparer ne doit jamais pouvoir en retirer un
+     * autre, ni faire disparaître une entrée que le MJ vient d'ajouter.
+     */
+    public function test_preparer_un_sort_ne_touche_a_aucun_autre(): void
+    {
+        $character = $this->playerCharacter(['spells_known' => [
+            ['name' => 'Bouclier', 'level' => 1, 'prepared' => false, 'damage_dice' => '1d8', 'notes' => 'garder'],
+            ['name' => 'Soins',    'level' => 1, 'prepared' => true],
+        ]]);
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Bouclier', 'prepared' => true,
+        ])->assertOk();
+
+        $spells = $character->fresh()->spells_known;
+        $this->assertCount(2, $spells);
+        $this->assertSame('1d8', $spells[0]['damage_dice']);
+        $this->assertSame('garder', $spells[0]['notes']);
+        $this->assertSame('Soins', $spells[1]['name']);
+    }
+
+    public function test_preparer_un_sort_absent_repond_404(): void
+    {
+        $this->playerCharacter(['spells_known' => [['name' => 'Bouclier', 'level' => 1, 'prepared' => true]]]);
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Boule de feu', 'prepared' => true,
+        ])->assertNotFound();
+    }
+
+    public function test_le_joueur_ajoute_un_sort_sans_le_dupliquer(): void
+    {
+        $character = $this->playerCharacter(['spells_known' => []]);
+
+        $this->postJson('/api/share/character/tok-joueur/spells', [
+            'name' => 'Boule de feu', 'level' => 3, 'damage_dice' => '8d6',
+        ])->assertOk();
+
+        // Deuxième envoi (double-clic, renvoi réseau) : la liste ne bouge plus.
+        $this->postJson('/api/share/character/tok-joueur/spells', [
+            'name' => 'boule de feu', 'level' => 3,
+        ])->assertOk();
+
+        $spells = $character->fresh()->spells_known;
+        $this->assertCount(1, $spells);
+        $this->assertSame('Boule de feu', $spells[0]['name']);
+        $this->assertSame('8d6', $spells[0]['damage_dice']);
+    }
+
+    public function test_le_joueur_ajoute_un_objet_et_cumule_les_quantites(): void
+    {
+        $character = $this->playerCharacter(['inventory' => []]);
+
+        $this->postJson('/api/share/character/tok-joueur/inventory', [
+            'name' => 'Torche', 'quantity' => 2, 'weight' => 0.5, 'value_gp' => 0.01,
+        ])->assertOk();
+
+        $this->postJson('/api/share/character/tok-joueur/inventory', [
+            'name' => 'torche', 'quantity' => 3,
+        ])->assertOk();
+
+        $inventory = $character->fresh()->inventory;
+        $this->assertCount(1, $inventory);
+        $this->assertSame(5, $inventory[0]['quantity']);
+        // La valeur du premier ajout survit au cumul.
+        $this->assertEqualsWithDelta(0.01, $inventory[0]['value_gp'], 0.0001);
+    }
+
+    public function test_le_joueur_equipe_et_desequipe_un_objet(): void
+    {
+        $character = $this->playerCharacter(['inventory' => [
+            ['name' => 'Épée longue', 'quantity' => 1, 'weight' => 1.5, 'value_gp' => 15, 'notes' => '', 'equipped' => false],
+        ]]);
+
+        $this->patchJson('/api/share/character/tok-joueur/inventory-equipped', [
+            'name' => 'Épée longue', 'equipped' => true,
+        ])->assertOk();
+
+        $this->assertTrue($character->fresh()->inventory[0]['equipped']);
+
+        $this->patchJson('/api/share/character/tok-joueur/inventory-equipped', [
+            'name' => 'Épée longue', 'equipped' => false,
+        ])->assertOk();
+
+        $this->assertFalse($character->fresh()->inventory[0]['equipped']);
+    }
+
+    public function test_le_joueur_prend_un_repos_long(): void
+    {
+        $character = $this->playerCharacter([
+            'level'                 => 4,
+            'max_hp'                => 30,
+            'current_hp'            => 7,
+            'temporary_hp'          => 4,
+            'spell_slots'           => ['1' => ['max' => 4, 'used' => 3]],
+            'death_saves_failures'  => 2,
+        ]);
+
+        $this->postJson('/api/share/character/tok-joueur/rest')
+            ->assertOk()
+            ->assertJsonPath('data.combat.current_hp', 30);
+
+        $fresh = $character->fresh();
+        $this->assertSame(0, $fresh->temporary_hp);
+        $this->assertSame(0, $fresh->spell_slots['1']['used']);
+        $this->assertSame(0, $fresh->death_saves_failures);
+    }
+
+    public function test_le_repos_court_refuse_plus_de_des_que_disponibles(): void
+    {
+        $this->playerCharacter(['level' => 3, 'hit_dice_remaining' => 1]);
+
+        $this->postJson('/api/share/character/tok-joueur/short-rest', ['dice_spent' => 2])
+            ->assertStatus(422);
+    }
+
+    /** Un jeton inconnu n'écrit rien, sur aucune de ces routes. */
+    public function test_un_jeton_inconnu_ne_peut_rien_ecrire(): void
+    {
+        $this->patchJson('/api/share/character/inconnu/currency', ['deltas' => ['po' => 1]])->assertNotFound();
+        $this->postJson('/api/share/character/inconnu/spells', ['name' => 'X', 'level' => 1])->assertNotFound();
+        $this->postJson('/api/share/character/inconnu/inventory', ['name' => 'X', 'quantity' => 1])->assertNotFound();
+        $this->postJson('/api/share/character/inconnu/rest')->assertNotFound();
+    }
 }

@@ -34,6 +34,15 @@ Route::patch('/share/character/{token}/hp',     [ShareController::class, 'update
 Route::post('/share/character/{token}/roll',    [ShareController::class, 'rollDice']);
 Route::post('/share/character/{token}/initiative', [ShareController::class, 'rollInitiative']);
 Route::patch('/share/character/{token}/cast',    [ShareController::class, 'castSpell']);
+// Écritures du joueur sur sa propre fiche : ajout et états réversibles seulement.
+// Aucune route de suppression — le jeton est une capacité au porteur.
+Route::patch('/share/character/{token}/currency',  [ShareController::class, 'updateCurrency']);
+Route::patch('/share/character/{token}/spell-prepared', [ShareController::class, 'prepareSpell']);
+Route::post('/share/character/{token}/spells',     [ShareController::class, 'addSpell']);
+Route::post('/share/character/{token}/inventory',  [ShareController::class, 'addInventoryItem']);
+Route::patch('/share/character/{token}/inventory-equipped', [ShareController::class, 'toggleInventoryEquipped']);
+Route::post('/share/character/{token}/rest',       [ShareController::class, 'longRest']);
+Route::post('/share/character/{token}/short-rest', [ShareController::class, 'shortRest']);
 Route::get('/share/character/{token}/notes',    [ShareController::class, 'notes']);
 Route::put('/share/character/{token}/notes',    [ShareController::class, 'updateNotes']);
 Route::get('/share/{token}/rolls',              [ShareController::class, 'campaignRolls']);

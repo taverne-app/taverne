@@ -128,3 +128,74 @@ export async function rollSharedInitiative(token: string): Promise<Character> {
   if (!res.ok) throw new Error('Initiative non enregistrée')
   return (await res.json()).data
 }
+
+// ── Écritures du joueur sur sa propre fiche ──────────────────────────────────
+//
+// Toutes envoient une INTENTION (« +15 po », « prépare ce sort », « ajoute cet
+// objet »), jamais l'état complet du champ : le MJ écrit sur la même fiche, et un
+// onglet resté ouvert ne doit pas pouvoir écraser ce qu'il vient de changer.
+// Aucune suppression n'est exposée — le lien de partage est une capacité au porteur.
+
+/** Réponse d'erreur du serveur : son message est toujours plus utile que « erreur ». */
+async function playerWrite(url: string, method: 'POST' | 'PATCH', body?: unknown, fallback = 'Modification refusée'): Promise<Character> {
+  const res = await fetch(url, {
+    method,
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  })
+  if (!res.ok) {
+    const message = await res.json().catch(() => null)
+    throw new Error(message?.message ?? fallback)
+  }
+  return (await res.json()).data
+}
+
+export type CoinDeltas = Partial<Record<'pc' | 'pa' | 'pe' | 'po' | 'pp', number>>
+
+/** Mouvements de bourse. Négatifs pour une dépense ; le serveur refuse un solde négatif. */
+export function updateSharedCurrency(token: string, deltas: CoinDeltas): Promise<Character> {
+  return playerWrite(`/api/share/character/${token}/currency`, 'PATCH', { deltas }, 'Bourse non modifiée')
+}
+
+export function prepareSharedSpell(token: string, name: string, prepared: boolean): Promise<Character> {
+  return playerWrite(`/api/share/character/${token}/spell-prepared`, 'PATCH', { name, prepared }, 'Préparation non enregistrée')
+}
+
+export function addSharedSpell(
+  token: string,
+  spell: { name: string; level: number; damage_dice?: string },
+): Promise<Character> {
+  return playerWrite(`/api/share/character/${token}/spells`, 'POST', spell, 'Sort non ajouté')
+}
+
+export function addSharedInventoryItem(
+  token: string,
+  item: { name: string; quantity: number; weight?: number; value_gp?: number | null; notes?: string },
+): Promise<Character> {
+  return playerWrite(`/api/share/character/${token}/inventory`, 'POST', item, 'Objet non ajouté')
+}
+
+export function toggleSharedInventoryEquipped(token: string, name: string, equipped: boolean): Promise<Character> {
+  return playerWrite(`/api/share/character/${token}/inventory-equipped`, 'PATCH', { name, equipped }, 'Objet non modifié')
+}
+
+export function sharedLongRest(token: string): Promise<Character> {
+  return playerWrite(`/api/share/character/${token}/rest`, 'POST', undefined, 'Repos non enregistré')
+}
+
+/** Le repos court renvoie le détail des dés — la table veut voir ce qui est sorti. */
+export async function sharedShortRest(
+  token: string,
+  diceSpent: number,
+): Promise<{ character: Character; rolls: number[]; modifier: number; total_healed: number }> {
+  const res = await fetch(`/api/share/character/${token}/short-rest`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ dice_spent: diceSpent }),
+  })
+  if (!res.ok) {
+    const message = await res.json().catch(() => null)
+    throw new Error(message?.message ?? 'Repos non enregistré')
+  }
+  return res.json()
+}
