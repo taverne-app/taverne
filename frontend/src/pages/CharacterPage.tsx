@@ -46,7 +46,7 @@ import { useToast } from '../contexts/ToastContext'
 import { ApiError } from '../api/client'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
-import { SRD_SPELLS, SPELL_DAMAGE, spellMatchesQuery } from '../data/spells'
+import { SRD_SPELLS, SPELL_DAMAGE, spellMatchesQuery, canonicalSpellName } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
 import { SPELL_DETAILS } from '../data/spell_details'
 import { computeMulticlassSlots, maxPreparedSpells } from '../data/multiclass'
@@ -730,7 +730,10 @@ export function CharacterPage() {
 
   async function addSpellFromBrowser(name: string, level: number) {
     if (!character) return
-    if (character.spellcasting.spells.some(s => s.name === name)) return
+    // Comparaison sur le nom canonique : la fiche peut porter une ancienne
+    // traduction du sort que le répertoire propose désormais sous son nom officiel.
+    const canon = canonicalSpellName(name)
+    if (character.spellcasting.spells.some(s => canonicalSpellName(s.name) === canon)) return
     // Les dés de dégâts viennent du SRD : sans eux, le sort n'apparaîtrait jamais
     // comme attaque en combat. Ils restent modifiables à la main ensuite.
     const damage = SPELL_DAMAGE[name]
@@ -3590,7 +3593,7 @@ export function CharacterPage() {
 
           {/* Spell browser */}
           {showSpellBrowser && (() => {
-            const known = new Set(character.spellcasting.spells.map(s => s.name))
+            const known = new Set(character.spellcasting.spells.map(s => canonicalSpellName(s.name)))
             const filtered = SRD_SPELLS.filter(([name, level]) =>
               (spellBrowserLevel === 'all' || level === spellBrowserLevel) &&
               (spellBrowserSearch === '' || spellMatchesQuery(name, spellBrowserSearch.toLowerCase()))

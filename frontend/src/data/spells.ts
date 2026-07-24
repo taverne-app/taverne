@@ -643,6 +643,24 @@ export function spellMatchesQuery(name: string, lowerQuery: string): boolean {
   return aliases != null && aliases.some(a => a.toLowerCase().includes(lowerQuery))
 }
 
+// Index en minuscules de tous les noms connus (canoniques et alias) vers le nom
+// canonique. La casse est ignorée parce qu'un sort saisi à la main n'est pas
+// capitalisé comme le SRD, et que la comparaison sert à décider d'un doublon.
+const CANON_BY_ANY_NAME: Record<string, string> = {}
+for (const [name] of SRD_SPELLS) CANON_BY_ANY_NAME[name.toLowerCase()] = name
+for (const [alias, canon] of Object.entries(SPELL_ALIASES)) CANON_BY_ANY_NAME[alias.toLowerCase()] = canon
+
+/**
+ * Nom officiel d'un sort, un ancien nom étant traduit au passage. À utiliser dès
+ * qu'on compare deux sorts par leur nom : un personnage qui a « Missile magique »
+ * dans sa fiche possède déjà « Projectile magique », et le lui proposer une
+ * seconde fois créerait un doublon que rien ne signalerait ensuite.
+ * Un nom inconnu (sort maison) est renvoyé tel quel.
+ */
+export function canonicalSpellName(name: string): string {
+  return CANON_BY_ANY_NAME[name.trim().toLowerCase()] ?? name
+}
+
 /**
  * Dés de dégâts des sorts offensifs du SRD.
  *
