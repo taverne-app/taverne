@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { SRD_SPELLS, SPELL_META, SCHOOL_LABELS, SCHOOL_COLORS, type SpellSchool } from '../data/spells'
+import { SRD_SPELLS, SPELL_META, SCHOOL_LABELS, SCHOOL_COLORS, spellMatchesQuery, type SpellSchool } from '../data/spells'
 
 interface Props {
   onClose: () => void
@@ -18,7 +18,7 @@ export function SpellCompendiumModal({ onClose }: Props) {
     const q = search.toLowerCase()
     return SRD_SPELLS.filter(([name, level]) => {
       if (levelFilter !== 'all' && level !== levelFilter) return false
-      if (q && !name.toLowerCase().includes(q)) return false
+      if (q && !spellMatchesQuery(name, q)) return false
       const meta = SPELL_META[name]
       if (!meta) return schoolFilter === 'all' && concFilter === 'all'
       if (schoolFilter !== 'all' && meta.school !== schoolFilter) return false
