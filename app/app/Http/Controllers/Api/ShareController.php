@@ -211,9 +211,11 @@ class ShareController extends Controller
 
         $spells = $character->spells_known ?? [];
         $found  = false;
+        $level  = 0;
 
         foreach ($spells as &$spell) {
             if (($spell['name'] ?? null) === $validated['name']) {
+                $level = (int) ($spell['level'] ?? 0);
                 $spell['prepared'] = $validated['prepared'];
                 $found = true;
             }
@@ -221,6 +223,22 @@ class ShareController extends Controller
         unset($spell);
 
         abort_unless($found, 404, "Ce sort n'est pas sur la fiche.");
+
+        // Le plafond ne vaut que pour les sorts de niveau ≥ 1 (un tour de magie ne se
+        // prépare pas) et que dans le sens de l'ajout — dé-préparer doit toujours
+        // rester possible, y compris depuis une fiche déjà au-dessus du plafond.
+        $max = $character->max_prepared_spells;
+        if ($validated['prepared'] && $level > 0 && $max !== null) {
+            $count = count(array_filter(
+                $spells,
+                fn ($s) => (int) ($s['level'] ?? 0) > 0 && ($s['prepared'] ?? false),
+            ));
+            abort_if(
+                $count > $max,
+                422,
+                "Maximum atteint : {$max} sorts préparables (niveau + mod. d'incantation).",
+            );
+        }
 
         $character->update(['spells_known' => $spells]);
 

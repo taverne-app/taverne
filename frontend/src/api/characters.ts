@@ -113,6 +113,12 @@ export interface Character {
     attack_bonus: number
     slots: Record<string, SpellSlot>
     spells: Spell[]
+    /**
+     * Plafond de sorts préparables (niveau ≥ 1), calculé par le serveur — c'est lui
+     * qui refuse, l'interface ne fait que l'annoncer. `null` pour une classe qui
+     * « connaît » ses sorts (ensorceleur, barde…) : rien à plafonner.
+     */
+    max_prepared: number | null
   }
   inventory: {
     items: InventoryItem[]

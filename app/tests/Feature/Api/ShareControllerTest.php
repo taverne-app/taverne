@@ -629,4 +629,96 @@ class ShareControllerTest extends TestCase
         $this->postJson('/api/share/character/inconnu/inventory', ['name' => 'X', 'quantity' => 1])->assertNotFound();
         $this->postJson('/api/share/character/inconnu/rest')->assertNotFound();
     }
+
+    /**
+     * Le plafond doit REFUSER, pas seulement s'afficher : la fiche est publique
+     * derrière son jeton, et l'interface n'est pas un garde-fou.
+     */
+    public function test_le_joueur_ne_depasse_pas_le_plafond_de_sorts_prepares(): void
+    {
+        // Magicien niv. 1, INT 16 (+3) → 4 sorts préparables.
+        $character = $this->playerCharacter([
+            'character_class' => 'Magicien',
+            'level'           => 1,
+            'intelligence'    => 16,
+            'spells_known'    => [
+                ['name' => 'Bouclier',           'level' => 1, 'prepared' => true],
+                ['name' => 'Armure de mage',     'level' => 1, 'prepared' => true],
+                ['name' => 'Projectile magique', 'level' => 1, 'prepared' => true],
+                ['name' => 'Sommeil',            'level' => 1, 'prepared' => true],
+                ['name' => 'Graisse',            'level' => 1, 'prepared' => false],
+                ['name' => 'Trait de feu',       'level' => 0, 'prepared' => true],
+            ],
+        ]);
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Graisse', 'prepared' => true,
+        ])->assertStatus(422);
+
+        // Le refus ne doit RIEN avoir écrit.
+        $this->assertFalse($character->fresh()->spells_known[4]['prepared']);
+    }
+
+    /** Dé-préparer reste toujours possible, même depuis une fiche au-dessus du plafond. */
+    public function test_deprepare_reste_possible_au_dessus_du_plafond(): void
+    {
+        $character = $this->playerCharacter([
+            'character_class' => 'Magicien',
+            'level'           => 1,
+            'intelligence'    => 16,
+            'spells_known'    => array_map(
+                fn ($i) => ['name' => "Sort {$i}", 'level' => 1, 'prepared' => true],
+                range(1, 9),
+            ),
+        ]);
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Sort 1', 'prepared' => false,
+        ])->assertOk();
+
+        $this->assertFalse($character->fresh()->spells_known[0]['prepared']);
+    }
+
+    /** Un tour de magie ne se prépare pas : il échappe au plafond. */
+    public function test_un_tour_de_magie_echappe_au_plafond(): void
+    {
+        $character = $this->playerCharacter([
+            'character_class' => 'Magicien',
+            'level'           => 1,
+            'intelligence'    => 16,
+            'spells_known'    => [
+                ['name' => 'Bouclier',           'level' => 1, 'prepared' => true],
+                ['name' => 'Armure de mage',     'level' => 1, 'prepared' => true],
+                ['name' => 'Projectile magique', 'level' => 1, 'prepared' => true],
+                ['name' => 'Sommeil',            'level' => 1, 'prepared' => true],
+                ['name' => 'Trait de feu',       'level' => 0, 'prepared' => false],
+            ],
+        ]);
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Trait de feu', 'prepared' => true,
+        ])->assertOk();
+
+        $this->assertTrue($character->fresh()->spells_known[4]['prepared']);
+    }
+
+    /** Un ensorceleur « connaît » ses sorts : aucun plafond ne doit le bloquer. */
+    public function test_une_classe_sans_preparation_nest_jamais_bloquee(): void
+    {
+        $character = $this->playerCharacter([
+            'character_class' => 'Ensorceleur',
+            'level'           => 1,
+            'charisma'        => 16,
+            'spells_known'    => array_map(
+                fn ($i) => ['name' => "Sort {$i}", 'level' => 1, 'prepared' => $i > 1],
+                range(1, 9),
+            ),
+        ]);
+
+        $this->patchJson('/api/share/character/tok-joueur/spell-prepared', [
+            'name' => 'Sort 1', 'prepared' => true,
+        ])->assertOk();
+
+        $this->assertTrue($character->fresh()->spells_known[0]['prepared']);
+    }
 }

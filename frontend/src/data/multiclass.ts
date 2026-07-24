@@ -21,47 +21,6 @@ export function getCasterLevel(className: string, level: number): number {
   return 0
 }
 
-// Classes qui PRÉPARENT leurs sorts chaque jour, par opposition à celles qui les
-// « connaissent » définitivement (ensorceleur, barde, occultiste, rôdeur) et n'ont
-// donc aucun plafond de préparation. La valeur dit quelle part du niveau de classe
-// entre dans « niveau + mod. » : plein pour les lanceurs complets, la moitié pour les
-// demi-lanceurs (paladin arrondit à l'inférieur, artificier au supérieur).
-const PREPARED_CASTERS: Record<string, 'full' | 'half-down' | 'half-up'> = {
-  magicien: 'full', wizard: 'full',
-  clerc: 'full', cleric: 'full',
-  druide: 'full', druid: 'full',
-  paladin: 'half-down',
-  artificier: 'half-up', artificer: 'half-up',
-}
-
-function preparedClassLevel(className: string, level: number): number {
-  const kind = PREPARED_CASTERS[normClass(className)] ?? PREPARED_CASTERS[className.toLowerCase()]
-  if (!kind) return 0
-  if (kind === 'full') return level
-  if (kind === 'half-down') return Math.floor(level / 2)
-  return Math.ceil(level / 2)
-}
-
-/**
- * Nombre de sorts de niveau ≥ 1 qu'un personnage peut préparer, ou `null` s'il ne
- * possède aucune classe qui prépare (les tours de magie, eux, ne se préparent jamais).
- * Règle 5e : niveau de la classe + mod. d'incantation, minimum 1 par classe. On somme
- * sur les classes qui préparent — cas rare du multiclassage ; le modèle ne stocke qu'un
- * seul modificateur d'incantation, on l'applique donc à chaque part.
- */
-export function maxPreparedSpells(
-  primaryClass: string, primaryLevel: number,
-  secondaryClass: string | null, secondaryLevel: number | null,
-  castingModifier: number,
-): number | null {
-  const parts = [
-    preparedClassLevel(primaryClass, primaryLevel),
-    secondaryClass ? preparedClassLevel(secondaryClass, secondaryLevel ?? 0) : 0,
-  ].filter(classLevel => classLevel > 0)
-  if (parts.length === 0) return null
-  return parts.reduce((sum, classLevel) => sum + Math.max(1, classLevel + castingModifier), 0)
-}
-
 // Total caster level → slots par niveau de sort (index 0 = niveau 1)
 export const MULTICLASS_SLOTS: Record<number, number[]> = {
   1:  [2],

@@ -78,6 +78,10 @@ class CharacterResource extends JsonResource
                 'attack_bonus' => $this->spell_attack_bonus,
                 'slots'        => (object) ($this->spell_slots ?? []),
                 'spells'       => $this->spells_known ?? [],
+                // Plafond de préparation calculé par le serveur — c'est lui qui refuse,
+                // l'interface ne fait que l'annoncer. `null` = classe qui « connaît »
+                // ses sorts, donc rien à plafonner.
+                'max_prepared' => $this->max_prepared_spells,
             ],
 
             'inventory' => [

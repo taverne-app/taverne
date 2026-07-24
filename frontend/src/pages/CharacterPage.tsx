@@ -49,7 +49,7 @@ import { useTabNotify } from '../hooks/useTabNotify'
 import { SRD_SPELLS, SPELL_DAMAGE, spellMatchesQuery, canonicalSpellName } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
 import { SPELL_DETAILS } from '../data/spell_details'
-import { computeMulticlassSlots, maxPreparedSpells } from '../data/multiclass'
+import { computeMulticlassSlots } from '../data/multiclass'
 import { ImageLightbox } from '../components/ImageLightbox'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
@@ -684,15 +684,10 @@ export function CharacterPage() {
   const [spellBrowserLevel, setSpellBrowserLevel] = useState<number | 'all'>('all')
   const [spellBrowserSearch, setSpellBrowserSearch] = useState('')
 
-  // Plafond de sorts préparés (niveau ≥ 1). null pour une classe qui « connaît » ses
-  // sorts (ensorceleur, barde…) : elle n'a pas de préparation à plafonner.
-  const maxPrepared = character
-    ? maxPreparedSpells(
-        character.character_class, character.level,
-        character.secondary_class, character.secondary_level,
-        character.spellcasting.modifier,
-      )
-    : null
+  // Plafond de sorts préparés (niveau ≥ 1), calculé par le serveur : c'est la même
+  // valeur qui fait autorité pour la fiche du joueur, laquelle écrit sans passer par
+  // ici. La règle a vécu en TypeScript ; la dupliquer l'aurait fait diverger.
+  const maxPrepared = character?.spellcasting.max_prepared ?? null
   const preparedLeveledCount = character
     ? character.spellcasting.spells.filter(s => s.level > 0 && s.prepared).length
     : 0

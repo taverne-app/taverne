@@ -313,6 +313,9 @@ export function SharedCharacterPage() {
     return acc
   }, {})
 
+  // Les tours de magie ne se préparent pas : ils échappent au plafond, ici comme au serveur.
+  const preparedLeveledCount = character.spellcasting.spells.filter(s => s.level > 0 && s.prepared).length
+
   const allSkills = Object.entries(character.skills).sort(([a], [b]) => a.localeCompare(b))
   const currency = character.currency
   const equippedItems = character.inventory.items.filter(i => i.equipped)
@@ -615,6 +618,15 @@ export function SharedCharacterPage() {
                       <span>DD <span className={`font-semibold ${th.text}`}>{character.spellcasting.save_dc}</span></span>
                       <span>Att. <span className={`font-semibold ${th.text}`}>{sign(character.spellcasting.attack_bonus)}</span></span>
                     </>
+                  )}
+                  {/* Le serveur refuse au-delà : autant l'annoncer avant le clic. */}
+                  {character.spellcasting.max_prepared !== null && (
+                    <span title="Sorts de niveau ≥ 1 préparables (niveau de classe + mod. d'incantation)">
+                      Préparés :{' '}
+                      <span className={`font-semibold ${preparedLeveledCount > character.spellcasting.max_prepared ? 'text-red-400' : th.text}`}>
+                        {preparedLeveledCount}/{character.spellcasting.max_prepared}
+                      </span>
+                    </span>
                   )}
                 </div>
                 <div className="space-y-2 mb-4">

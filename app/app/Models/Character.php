@@ -186,12 +186,15 @@ class Character extends Model
      */
     protected function defaultSpellcastingAbility(): ?string
     {
-        $class = mb_strtolower($this->character_class ?? '');
+        // Même normalisation que le plafond de préparation : sans elle, « Magicien »
+        // avec une espace parasite perdait sa caractéristique ici tout en gardant son
+        // plafond là-bas — deux réponses contradictoires sur la même fiche.
+        $class = self::normalizeClass($this->character_class);
 
         if (in_array($class, ['magicien', 'wizard', 'artificier', 'artificer'], true)) {
             return 'intelligence';
         }
-        if (in_array($class, ['clerc', 'cleric', 'druide', 'druid', 'rôdeur', 'rodeur', 'ranger'], true)) {
+        if (in_array($class, ['clerc', 'cleric', 'druide', 'druid', 'rodeur', 'ranger'], true)) {
             return 'wisdom';
         }
         if (in_array($class, ['barde', 'bard', 'ensorceleur', 'sorcerer', 'occultiste', 'warlock', 'paladin'], true)) {
@@ -214,6 +217,84 @@ class Character extends Model
     public function isAlive(): bool
     {
         return $this->death_saves_failures < 3;
+    }
+
+    /**
+     * Classes qui PRÉPARENT leurs sorts chaque jour, par opposition à celles qui les
+     * « connaissent » définitivement (ensorceleur, barde, occultiste, rôdeur) et n'ont
+     * donc aucun plafond. La valeur dit quelle part du niveau de classe entre dans
+     * « niveau + mod. » : plein pour les lanceurs complets, la moitié pour les
+     * demi-lanceurs (paladin arrondit à l'inférieur, artificier au supérieur).
+     */
+    private const PREPARED_CASTERS = [
+        'magicien'   => 'full',      'wizard'    => 'full',
+        'clerc'      => 'full',      'cleric'    => 'full',
+        'druide'     => 'full',      'druid'     => 'full',
+        'paladin'    => 'half-down',
+        'artificier' => 'half-up',   'artificer' => 'half-up',
+    ];
+
+    /** Minuscules sans accents : « Rôdeur » et « rodeur » désignent la même classe. */
+    private static function normalizeClass(?string $name): string
+    {
+        $lower = mb_strtolower(trim($name ?? ''));
+
+        return strtr($lower, [
+            'à' => 'a', 'â' => 'a', 'ä' => 'a', 'ç' => 'c', 'é' => 'e', 'è' => 'e',
+            'ê' => 'e', 'ë' => 'e', 'î' => 'i', 'ï' => 'i', 'ô' => 'o', 'ö' => 'o',
+            'û' => 'u', 'ù' => 'u', 'ü' => 'u',
+        ]);
+    }
+
+    private static function preparedClassLevel(?string $class, ?int $level): int
+    {
+        $kind = self::PREPARED_CASTERS[self::normalizeClass($class)] ?? null;
+        if ($kind === null) return 0;
+
+        $level = max(0, (int) $level);
+
+        return match ($kind) {
+            'full'      => $level,
+            'half-down' => intdiv($level, 2),
+            'half-up'   => (int) ceil($level / 2),
+        };
+    }
+
+    /**
+     * Nombre de sorts de niveau ≥ 1 préparables, ou `null` si aucune classe du
+     * personnage ne prépare (les tours de magie, eux, ne se préparent jamais).
+     * Règle 5e : niveau de la classe + mod. d'incantation, minimum 1 par classe.
+     * On somme sur les classes qui préparent — cas rare du multiclassage ; le modèle
+     * ne stocke qu'un seul modificateur d'incantation, on l'applique à chaque part.
+     *
+     * Cette règle a d'abord vécu en TypeScript. Elle est ici parce que le serveur doit
+     * pouvoir REFUSER : la fiche joueur est publique derrière son jeton, un plafond
+     * qui n'existe que dans l'interface ne plafonne rien.
+     */
+    public function getMaxPreparedSpellsAttribute(): ?int
+    {
+        $parts = array_filter([
+            self::preparedClassLevel($this->character_class, $this->level),
+            self::preparedClassLevel($this->secondary_class, $this->secondary_level),
+        ], fn (int $classLevel) => $classLevel > 0);
+
+        if ($parts === []) return null;
+
+        $modifier = $this->spellcasting_modifier;
+
+        return array_sum(array_map(
+            fn (int $classLevel) => max(1, $classLevel + $modifier),
+            $parts,
+        ));
+    }
+
+    /** Sorts de niveau ≥ 1 actuellement préparés. Les tours de magie n'en sont pas. */
+    public function getPreparedSpellsCountAttribute(): int
+    {
+        return count(array_filter(
+            $this->spells_known ?? [],
+            fn ($s) => (int) ($s['level'] ?? 0) > 0 && ($s['prepared'] ?? false),
+        ));
     }
 
     /**
