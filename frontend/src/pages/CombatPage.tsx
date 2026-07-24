@@ -600,8 +600,13 @@ export function CombatPage() {
     try { return localStorage.getItem(`taverne-combat-notes-${campaignId ?? 'default'}`) ?? '' } catch { return '' }
   })
 
-  // Manual initiative reordering
+  // Réordonnancement manuel de l'initiative (local au MJ ; les joueurs trient toujours
+  // par jet d'initiative). Deux états SÉPARÉS à dessein : `manualOrder` est l'arrangement
+  // retenu qui pilote l'affichage, `reordering` n'est que le mode d'édition (poignées,
+  // glisser-déposer). Les confondre faisait que revalider (sortir du mode) effaçait
+  // l'ordre donné et rebasculait sur l'initiative — le bug corrigé ici.
   const [manualOrder, setManualOrder] = useState<string[] | null>(null)
+  const [reordering, setReordering] = useState(false)
   const [dragRowId, setDragRowId] = useState<string | null>(null)
   const [dragOverId, setDragOverId] = useState<string | null>(null)
 
@@ -972,7 +977,9 @@ export function CombatPage() {
           setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
         }),
     ]), "Les initiatives n'ont pas toutes pu être enregistrées.")
-    setManualOrder(null)
+    // De nouveaux jets rendent caduc l'ordre donné à la main : on repart de l'initiative,
+    // et on sort du mode d'édition pour ne pas laisser des poignées sur un ordre effacé.
+    setManualOrder(null); setReordering(false)
     // Lancer l'initiative, c'est ouvrir le combat : les joueurs y accèdent.
     void setCombatActive(true)
   }
@@ -997,7 +1004,7 @@ export function CombatPage() {
           setCombatants(prev => prev.map(x => x.id === updated.id ? updated : x))
         }),
     ), "Les initiatives des combattants n'ont pas toutes pu être enregistrées.")
-    setManualOrder(null)
+    setManualOrder(null); setReordering(false)
     void setCombatActive(true)
   }
 
@@ -2232,21 +2239,21 @@ export function CombatPage() {
                   return (
                     <div
                       key={rowId(row)}
-                      draggable={!!manualOrder}
-                      onDragStart={manualOrder ? () => setDragRowId(rowId(row)) : undefined}
-                      onDragOver={manualOrder ? e => { e.preventDefault(); setDragOverId(rowId(row)) } : undefined}
-                      onDrop={manualOrder ? e => { e.preventDefault(); handleDrop(rowId(row)) } : undefined}
-                      onDragEnd={manualOrder ? () => { setDragRowId(null); setDragOverId(null) } : undefined}
-                      className={`px-5 py-4 transition-colors ${manualOrder ? 'cursor-grab' : ''} ${
-                        manualOrder && dragRowId === rowId(row) ? 'opacity-40' :
-                        manualOrder && dragOverId === rowId(row) && dragRowId !== rowId(row) ? 'border-t border-sky-500' :
+                      draggable={reordering}
+                      onDragStart={reordering ? () => setDragRowId(rowId(row)) : undefined}
+                      onDragOver={reordering ? e => { e.preventDefault(); setDragOverId(rowId(row)) } : undefined}
+                      onDrop={reordering ? e => { e.preventDefault(); handleDrop(rowId(row)) } : undefined}
+                      onDragEnd={reordering ? () => { setDragRowId(null); setDragOverId(null) } : undefined}
+                      className={`px-5 py-4 transition-colors ${reordering ? 'cursor-grab' : ''} ${
+                        reordering && dragRowId === rowId(row) ? 'opacity-40' :
+                        reordering && dragOverId === rowId(row) && dragRowId !== rowId(row) ? 'border-t border-sky-500' :
                         isActive ? 'bg-amber-500/10 border-l-2 border-amber-500' :
                         'hover:bg-stone-800/40'
                       }`}
                     >
                       <div className="flex items-center gap-2 sm:gap-4">
                         {/* Reorder handle */}
-                        {manualOrder && !combatTrackerSearch && (
+                        {reordering && !combatTrackerSearch && (
                           <div className="flex flex-col gap-0.5 shrink-0 select-none">
                             <button onClick={e => { e.stopPropagation(); moveRow(rowId(row), 'up') }} disabled={displayIdx === 0}
                               className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▲</button>
@@ -2724,21 +2731,21 @@ export function CombatPage() {
                 return (
                   <div
                     key={rowId(row)}
-                    draggable={!!manualOrder}
-                    onDragStart={manualOrder ? () => setDragRowId(rowId(row)) : undefined}
-                    onDragOver={manualOrder ? e => { e.preventDefault(); setDragOverId(rowId(row)) } : undefined}
-                    onDrop={manualOrder ? e => { e.preventDefault(); handleDrop(rowId(row)) } : undefined}
-                    onDragEnd={manualOrder ? () => { setDragRowId(null); setDragOverId(null) } : undefined}
-                    className={`px-5 py-4 transition-colors ${manualOrder ? 'cursor-grab' : ''} ${
-                      manualOrder && dragRowId === rowId(row) ? 'opacity-40' :
-                      manualOrder && dragOverId === rowId(row) && dragRowId !== rowId(row) ? 'border-t border-sky-500' :
+                    draggable={reordering}
+                    onDragStart={reordering ? () => setDragRowId(rowId(row)) : undefined}
+                    onDragOver={reordering ? e => { e.preventDefault(); setDragOverId(rowId(row)) } : undefined}
+                    onDrop={reordering ? e => { e.preventDefault(); handleDrop(rowId(row)) } : undefined}
+                    onDragEnd={reordering ? () => { setDragRowId(null); setDragOverId(null) } : undefined}
+                    className={`px-5 py-4 transition-colors ${reordering ? 'cursor-grab' : ''} ${
+                      reordering && dragRowId === rowId(row) ? 'opacity-40' :
+                      reordering && dragOverId === rowId(row) && dragRowId !== rowId(row) ? 'border-t border-sky-500' :
                       isActive ? 'bg-red-500/10 border-l-2 border-red-500' :
                       'hover:bg-stone-800/40'
                     }`}
                   >
                     <div className="flex items-center gap-2 sm:gap-4">
                       {/* Reorder handle */}
-                      {manualOrder && (
+                      {reordering && (
                         <div className="flex flex-col gap-0.5 shrink-0 select-none">
                           <button onClick={e => { e.stopPropagation(); moveRow(rowId(row), 'up') }} disabled={displayIdx === 0}
                             className="text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none transition-colors px-0.5">▲</button>
@@ -4285,10 +4292,24 @@ export function CombatPage() {
                   >⛺ Repos</button>
                 )}
                 <button
-                  onClick={() => { setManualOrder(manualOrder ? null : sorted.map(rowId)) }}
-                  className={`shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${manualOrder ? 'bg-sky-700/40 border-sky-500 text-sky-300' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'}`}
-                  title="Réordonner manuellement l'initiative (poignées ⠿ sur les lignes)"
-                >⇅ Réordonner</button>
+                  onClick={() => {
+                    // Sortir du mode conserve l'ordre donné ; y entrer l'amorce sur
+                    // l'ordre courant (initiative) seulement s'il n'en existe pas déjà.
+                    if (reordering) { setReordering(false) }
+                    else { if (!manualOrder) setManualOrder(sorted.map(rowId)); setReordering(true) }
+                  }}
+                  className={`shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border transition-colors ${reordering ? 'bg-sky-700/40 border-sky-500 text-sky-300' : 'bg-stone-800 border-stone-700 text-stone-400 hover:border-sky-600/50 hover:text-sky-400'}`}
+                  title={reordering ? 'Valider l’ordre manuel' : 'Réordonner manuellement l’initiative (poignées sur les lignes)'}
+                >⇅ {reordering ? 'Valider l’ordre' : 'Réordonner'}</button>
+                {/* Revenir à l'ordre d'initiative : le seul moyen d'abandonner l'ordre
+                    manuel maintenant que revalider ne l'efface plus. */}
+                {manualOrder && !reordering && (
+                  <button
+                    onClick={() => setManualOrder(null)}
+                    className="shrink-0 text-xs font-medium rounded-lg px-2.5 py-1 border bg-stone-800 border-stone-700 text-stone-400 hover:border-amber-600/50 hover:text-amber-400 transition-colors"
+                    title="Abandonner l'ordre manuel et revenir au tri par initiative"
+                  >↺ Initiative</button>
+                )}
               </div>
             )}
 
@@ -4412,7 +4433,7 @@ export function CombatPage() {
                           d'initiative avec ses poignées, donc l'ordre se change ici.
                           Ruban horizontal → ◄ ► au lieu de ▲ ▼. Hors du <button> de la
                           carte (un bouton ne peut pas en contenir un autre). */}
-                      {manualOrder && (
+                      {reordering && (
                         <div className="mt-0.5 flex items-center justify-center gap-1">
                           <button onClick={() => moveRow(id, 'up')} disabled={i === 0} title="Déplacer vers la gauche"
                             className="flex-1 text-sky-400 hover:text-sky-200 disabled:text-stone-700 text-xs leading-none py-0.5 rounded bg-stone-800 border border-stone-700 transition-colors">◄</button>
