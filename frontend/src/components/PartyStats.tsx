@@ -54,7 +54,7 @@ export function PartyStats({
 
   /**
    * Chaque personnage reçoit le montant PLEIN — l'XP d'une rencontre n'est pas
-   * divisée par le nombre de PJ, c'est la règle D&D 5e (le partage est déjà fait
+   * divisée par le nombre de PJ, c'est la règle 5e (le partage est déjà fait
    * dans le calcul de l'XP de rencontre).
    */
   async function handleAwardXp() {

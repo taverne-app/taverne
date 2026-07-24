@@ -18,7 +18,7 @@ const DOT: Record<TokenColor, string> = {
 
 // Diamètre des pions (px) au repos, quand il n'y a pas de grille pour donner l'échelle.
 const SIZE_PX: Record<BattleToken['size'], number> = { sm: 24, md: 30, lg: 44 }
-// Avec une grille, le pion se mesure en cases : Moyen occupe exactement une case (D&D 5e
+// Avec une grille, le pion se mesure en cases : Moyen occupe exactement une case (règles 5e
 // loge P et M dans une case, G dans quatre). Le 0.92 laisse voir le trait de la grille
 // sous le pion, sinon un M posé sur sa case a l'air de déborder.
 const SIZE_CELLS: Record<BattleToken['size'], number> = { sm: 0.57, md: 0.85, lg: 1.7 }

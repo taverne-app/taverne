@@ -20,7 +20,7 @@ export function LegalPage() {
 
         <section>
           <h2 className="text-white font-semibold text-base mb-2">2. Description du service</h2>
-          <p>La Taverne est un outil de gestion de campagnes pour jeux de rôle (D&D 5e et compatibles), accessible via abonnement mensuel. Un plan gratuit limité est disponible sans engagement.</p>
+          <p>La Taverne est un outil de gestion de campagnes pour jeux de rôle compatibles avec la 5e édition, accessible via abonnement mensuel. Un plan gratuit limité est disponible sans engagement.</p>
         </section>
 
         <section>

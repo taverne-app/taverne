@@ -36,7 +36,7 @@
       <p style="color: #78716c; font-size: 13px; word-break: break-all;">Si le bouton ne fonctionne pas, copiez ce lien dans votre navigateur : {{ $url }}</p>
     </div>
     <div class="footer">
-      <p>© {{ date('Y') }} La Taverne — Outil de gestion de campagnes D&D 5e</p>
+      <p>© {{ date('Y') }} La Taverne — Outil de gestion de campagnes de jeu de rôle 5e</p>
     </div>
   </div>
 </body>

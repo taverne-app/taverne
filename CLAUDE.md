@@ -1,6 +1,6 @@
 # Taverne — instructions de travail
 
-Gestionnaire de campagnes D&D 5e, en français, auto-hébergeable via Docker.
+Gestionnaire de campagnes de jeu de rôle 5e, en français, auto-hébergeable via Docker.
 Ce fichier est lu à chaque session : il contient ce qui **ne se déduit pas du code**.
 
 ---

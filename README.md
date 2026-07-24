@@ -4,9 +4,9 @@
 [![Stars](https://img.shields.io/github/stars/taverne-app/taverne?style=social)](https://github.com/taverne-app/taverne/stargazers)
 [![Version](https://img.shields.io/github/v/release/taverne-app/taverne?label=version)](https://github.com/taverne-app/taverne/releases)
 
-**Outil de gestion de campagnes Donjons & Dragons 5e en français — self-hostable via Docker.**
+**Outil de gestion de campagnes de jeu de rôle 5e en français — self-hostable via Docker.**
 
-Taverne centralise tout ce dont un Maître du Donjon et ses joueurs ont besoin : fiches de personnage interactives, suivi des combats en temps réel, compendiums intégrés et partage instantané entre les participants d'une session.
+Taverne centralise tout ce dont un meneur de jeu et ses joueurs ont besoin : fiches de personnage interactives, suivi des combats en temps réel, compendiums intégrés et partage instantané entre les participants d'une session.
 
 > Version SaaS disponible sur [taverne.app](https://taverne.app)
 

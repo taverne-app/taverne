@@ -249,7 +249,7 @@ export function CreateCharacterModal({ campaignId, onCreated, onClose }: Props) 
                   onChange={e => setName(e.target.value)}
                   autoFocus
                   className="w-full bg-stone-800 border border-stone-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500 transition-colors"
-                  placeholder="Aragorn, Elminster…"
+                  placeholder="Nom de votre personnage…"
                 />
                 {errors.name && <p className="text-red-400 text-xs mt-1">{errors.name}</p>}
               </div>

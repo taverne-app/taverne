@@ -3498,7 +3498,7 @@ export function CharacterPage() {
                   </div>
                 ))}
               </div>
-              <p className="text-stone-600 text-xs mt-3">Emplacements combinés selon la table multiclasse D&D 5e (PHB p.165)</p>
+              <p className="text-stone-600 text-xs mt-3">Emplacements combinés selon la table multiclasse du SRD 5.1</p>
             </div>
           )
         })()}

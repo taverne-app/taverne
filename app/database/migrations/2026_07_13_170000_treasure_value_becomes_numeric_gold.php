@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\DB;
  */
 return new class extends Migration
 {
-    /** Taux D&D 5e vers la pièce d'or. */
+    /** Taux 5e vers la pièce d'or. */
     private const RATES = ['pp' => 10.0, 'po' => 1.0, 'pe' => 0.5, 'pa' => 0.1, 'pc' => 0.01];
 
     public function up(): void

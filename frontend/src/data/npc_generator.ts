@@ -18,7 +18,7 @@ const NAMES: Record<string, { m: string[]; f: string[] }> = {
     f: ['Aelys', 'Brynn', 'Calia', 'Dara', 'Elara', 'Fern', 'Gilda', 'Hana', 'Isra', 'Jora', 'Kira', 'Lyra', 'Mira', 'Nara', 'Odra', 'Petra', 'Rael', 'Sela', 'Tara', 'Ursa', 'Vela', 'Wren', 'Xyla', 'Yara', 'Zora'],
   },
   Elfe: {
-    m: ['Aelar', 'Caelum', 'Erevan', 'Faenor', 'Galindel', 'Hadarai', 'Immeral', 'Jelenneth', 'Kelemvor', 'Laucian', 'Mindartis', 'Naeris', 'Orym', 'Paelias', 'Quarion', 'Riardon', 'Soveliss', 'Thamior', 'Varis', 'Zephyros'],
+    m: ['Aelar', 'Caelum', 'Erevan', 'Faenor', 'Galindel', 'Hadarai', 'Immeral', 'Jelenneth', 'Keleneth', 'Laucian', 'Mindartis', 'Naeris', 'Orym', 'Paelias', 'Quarion', 'Riardon', 'Soveliss', 'Thamior', 'Varis', 'Zephyros'],
     f: ['Adrie', 'Birel', 'Caelynn', 'Dara', 'Enna', 'Faral', 'Gennal', 'Halia', 'Irann', 'Keyla', 'Leshanna', 'Mialee', 'Naivara', 'Quelenna', 'Raven', 'Sariel', 'Thia', 'Vadania', 'Valanthe', 'Xanaphia'],
   },
   Nain: {

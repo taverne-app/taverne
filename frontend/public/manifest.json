@@ -1,7 +1,7 @@
 {
   "name": "La Taverne",
   "short_name": "Taverne",
-  "description": "Fiche de personnage D&D 5e — accessible en session, même hors connexion.",
+  "description": "Fiche de personnage 5e — accessible en session, même hors connexion.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

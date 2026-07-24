@@ -119,7 +119,7 @@ class Character extends Model
         return (int) floor((($score ?? 10) - 10) / 2);
     }
 
-    /** Bonus de maîtrise selon le niveau (règle D&D 5e) */
+    /** Bonus de maîtrise selon le niveau (règle 5e) */
     public function getProficiencyBonusAttribute(): int
     {
         return (int) ceil($this->level / 4) + 1;
@@ -325,7 +325,7 @@ class Character extends Model
         $this->update([
             // L'effet principal d'un repos long : on récupère TOUS ses points de vie.
             'current_hp'            => $this->max_hp,
-            // Les PV temporaires ne survivent pas à un repos long (PHB).
+            // Les PV temporaires ne survivent pas à un repos long (règle 5e).
             'temporary_hp'          => 0,
             // Un repos long retire un niveau d'épuisement.
             'exhaustion_level'      => max(0, ($this->exhaustion_level ?? 0) - 1),

@@ -95,10 +95,10 @@ export function LandingPage() {
       {/* Hero */}
       <section className="max-w-3xl mx-auto px-5 pt-24 pb-20 text-center">
         <p className="text-amber-500 text-sm font-semibold uppercase tracking-widest mb-4">
-          Pour les maîtres du donjon
+          Pour les meneurs de jeu
         </p>
         <h1 className="text-4xl sm:text-5xl font-bold leading-tight mb-5">
-          Gérez vos campagnes D&D 5e<br className="hidden sm:block" /> sans vous éparpiller
+          Gérez vos campagnes 5e<br className="hidden sm:block" /> sans vous éparpiller
         </h1>
         <p className="text-stone-400 text-lg leading-relaxed mb-8 max-w-xl mx-auto">
           PNJ, lieux, quêtes, combat, sessions — tout ce dont votre table a besoin, accessible en une seule appli.
@@ -210,7 +210,7 @@ export function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-stone-800 py-6">
         <p className="text-center text-stone-600 text-xs flex items-center justify-center gap-3 flex-wrap">
-          <span>© {new Date().getFullYear()} La Taverne — Outil de gestion de campagnes D&D 5e</span>
+          <span>© {new Date().getFullYear()} La Taverne — Outil de gestion de campagnes de jeu de rôle 5e</span>
           <Link to="/legal"   className="hover:text-stone-400 transition-colors">CGV</Link>
           <Link to="/privacy" className="hover:text-stone-400 transition-colors">Confidentialité</Link>
         </p>

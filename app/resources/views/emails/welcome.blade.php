@@ -41,7 +41,7 @@
       <p style="color: #78716c; font-size: 13px;">Des questions ? Répondez directement à cet email.</p>
     </div>
     <div class="footer">
-      <p>© {{ date('Y') }} La Taverne — Outil de gestion de campagnes D&D 5e</p>
+      <p>© {{ date('Y') }} La Taverne — Outil de gestion de campagnes de jeu de rôle 5e</p>
     </div>
   </div>
 </body>

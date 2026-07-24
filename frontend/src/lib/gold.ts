@@ -6,7 +6,7 @@
  * (« 500 po », « inestimable ») : rien n'était additionnable.
  */
 
-/** Taux de change D&D 5e vers la pièce d'or. */
+/** Taux de change 5e vers la pièce d'or. */
 export const COIN_RATES = { pp: 10, po: 1, pe: 0.5, pa: 0.1, pc: 0.01 } as const
 
 export interface Coins {
