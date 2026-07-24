@@ -24,7 +24,7 @@ export default function CampaignWorldSection({
   campaign, setCampaign, copiedKey, copyToClipboard, exportSection, importSectionData, saving,
 }: SectionProps) {
   // Notes privées du MJ. Elles vivaient sur la page Session ; leur place est ici, avec
-  // le monde qu'elles décrivent — et le futur wiki les remplacera.
+  // le monde qu'elles décrivent — et le futur codex les remplacera.
   const [dmNotesDraft, setDmNotesDraft] = useState(campaign.dm_notes ?? '')
   const [savingNotes, setSavingNotes] = useState(false)
   const [dmNotesPreview, setDmNotesPreview] = useState(false)

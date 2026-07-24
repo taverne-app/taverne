@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\CharacterController;
 use App\Http\Controllers\Api\CombatantController;
 use App\Http\Controllers\Api\ChapterController;
 use App\Http\Controllers\Api\ShareController;
+use App\Http\Controllers\Api\CodexPageController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +37,9 @@ Route::patch('/share/character/{token}/cast',    [ShareController::class, 'castS
 Route::get('/share/character/{token}/notes',    [ShareController::class, 'notes']);
 Route::put('/share/character/{token}/notes',    [ShareController::class, 'updateNotes']);
 Route::get('/share/{token}/rolls',              [ShareController::class, 'campaignRolls']);
+Route::get('/share/{token}/codex',               [ShareController::class, 'codexPages']);
+Route::post('/share/{token}/codex',              [ShareController::class, 'storeCodexPage']);
+Route::put('/share/{token}/codex/{codexPage}',    [ShareController::class, 'updateCodexPage']);
 Route::get('/share/{token}',                    [ShareController::class, 'show']);
 
 Route::middleware('auth:sanctum')->group(function () {
@@ -63,6 +67,7 @@ Route::middleware('auth:sanctum')->group(function () {
         Route::post('combat-turn',              [CampaignController::class, 'broadcastTurn']);
         Route::get('rolls',                     [CampaignController::class, 'rolls']);
         Route::patch('time-of-day',             [CampaignController::class, 'setTimeOfDay']);
+        Route::apiResource('codex-pages', CodexPageController::class)->except(['show']);
         Route::post('chapters/reorder', [ChapterController::class, 'reorder']);
         Route::apiResource('chapters', ChapterController::class)->except(['show']);
         Route::apiResource('combatants', CombatantController::class)->except(['show', 'update']);

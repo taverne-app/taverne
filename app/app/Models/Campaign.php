@@ -53,6 +53,12 @@ class Campaign extends Model
         return $this->hasMany(Character::class)->orderBy('name');
     }
 
+    /** L'arbre du codex à plat : le front le remonte à partir de `parent_id`. */
+    public function codexPages(): HasMany
+    {
+        return $this->hasMany(CodexPage::class)->orderBy('position')->orderBy('id');
+    }
+
     /**
      * Les chapitres, dans l'ordre où ils se lisent : les terminés tombent en fin de
      * liste sans perdre leur rang les uns par rapport aux autres.

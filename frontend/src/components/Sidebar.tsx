@@ -111,6 +111,7 @@ export function Sidebar({ pinned, onTogglePin }: { pinned: boolean; onTogglePin:
     ? [
         { to: `/campaigns/${current.id}/chapitres`, icon: '📖', label: 'Chapitres',   end: false, sep: false , badge: badges.chapitres, children: children.chapitres },
         { to: `/campaigns/${current.id}/monde`,    icon: '🗺', label: 'Monde',       end: false, sep: false , badge: badges.monde },
+        { to: `/campaigns/${current.id}/codex`,     icon: '📚', label: 'Codex',        end: false, sep: false },
         { to: `/campaigns/${current.id}/bestiaire`, icon: '🐉', label: 'Bestiaire',  end: false, sep: false , badge: badges.bestiaire, children: children.bestiaire },
         { to: `/campaigns/${current.id}/campagne`, icon: '🏰', label: 'Campagne',    end: false, sep: false },
         { to: `/characters?campaign=${current.id}`, icon: '👤', label: 'Personnages', end: false, sep: true, children: children.characters },

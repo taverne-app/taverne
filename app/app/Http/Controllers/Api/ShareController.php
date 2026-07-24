@@ -8,10 +8,13 @@ use App\Events\SpellCast;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\CharacterResource;
 use App\Http\Resources\SharedCampaignResource;
+use App\Http\Resources\CodexPageResource;
 use App\Models\Campaign;
 use App\Models\Character;
+use App\Models\CodexPage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 class ShareController extends Controller
 {
@@ -228,6 +231,107 @@ class ShareController extends Controller
         CharacterUpdated::dispatch($fresh);
 
         return new CharacterResource($fresh);
+    }
+
+    /**
+     * Le codex vu des joueurs : uniquement les pages 'table'. Une page 'mj' ne doit
+     * apparaître d'AUCUNE façon ici — ni son titre, ni sa place dans l'arbre.
+     */
+    public function codexPages(string $token): AnonymousResourceCollection
+    {
+        $campaign = Campaign::where('share_token', $token)->firstOrFail();
+
+        return CodexPageResource::collection(
+            $campaign->codexPages()->where('visibility', 'table')->get()
+        );
+    }
+
+    public function storeCodexPage(string $token, Request $request): CodexPageResource
+    {
+        $campaign = Campaign::where('share_token', $token)->firstOrFail();
+
+        $validated = $request->validate([
+            'title'           => ['required', 'string', 'max:150'],
+            'body'            => ['sometimes', 'nullable', 'string', 'max:100000'],
+            'parent_id'       => ['sometimes', 'nullable', 'integer'],
+            'character_token' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        // Un joueur ne range sa page que sous une page qu'il voit. Un parent 'mj' le
+        // renseignerait sur l'existence d'un secret : on le refuse comme inexistant.
+        $parentId = $this->visiblePlayerParent($campaign, $validated['parent_id'] ?? null);
+
+        $page = $campaign->codexPages()->create([
+            'title'       => $validated['title'],
+            'body'        => $validated['body'] ?? null,
+            'parent_id'   => $parentId,
+            // Jamais choisi par le joueur : ce qu'il écrit appartient à la table.
+            'visibility'  => 'table',
+            'position'    => ((int) $campaign->codexPages()->where('parent_id', $parentId)->max('position')) + 1,
+            'last_editor' => $this->editorName($campaign, $validated['character_token'] ?? null),
+        ]);
+
+        return new CodexPageResource($page);
+    }
+
+    /**
+     * Les joueurs modifient le texte, jamais la structure ni la visibilité : déplacer
+     * ou rendre secrète une page reste au MJ. Ils ne suppriment pas non plus — rien
+     * ne rattrape une suppression ici (ni dump, ni PITR).
+     */
+    public function updateCodexPage(string $token, CodexPage $codexPage, Request $request): CodexPageResource
+    {
+        $campaign = Campaign::where('share_token', $token)->firstOrFail();
+
+        abort_if($codexPage->campaign_id !== $campaign->id, 403);
+        abort_if($codexPage->visibility !== 'table', 404);
+
+        $validated = $request->validate([
+            'title'           => ['sometimes', 'string', 'max:150'],
+            'body'            => ['sometimes', 'nullable', 'string', 'max:100000'],
+            'character_token' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        $codexPage->update([
+            'title'       => $validated['title'] ?? $codexPage->title,
+            'body'        => array_key_exists('body', $validated) ? $validated['body'] : $codexPage->body,
+            'last_editor' => $this->editorName($campaign, $validated['character_token'] ?? null),
+        ]);
+
+        return new CodexPageResource($codexPage->fresh());
+    }
+
+    private function visiblePlayerParent(Campaign $campaign, ?int $parentId): ?int
+    {
+        if ($parentId === null) {
+            return null;
+        }
+
+        abort_unless(
+            $campaign->codexPages()->whereKey($parentId)->where('visibility', 'table')->exists(),
+            422,
+            'Page parente introuvable.',
+        );
+
+        return $parentId;
+    }
+
+    /**
+     * Le lien de campagne est le même pour toute la table : il ne dit pas qui écrit.
+     * Le jeton du PERSONNAGE, lui, n'est remis qu'à son joueur — c'est la seule
+     * identité disponible. À défaut, la page reste signée d'un joueur anonyme.
+     */
+    private function editorName(Campaign $campaign, ?string $characterToken): string
+    {
+        if (! $characterToken) {
+            return 'Un joueur';
+        }
+
+        $character = Character::where('share_token', $characterToken)
+            ->where('campaign_id', $campaign->id)
+            ->first();
+
+        return $character?->name ?? 'Un joueur';
     }
 
     private function applyDamage(Character $character, int $amount): void

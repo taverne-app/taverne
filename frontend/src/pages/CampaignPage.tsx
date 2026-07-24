@@ -6,6 +6,7 @@ const CampaignWorldSection = lazy(() => import('./campaign/CampaignWorldSection'
 const CampaignChapterSection = lazy(() => import('./campaign/CampaignChapterSection'))
 const CampaignBestiary = lazy(() => import('./campaign/CampaignBestiary'))
 const CampaignOverviewSection = lazy(() => import('./campaign/CampaignOverviewSection'))
+const CampaignCodexSection = lazy(() => import('./campaign/CampaignCodexSection'))
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import {
   getCampaign,
@@ -91,7 +92,7 @@ export function CampaignPage() {
   // Carte de campagne
 
   // Navigation par onglets
-  const VALID_TABS = ['chapitres', 'monde', 'bestiaire', 'campagne'] as const
+  const VALID_TABS = ['chapitres', 'monde', 'codex', 'bestiaire', 'campagne'] as const
   type Tab = typeof VALID_TABS[number]
   /**
    * L'onglet vit dans l'URL, pas dans le localStorage : sans ça, aucun lien
@@ -543,6 +544,11 @@ export function CampaignPage() {
         {/* Section Bestiaire : chunk séparé. */}
         <Suspense fallback={<p className="text-stone-600 text-sm py-8 text-center">Chargement…</p>}>
           {activeTab === 'bestiaire' && <CampaignBestiary {...sectionProps} />}
+        </Suspense>
+
+        {/* Section Codex : chunk séparé. */}
+        <Suspense fallback={<p className="text-stone-600 text-sm py-8 text-center">Chargement…</p>}>
+          {activeTab === 'codex' && <CampaignCodexSection {...sectionProps} />}
         </Suspense>
 
 

@@ -8,6 +8,7 @@ import { FloatingDiceRoller } from '../components/FloatingDiceRoller'
 import { RulesCompendium } from '../components/RulesCompendium'
 import { SharedSidebar } from '../components/SharedSidebar'
 import { PlayerNotes } from '../components/PlayerNotes'
+import { SharedCodex } from '../components/SharedCodex'
 
 
 export function SharedCampaignPage() {
@@ -98,7 +99,7 @@ export function SharedCampaignPage() {
           </section>
         )}
 
-        {/* Ce que les joueurs savent du passé de la campagne viendra de leur wiki,
+        {/* Ce que les joueurs savent du passé de la campagne viendra de leur codex,
             écrit pour eux. Les chapitres du MJ ne sont pas publiables : ils portent
             ses secrets. */}
 
@@ -267,6 +268,8 @@ export function SharedCampaignPage() {
             </div>
           </section>
         )}
+
+        {token && <SharedCodex campaignToken={token} />}
 
         {token && <PlayerNotes campaignToken={token} />}
 

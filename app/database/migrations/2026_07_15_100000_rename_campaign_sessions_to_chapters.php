@@ -14,7 +14,7 @@ use Illuminate\Support\Facades\Schema;
  *   - `status` (planned|played) devient `done` : une seule coche, pas un cycle de vie.
  *   - `campaigns.campaign_milestones` disparaît : les jalons faisaient doublon avec les
  *     chapitres côté MJ, et leur seul rôle propre (montrer le passé aux joueurs) revient
- *     au futur wiki joueurs.
+ *     au futur codex joueurs.
  *
  * Les chapitres terminés gardent leur ordre : ils passent en fin de file, ils ne se
  * mélangent pas. D'où la renumérotation ci-dessous — les séances jouées avaient toutes

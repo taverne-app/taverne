@@ -12,11 +12,11 @@ use Illuminate\Http\Resources\Json\JsonResource;
  * informations destinées aux joueurs : ni notes du MJ, ni rencontres/monstres/tables
  * réservés au MJ, et les pions cachés du plateau (embuscades, pièges) sont retirés
  * — pas seulement masqués côté client. Les quêtes elles-mêmes ne sont plus publiées :
- * ce que les joueurs savent de l'aventure viendra de leur wiki, pas de mes objectifs.
+ * ce que les joueurs savent de l'aventure viendra de leur codex, pas de mes objectifs.
  *
  * Les chapitres n'y figurent PAS, même terminés. Un chapitre porte la préparation du
  * MJ — secrets, accroches, trésors à venir : le publier vendrait la mèche. Ce que les
- * joueurs savent du passé sera leur wiki, écrit pour eux, pas un sous-produit de mes
+ * joueurs savent du passé sera leur codex, écrit pour eux, pas un sous-produit de mes
  * notes.
  */
 class SharedCampaignResource extends JsonResource
