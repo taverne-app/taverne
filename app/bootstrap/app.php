@@ -15,7 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        //
+        // Sans cela, le middleware d'authentification construit une redirection vers
+        // route('login') — qui n'existe pas ici, l'authentification vivant dans la SPA.
+        // La RouteNotFoundException part alors en 500 avant que le rendu JSON plus bas
+        // n'ait vu passer l'AuthenticationException. Renvoyer null la laisse remonter.
+        $middleware->redirectGuestsTo(fn () => null);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
