@@ -46,10 +46,11 @@ import { useToast } from '../contexts/ToastContext'
 import { ApiError } from '../api/client'
 import { createEcho, REALTIME_CONFIGURED } from '../lib/echo'
 import { useTabNotify } from '../hooks/useTabNotify'
-import { SRD_SPELLS, SPELL_DAMAGE } from '../data/spells'
+import { SRD_SPELLS, SPELL_DAMAGE, spellMatchesQuery } from '../data/spells'
 import { MAGIC_ITEMS, type MagicItem, type ItemRarity } from '../data/items'
 import { SPELL_DETAILS } from '../data/spell_details'
-import { computeMulticlassSlots } from '../data/multiclass'
+import { computeMulticlassSlots, maxPreparedSpells } from '../data/multiclass'
+import { PortraitLightbox } from '../components/PortraitLightbox'
 import { SpellCompendiumModal } from '../components/SpellCompendiumModal'
 import { MarkdownText } from '../components/MarkdownText'
 import { ImagePicker } from '../components/ImagePicker'
@@ -683,6 +684,19 @@ export function CharacterPage() {
   const [spellBrowserLevel, setSpellBrowserLevel] = useState<number | 'all'>('all')
   const [spellBrowserSearch, setSpellBrowserSearch] = useState('')
 
+  // Plafond de sorts préparés (niveau ≥ 1). null pour une classe qui « connaît » ses
+  // sorts (ensorceleur, barde…) : elle n'a pas de préparation à plafonner.
+  const maxPrepared = character
+    ? maxPreparedSpells(
+        character.character_class, character.level,
+        character.secondary_class, character.secondary_level,
+        character.spellcasting.modifier,
+      )
+    : null
+  const preparedLeveledCount = character
+    ? character.spellcasting.spells.filter(s => s.level > 0 && s.prepared).length
+    : 0
+
   async function handleAddSpell() {
     if (!character || !spellNameDraft.trim()) return
     const lvl = parseInt(spellLevelDraft, 10)
@@ -737,6 +751,13 @@ export function CharacterPage() {
 
   async function handleTogglePrepared(index: number) {
     if (!character) return
+    const spell = character.spellcasting.spells[index]
+    // Plafond strict : on ne prépare pas un sort de niveau ≥ 1 de plus que le maximum.
+    // Les tours de magie (niveau 0) ne se préparent pas — ils échappent au plafond.
+    if (!spell.prepared && spell.level > 0 && maxPrepared != null && preparedLeveledCount >= maxPrepared) {
+      toast.error(`Maximum atteint : ${maxPrepared} sorts préparables (niveau + mod. d'incantation).`)
+      return
+    }
     const next = character.spellcasting.spells.map((s, i) =>
       i === index ? { ...s, prepared: !s.prepared } : s,
     )
@@ -876,7 +897,7 @@ export function CharacterPage() {
     if (value.trim().length < 2) { setSpellSuggestions([]); return }
     const lower = value.toLowerCase()
     setSpellSuggestions(
-      SRD_SPELLS.filter(([name]) => name.toLowerCase().includes(lower)).slice(0, 8),
+      SRD_SPELLS.filter(([name]) => spellMatchesQuery(name, lower)).slice(0, 8),
     )
   }
 
@@ -1793,11 +1814,10 @@ export function CharacterPage() {
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div className="flex items-start gap-4 min-w-0">
                 {character.portrait_url && (
-                  <img
+                  <PortraitLightbox
                     src={character.portrait_url}
                     alt={character.name}
                     className="w-16 h-16 rounded-full object-cover shrink-0 border-2 border-stone-700"
-                    onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                 )}
               <div className="min-w-0">
@@ -3495,17 +3515,29 @@ export function CharacterPage() {
               {character.spellcasting.spells.length > 0 && (() => {
                 const preparedCount = character.spellcasting.spells.filter(s => s.prepared).length
                 const totalCount = character.spellcasting.spells.length
+                // Lanceur qui prépare : on montre le plafond (niveau + mod.) plutôt que
+                // le total connu, et on alerte en rouge s'il est dépassé — un état déjà
+                // trop chargé ne se corrige pas tout seul, le MJ doit décocher.
+                const over = maxPrepared != null && preparedLeveledCount > maxPrepared
                 return (
                   <button
                     onClick={() => setSpellFilter(f => f === 'all' ? 'prepared' : 'all')}
                     className={`text-xs rounded-lg px-2 py-0.5 border transition-colors ${
-                      spellFilter === 'prepared'
-                        ? 'bg-violet-700/40 border-violet-600/50 text-violet-300'
-                        : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
+                      over
+                        ? 'bg-red-900/50 border-red-600/60 text-red-300'
+                        : spellFilter === 'prepared'
+                          ? 'bg-violet-700/40 border-violet-600/50 text-violet-300'
+                          : 'bg-stone-800 border-stone-700 text-stone-500 hover:text-stone-300'
                     }`}
-                    title={spellFilter === 'all' ? 'Afficher uniquement les sorts préparés' : 'Afficher tous les sorts'}
+                    title={
+                      maxPrepared != null
+                        ? `${preparedLeveledCount} sorts préparés sur ${maxPrepared} (niveau + mod. d'incantation) — les tours de magie ne comptent pas`
+                        : spellFilter === 'all' ? 'Afficher uniquement les sorts préparés' : 'Afficher tous les sorts'
+                    }
                   >
-                    {preparedCount}/{totalCount} préparés
+                    {maxPrepared != null
+                      ? `${preparedLeveledCount}/${maxPrepared} préparés`
+                      : `${preparedCount}/${totalCount} préparés`}
                   </button>
                 )
               })()}
@@ -3561,7 +3593,7 @@ export function CharacterPage() {
             const known = new Set(character.spellcasting.spells.map(s => s.name))
             const filtered = SRD_SPELLS.filter(([name, level]) =>
               (spellBrowserLevel === 'all' || level === spellBrowserLevel) &&
-              (spellBrowserSearch === '' || name.toLowerCase().includes(spellBrowserSearch.toLowerCase()))
+              (spellBrowserSearch === '' || spellMatchesQuery(name, spellBrowserSearch.toLowerCase()))
             )
             return (
               <div className="mb-4 pb-4 border-b border-stone-800">
@@ -3728,14 +3760,26 @@ export function CharacterPage() {
                                   : 'bg-stone-800 border-stone-700 text-stone-400'
                             }`}
                           >
-                            <button
-                              onClick={() => handleTogglePrepared(spell._idx)}
-                              disabled={saving}
-                              title={spell.prepared ? 'Marquer comme non préparé' : 'Marquer comme préparé'}
-                              className={`w-2.5 h-2.5 rounded-full border transition-colors disabled:cursor-not-allowed shrink-0 ${
-                                spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
-                              }`}
-                            />
+                            {(() => {
+                              // Plafond atteint : la coche d'un sort de niveau ≥ 1 encore
+                              // non préparé est désactivée plutôt que de cliquer pour rien.
+                              const atCap = !spell.prepared && spell.level > 0
+                                && maxPrepared != null && preparedLeveledCount >= maxPrepared
+                              return (
+                                <button
+                                  onClick={() => handleTogglePrepared(spell._idx)}
+                                  disabled={saving || atCap}
+                                  title={
+                                    atCap
+                                      ? `Maximum atteint : ${maxPrepared} sorts préparables`
+                                      : spell.prepared ? 'Marquer comme non préparé' : 'Marquer comme préparé'
+                                  }
+                                  className={`w-2.5 h-2.5 rounded-full border transition-colors disabled:cursor-not-allowed shrink-0 ${
+                                    spell.prepared ? 'bg-violet-400 border-violet-400' : 'bg-transparent border-stone-500'
+                                  } ${atCap ? 'opacity-30' : ''}`}
+                                />
+                              )
+                            })()}
                             {(() => {
                               const detail = SPELL_DETAILS[spell.name]
                               return (

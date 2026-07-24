@@ -4,6 +4,7 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { scaleCantripDamage } from '../data/spells'
 import { setInitiativeRoll, updateInspiration, updateConditions, updateIdentity, updateDeathSaves, useSpellSlot, updateHp, updateConcentration, shortRest, longRest, type Character, type DiceRoll, type AttackMacro, type Spell } from '../api/characters'
 import { getCampaign, updateCampaign, broadcastCombatTurn, type Campaign, type SavedEncounter, type CustomMonster, type MonsterAttack, type BattleMap } from '../api/campaigns'
+import { PortraitLightbox } from '../components/PortraitLightbox'
 import { BattleMapBoard } from '../components/BattleMapBoard'
 import {
   listCombatants,
@@ -2297,11 +2298,10 @@ export function CombatPage() {
                         <div className="flex-1 min-w-0">
                           <div className="flex flex-wrap items-center gap-2 min-w-0">
                             {character.portrait_url && (
-                              <img
+                              <PortraitLightbox
                                 src={character.portrait_url}
                                 alt={character.name}
                                 className="w-7 h-7 rounded-full object-cover shrink-0 border border-stone-700"
-                                onError={e => { (e.target as HTMLImageElement).style.display = 'none' }}
                               />
                             )}
                             <Link
