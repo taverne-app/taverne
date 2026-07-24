@@ -154,7 +154,8 @@ export function generateNpc(): GeneratedNpc {
   const namePool = NAMES[race] ?? NAMES['Humain']
   const name = pick(gender === 'Homme' ? namePool.m : namePool.f)
   const profession = pick(PROFESSIONS)
-  const appearance = `${pick(BUILD)}, ${pick(HAIR)}, ${pick(EYES)}. ${pick(DISTINCTIVE).charAt(0).toUpperCase() + pick(DISTINCTIVE).slice(1)}.`
+  const distinctive = pick(DISTINCTIVE)
+  const appearance = `${pick(BUILD)}, ${pick(HAIR)}, ${pick(EYES)}. ${distinctive.charAt(0).toUpperCase() + distinctive.slice(1)}.`
   const personality = pick(TRAITS)
   const bond = pick(BONDS)
   const flaw = pick(FLAWS)
