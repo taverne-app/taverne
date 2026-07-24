@@ -9,6 +9,7 @@ import { RulesCompendium } from '../components/RulesCompendium'
 import { SharedSidebar } from '../components/SharedSidebar'
 import { PlayerNotes } from '../components/PlayerNotes'
 import { SharedCodex } from '../components/SharedCodex'
+import { ImageLightbox, ImageZoomModal } from '../components/ImageLightbox'
 
 
 export function SharedCampaignPage() {
@@ -19,6 +20,9 @@ export function SharedCampaignPage() {
   const [npcSearch, setNpcSearch] = useState('')
   const [locationSearchShared, setLocationSearchShared] = useState('')
   const [treasurySearch, setTreasurySearch] = useState('')
+  // Carte de campagne agrandie : le déclencheur est le conteneur (l'<img> est sous la
+  // couche d'épingles), pas l'image, d'où une modale contrôlée plutôt qu'ImageLightbox.
+  const [zoomedMap, setZoomedMap] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -108,7 +112,12 @@ export function SharedCampaignPage() {
           <section>
             <h2 className="text-stone-500 text-xs font-semibold uppercase tracking-widest mb-3">Carte</h2>
             <div className="relative bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
-              <div className="relative" style={{ userSelect: 'none' }}>
+              <div
+                className="relative cursor-zoom-in"
+                style={{ userSelect: 'none' }}
+                title="Double-cliquez pour agrandir la carte"
+                onDoubleClick={() => setZoomedMap(campaign.campaign_map!.image_url)}
+              >
                 <img
                   src={campaign.campaign_map.image_url}
                   alt="Carte de campagne"
@@ -225,9 +234,7 @@ export function SharedCampaignPage() {
                     </div>
                     {loc.notes && <MarkdownText className="text-stone-400 text-xs mt-2 line-clamp-3">{loc.notes}</MarkdownText>}
                     {loc.map_url && (
-                      <a href={loc.map_url} target="_blank" rel="noopener noreferrer" title="Ouvrir la carte en grand" className="block mt-2">
-                        <img src={loc.map_url} alt={`Carte de ${loc.name}`} className="w-full rounded-lg border border-stone-800" />
-                      </a>
+                      <ImageLightbox src={loc.map_url} alt={`Carte de ${loc.name}`} className="w-full rounded-lg border border-stone-800 block mt-2" />
                     )}
                   </div>
                 ))}
@@ -277,6 +284,7 @@ export function SharedCampaignPage() {
       <FloatingDiceRoller campaign={token ? { kind: 'share', token } : undefined} />
       <RulesCompendium />
     </div>
+    {zoomedMap && <ImageZoomModal src={zoomedMap} alt="Carte de campagne" onClose={() => setZoomedMap(null)} />}
     </>
   )
 }

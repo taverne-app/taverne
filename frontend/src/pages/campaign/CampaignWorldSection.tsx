@@ -10,6 +10,7 @@ import {
 import { MarkdownText } from '../../components/MarkdownText'
 import { MicButton } from '../../components/MicButton'
 import { ImagePicker } from '../../components/ImagePicker'
+import { ImageLightbox, ImageZoomModal } from '../../components/ImageLightbox'
 import { generateNpc, generateNpcName, NPC_RACES, type GeneratedNpc } from '../../data/npc_generator'
 import type { SectionProps } from './shared'
 import { uuid } from './shared'
@@ -63,6 +64,10 @@ export default function CampaignWorldSection({
   const [mapUrlDraft, setMapUrlDraft] = useState('')
   const [editingMapUrl, setEditingMapUrl] = useState(false)
   const [mapAddingPin, setMapAddingPin] = useState(false)
+  // Carte de campagne agrandie : le double-clic est posé sur le conteneur (l'<img> est
+  // en pointer-events-none sous la couche d'épingles). Désactivé en mode « pose
+  // d'épingle », où le clic place un point — on ne veut pas zoomer en même temps.
+  const [zoomedMap, setZoomedMap] = useState<string | null>(null)
   const [pinLabelDraft, setPinLabelDraft] = useState('')
   const [pinColorDraft, setPinColorDraft] = useState<MapPin['color']>('amber')
   const [editingPinId, setEditingPinId] = useState<string | null>(null)
@@ -284,6 +289,7 @@ export default function CampaignWorldSection({
   ]
 
   return (
+    <>
     <div className="grid gap-4 md:grid-cols-[minmax(0,200px)_minmax(0,1fr)]">
       {/* Sommaire du Monde. Les cinq blocs tenaient dans une seule colonne : il fallait
           faire défiler la page entière pour atteindre les factions. */}
@@ -1111,9 +1117,7 @@ export default function CampaignWorldSection({
                               </div>
                             )}
                             {loc.map_url && (
-                              <a href={loc.map_url} target="_blank" rel="noopener noreferrer" title="Ouvrir la carte en grand">
-                                <img src={loc.map_url} alt={`Carte de ${loc.name}`} className="w-full rounded-lg border border-stone-700" />
-                              </a>
+                              <ImageLightbox src={loc.map_url} alt={`Carte de ${loc.name}`} className="w-full rounded-lg border border-stone-700 block" />
                             )}
                           </div>
                         )}
@@ -1212,8 +1216,10 @@ export default function CampaignWorldSection({
           {campaign.campaign_map?.image_url ? (
             <div className="bg-stone-900 border border-stone-800 rounded-xl overflow-hidden">
               <div
-                className={`relative select-none ${mapAddingPin ? 'cursor-crosshair' : ''}`}
+                className={`relative select-none ${mapAddingPin ? 'cursor-crosshair' : 'cursor-zoom-in'}`}
                 onClick={handleMapClick}
+                title={mapAddingPin ? undefined : 'Double-cliquez pour agrandir la carte'}
+                onDoubleClick={() => { if (!mapAddingPin) setZoomedMap(campaign.campaign_map!.image_url) }}
               >
                 <img
                   src={campaign.campaign_map.image_url}
@@ -1528,5 +1534,7 @@ export default function CampaignWorldSection({
         )}
       </div>
     </div>
+    {zoomedMap && <ImageZoomModal src={zoomedMap} alt="Carte de campagne" onClose={() => setZoomedMap(null)} />}
+    </>
   )
 }
