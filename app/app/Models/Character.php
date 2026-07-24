@@ -172,9 +172,33 @@ class Character extends Model
 
     public function getSpellcastingModifierAttribute(): int
     {
-        $ability = $this->spellcasting_ability;
+        $ability = $this->spellcasting_ability ?: $this->defaultSpellcastingAbility();
         if (!$ability || !isset($this->$ability)) return 0;
         return $this->modifier($this->$ability);
+    }
+
+    /**
+     * Caractéristique d'incantation déduite de la classe quand elle n'a pas été
+     * saisie. En 5e elle est imposée par la classe (magicien → INT, clerc → SAG…),
+     * jamais choisie. Sans ce repli, un personnage sans caractéristique renseignée
+     * se retrouvait avec un modificateur de 0 : DD des sorts, bonus d'attaque et
+     * plafond de sorts préparés tous faussés (le cas de Freya, magicien niv. 1).
+     */
+    protected function defaultSpellcastingAbility(): ?string
+    {
+        $class = mb_strtolower($this->character_class ?? '');
+
+        if (in_array($class, ['magicien', 'wizard', 'artificier', 'artificer'], true)) {
+            return 'intelligence';
+        }
+        if (in_array($class, ['clerc', 'cleric', 'druide', 'druid', 'rôdeur', 'rodeur', 'ranger'], true)) {
+            return 'wisdom';
+        }
+        if (in_array($class, ['barde', 'bard', 'ensorceleur', 'sorcerer', 'occultiste', 'warlock', 'paladin'], true)) {
+            return 'charisma';
+        }
+
+        return null;
     }
 
     public function getSpellSaveDcAttribute(): int
